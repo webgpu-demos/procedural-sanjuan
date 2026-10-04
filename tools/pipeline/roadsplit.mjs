@@ -1,4 +1,4 @@
-// Roads that PLATEAU maps only as an outline (the whole right-of-way, building line to building line)
+// Road outlines (the whole right-of-way, building line to building line: tools/pipeline/roadsurface.mjs)
 // are split here into a carriageway and sidewalks: the carriageway is the OSM centreline buffered to the
 // width its lanes need, clipped to the outline; what is left of the outline is sidewalk.
 // Where two one-way carriageways share an outline, the strip between them comes out as a median.
@@ -7,6 +7,13 @@ import { forEachAlong, inRings } from './landscape.mjs';
 
 const LANE = 3.0;        // lane width (m)
 const MIN_SIDEWALK = 1.5; // narrower leftovers are not worth a kerb: the street is carriageway wall to wall
+
+// Width of the carriageway a road needs: OSM's width where mapped, else its lanes (and a parking strip on
+// a single-lane street).
+export function carriageWidth(e) {
+  if (e.width >= 3 && e.width <= 30) return e.width;
+  return e.lanes >= 2 ? e.lanes * LANE + 1 : e.oneway ? 4.2 : 5;
+}
 
 const close = (r) => [...r, r[0]];
 const area = (r) => { let s = 0; for (let i = 0; i < r.length; i++) { const [x1, z1] = r[i], [x2, z2] = r[(i + 1) % r.length]; s += x2 * z1 - x1 * z2; } return s / 2; };
@@ -22,7 +29,7 @@ function fromClip(multi, minArea) {
 }
 
 // edges: road graph edges ({ ids, lanes, oneway, highway, bridge, tunnel }); pos: node id -> [x, z];
-// idxRoad: PolyIndex of all road outlines; outlines: [[outer, ...holes]] of the outline-only roads.
+// idxRoad: PolyIndex of all road outlines; outlines: [[outer, ...holes]] of the roads to split.
 // Returns { carriageway: [polygon], sidewalk: [polygon], untouched: number }.
 // walkLines: pedestrian streets and footpaths ([[x, z], ...]): an outline with no road for cars but one of
 // these running through it is a pedestrian street, paved like a sidewalk.
@@ -59,7 +66,7 @@ export function splitOutlineRoads({ outlines, edges, pos, idxRoad, walkLines = [
     }, 3);
     if (!widths.length) continue;
     const row = widths.sort((a, b) => a - b)[widths.length >> 1];
-    const carriage = e.lanes >= 2 ? e.lanes * LANE + 1 : e.oneway ? 4 : 4.5;
+    const carriage = carriageWidth(e);
     // room for a sidewalk on both sides? otherwise the buffer swallows the whole outline
     const h = row < carriage + 2 * MIN_SIDEWALK ? row : Math.min(carriage / 2, row / 2 - MIN_SIDEWALK);
     for (let i = 0; i < pts.length; i++) {

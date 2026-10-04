@@ -132,6 +132,9 @@ const FACADE_MAIN = /* glsl */ `
     else if (cat > 3.5 && cat < 4.5) r = vec4(0.16, 0.84, 0.3, 0.8); // public
     else if (cat > 4.5) r = vec4(0.0, 1.0, 0.26, 1.0);               // curtain wall: glass above a spandrel
     bool shop = row < 0.5 && cat > 1.5 && cat < 3.5;
+    // mixed streets (the colonial city): tall, narrow openings, French doors onto the street
+    bool colonial = cat > 1.5 && cat < 2.5 && !shop;
+    if (colonial) r = vec4(0.3, 0.7, 0.1, 0.86);
     if (shop) r = vec4(0.05, 0.95, 0.03, 0.8);                       // ground-floor shopfront
     float valid = step(0.0, v) * step(v, height - 0.9);
     // houses and apartments: some bays are plain wall
@@ -150,6 +153,9 @@ const FACADE_MAIN = /* glsl */ `
     frame = max(frame, panes > 1.5 ? 1.0 - box(mx, mw, 1.0 - mw, max(fwidth(mx), 1e-4)) : 0.0);
     frame *= 1.0 - far;
     float pane = inWin * (1.0 - frame);
+    // louvred wooden shutters: closed over some openings (no glass shows), folded back beside the others
+    float closed = colonial ? step(0.55, hash12(room + 91.0)) : 0.0;
+    pane *= 1.0 - closed;
 
     // interior mapping: intersect the view ray with a room box behind the glass
     vec3 V = normalize(vWPos - cameraPosition);
@@ -211,6 +217,16 @@ const FACADE_MAIN = /* glsl */ `
     gRough = mix(gRough, 0.05, pane);
     gMetal = mix(gMetal, 0.92, pane);
     gNm = mix(gNm, normalize(vec3((hash12(room + 5.1) - 0.5) * 0.03, (hash12(room + 9.4) - 0.5) * 0.03, 1.0)), inWin);
+    if (colonial) {
+      float k = fract(seed * 13.1), leafW = (r.y - r.x) * 0.5;
+      vec3 shutterCol = k < 0.3 ? vec3(0.1, 0.3, 0.18) : k < 0.55 ? vec3(0.34, 0.21, 0.11) : k < 0.8 ? vec3(0.86, 0.86, 0.82) : vec3(0.08, 0.28, 0.4);
+      float slats = mix(0.72 + 0.28 * smoothstep(0.35, 0.65, fract(pm.y * 9.0)), 0.9, far);
+      float open = (box(fx, r.x - leafW, r.x, wx) + box(fx, r.y, r.y + leafW, wx)) * box(fy, r.z, r.w, wy) * valid * (1.0 - closed) * (1.0 - far);
+      float leaves = closed * inWin + open;
+      diffuseColor.rgb = mix(diffuseColor.rgb, shutterCol * slats, leaves);
+      gRough = mix(gRough, 0.75, leaves); gMetal = mix(gMetal, 0.0, leaves);
+      gNm = mix(gNm, vec3(0.0, 0.0, 1.0), leaves);
+    }
     float daylight = (1.0 - uNight) * (shop ? 0.3 : cat > 4.5 ? 0.06 : 0.12);
     gEmissive = pane * interior * (daylight + uNight * on * glow * 1.25 * lamp);
     // The sun in the glass. Each pane sits a little out of true and float glass is never quite flat, so the
@@ -258,7 +274,7 @@ const FACADE_MAIN = /* glsl */ `
     // sign band over shopfronts
     if (shop) {
       float sign = box(fy, 0.84, 0.985, wy) * box(fx, 0.03, 0.97, wx) * valid * step(0.25, hash12(room + 57.0));
-      vec3 sc = mix(hue(hash12(room + 71.0)), vec3(0.95), 0.35 * step(0.6, hash12(room + 83.0)));
+      vec3 sc = mix(hue(hash12(room + 71.0)), vec3(0.93), 0.35 + 0.35 * step(0.6, hash12(room + 83.0))); // (painted boards, not neon)
       diffuseColor.rgb = mix(diffuseColor.rgb, sc * 0.75, sign);
       gEmissive += sign * sc * uNight * 1.6;
       gRough = mix(gRough, 0.4, sign);
@@ -271,7 +287,7 @@ const NO_PHOTO = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 
 NO_PHOTO.needsUpdate = true;
 
 // One instance per tile that has a wall photo atlas (they share the program); set it with material.userData.photo.
-// The real wall, from PLATEAU's aerial photo: too smeared to stand in front of, right from across the city.
+// The real wall, from a tile's wall photo atlas where one is compiled: too smeared to stand in front of, right from across the city.
 const PHOTO_PARS = /* glsl */ `
 uniform sampler2D uPhoto;
 uniform float uPhotoOn;
@@ -313,7 +329,7 @@ function facadeMaterial(tex) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gPane;');
   };
-  m.customProgramCacheKey = () => 'facade-v21';
+  m.customProgramCacheKey = () => 'facade-v22';
   return m;
 }
 
@@ -323,7 +339,7 @@ function facadeMaterial(tex) {
 const GROUND_PARS = /* glsl */ `
 uniform sampler2DArray uGroundAlb;
 uniform sampler2DArray uGroundNor;
-uniform float uGroundScale[4];
+uniform float uGroundScale[6];
 uniform float uFixedLayer;
 uniform sampler2D uOrtho;
 uniform vec4 uOrthoRect;
@@ -342,8 +358,8 @@ const GROUND_MAIN = /* glsl */ `
   gB = cross(gT, gN); // +z on flat ground, matching the texture's v axis
   vec3 tint = diffuseColor.rgb;
   float layer = uFixedLayer >= 0.0 ? uFixedLayer : floor(vLayer + 0.5);
-  bool water = layer > 3.5;
-  layer = min(layer, 3.0);
+  bool water = layer > 5.5;
+  layer = min(layer, 5.0);
   float sc = uGroundScale[int(layer)];
   vec2 st = abs(gN.y) > 0.5 ? vWPos.xz : vec2(vWPos.x + vWPos.z, vWPos.y);
   vec3 a = texture(uGroundAlb, vec3(st / sc, layer)).rgb * 2.0;
@@ -353,7 +369,7 @@ const GROUND_MAIN = /* glsl */ `
   diffuseColor.rgb *= mix(a, b, 0.4) * (0.86 + 0.28 * blotch);
   gNm = texture(uGroundNor, vec3(st / sc, layer)).xyz * 2.0 - 1.0;
   gNm = normalize(vec3(gNm.xy * 0.8, gNm.z));
-  gRough = layer < 0.5 ? 0.86 - 0.12 * blotch : 0.93;
+  gRough = layer < 0.5 ? 0.86 - 0.12 * blotch : layer > 4.5 ? 0.62 - 0.1 * blotch : 0.93; // (worn adoquines have a sheen)
   // the open ground (not roads, which have their own surface) shows the aerial photo: car parks, yards, gardens
   if (uFixedLayer >= 0.0 && uOrthoOn > 0.5) {
     vec2 ouv = (vWPos.xz - uOrthoRect.xy) / uOrthoRect.zw;
@@ -402,7 +418,9 @@ export function createMaterials(tex) {
     road: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     // lane lines and crossings: drawn over the road surface, with a stronger depth bias so they never flicker
     paint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -8 }),
-    // PLATEAU models (bridges, street furniture, trees): plain painted surfaces, seen from both sides
+    // static models of a tile (bridges, street furniture, trees): plain painted surfaces, seen from both sides
     models: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide }),
+    // the open sea beyond the area: the water of the tiles' sea polygons (meshing.js SEA), as one plane
+    sea: groundMaterial(tex, { fixedLayer: 6, color: new THREE.Color().setRGB(0.07, 0.33, 0.44, THREE.SRGBColorSpace) }),
   };
 }

@@ -1,15 +1,16 @@
-// GSI (国土地理院) elevation tiles -> a regular height grid in world metres.
-// Tiles are PNG-encoded DEMs on the Web Mercator XYZ grid:
-//   v = R * 2^16 + G * 2^8 + B;  v < 2^23: h = 0.01 v;  v = 2^23: no data;  v > 2^23: h = 0.01 (v - 2^24)
+// Elevation tiles -> a regular height grid in world metres.
+// The AWS Terrain Tiles (Mapzen / Tilezen, "terrarium" encoding) are PNG-encoded DEMs on the Web Mercator
+// XYZ grid: h = R * 256 + G + B / 256 - 32768 metres. In Puerto Rico they carry USGS 3DEP elevations on land
+// and NOAA / ETOPO bathymetry offshore (the sea floor, which the compiler later replaces by the sea surface).
 import fs from 'node:fs';
 import path from 'node:path';
 import { PNG } from 'pngjs';
 export { sampleGrid } from '../../src/shared/terrain.js';
 
-export const DEM_SOURCES = [
-  { id: 'dem5a', zoom: 15, url: (z, x, y) => `https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/${z}/${x}/${y}.png` },
-  { id: 'dem10b', zoom: 14, url: (z, x, y) => `https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png` },
-];
+const TERRARIUM = (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+export const DEM_SOURCES = [{ id: 'terrarium', zoom: 15, url: TERRARIUM }];
+// the coarse terrain of the surroundings, out to the horizon (see FAR in tools/pipeline/compile.mjs)
+export const FAR_DEM = { id: 'far', zoom: 12, url: TERRARIUM };
 
 const worldPx = (lon, lat, z) => {
   const s = 256 * 2 ** z, phi = (lat * Math.PI) / 180;
@@ -21,8 +22,8 @@ export function demTileRange({ south, west, north, east }, z) {
   return { z, x0: Math.floor(ax / 256), x1: Math.floor(bx / 256), y0: Math.floor(ay / 256), y1: Math.floor(by / 256) };
 }
 
-// A sampler over one DEM source: bilinear inside a tile, NaN where there is no data.
-function demSource(dir, src) {
+// A sampler over one DEM source: bilinear inside a tile, NaN where there is no data. (lon, lat) -> metres
+export function demSource(dir, src) {
   const cache = new Map();
   const tile = (x, y) => {
     const key = x + '_' + y;
@@ -32,10 +33,7 @@ function demSource(dir, src) {
     if (fs.existsSync(f)) {
       const png = PNG.sync.read(fs.readFileSync(f));
       h = new Float32Array(256 * 256);
-      for (let i = 0; i < h.length; i++) {
-        const v = (png.data[i * 4] << 16) | (png.data[i * 4 + 1] << 8) | png.data[i * 4 + 2];
-        h[i] = v === 0x800000 ? NaN : v < 0x800000 ? v * 0.01 : (v - 0x1000000) * 0.01;
-      }
+      for (let i = 0; i < h.length; i++) h[i] = png.data[i * 4] * 256 + png.data[i * 4 + 1] + png.data[i * 4 + 2] / 256 - 32768;
     }
     cache.set(key, h);
     return h;
@@ -54,22 +52,21 @@ function demSource(dir, src) {
 }
 
 // Builds a height grid covering [minX, maxX] x [minZ, maxZ] at `step` metres.
-// Gaps in the 5 m DEM fall back to the 10 m DEM, then to a diffusion fill from neighbours.
+// Missing tiles are filled by diffusion from their neighbours.
 export function buildHeightGrid(dir, proj, { minX, maxX, minZ, maxZ }, step) {
-  const samplers = DEM_SOURCES.map((s) => demSource(dir, s));
+  const sample = demSource(dir, DEM_SOURCES[0]);
   const w = Math.floor((maxX - minX) / step) + 1, h = Math.floor((maxZ - minZ) / step) + 1;
   const data = new Float32Array(w * h);
-  let fallback = 0, holes = 0;
+  let holes = 0;
   for (let j = 0; j < h; j++)
     for (let i = 0; i < w; i++) {
       const [lon, lat] = proj.unproject(minX + i * step, minZ + j * step);
-      let v = samplers[0](lon, lat);
-      if (Number.isNaN(v)) { v = samplers[1](lon, lat); fallback++; }
+      const v = sample(lon, lat);
       if (Number.isNaN(v)) holes++;
       data[j * w + i] = v;
     }
   if (holes) fillHoles(data, w, h);
-  return { x0: minX, z0: minZ, step, w, h, data, stats: { fallback, holes } };
+  return { x0: minX, z0: minZ, step, w, h, data, stats: { holes } };
 }
 
 function fillHoles(data, w, h) {

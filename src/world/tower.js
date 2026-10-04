@@ -1,4 +1,4 @@
-// Tokyo Tower-type steel lattice tower, built member by member: four legs that lean together under arches,
+// Steel lattice tower (the Tokyo Tower type), built member by member: four legs that lean together under arches,
 // the braced shaft above them, the two observation decks and the antenna mast. The data gives where it
 // stands, how it is turned, the width of its foot and its height (PLATEAU's shell is a closed pyramid and
 // is not drawn); the proportions in between are the tower's own.

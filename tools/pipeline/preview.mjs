@@ -1,7 +1,7 @@
 // Renders a compiled area top-down to data/preview/<area>.png, reading only the compiled output
 // (so it checks what the client will get). Terrain hillshade, road surfaces, buildings shaded by
 // height, the OSM graph (motorways orange, tunnels dashed-off, bridges red) and railways.
-// Usage: node tools/pipeline/preview.mjs [--area=shibuya] [--scale=2]   (metres per pixel)
+// Usage: node tools/pipeline/preview.mjs [--area=viejosanjuan] [--scale=2]   (metres per pixel)
 import fs from 'node:fs';
 import path from 'node:path';
 import { PNG } from 'pngjs';
@@ -78,7 +78,11 @@ for (let y = 0; y < H; y++)
 const AREA_COLOR = {
   [AREA.ROAD]: [92, 92, 98], [AREA.CARRIAGEWAY]: [62, 62, 70], [AREA.SIDEWALK]: [150, 146, 140],
   [AREA.ISLAND]: [90, 140, 80], [AREA.OTHER]: [120, 110, 120],
+  [AREA.WATER]: [52, 112, 150], [AREA.PARK]: [128, 170, 96], [AREA.WOOD]: [76, 122, 64], [AREA.PITCH]: [170, 150, 110], [AREA.BEACH]: [232, 214, 166],
+  [AREA.PATH]: [190, 180, 160], [AREA.STEPS]: [170, 160, 150], [AREA.PARKING]: [80, 80, 86], [AREA.PLAZA]: [196, 186, 170], [AREA.POOL]: [90, 190, 220],
+  [AREA.MARK_WHITE]: [245, 245, 240], [AREA.MARK_YELLOW]: [240, 190, 40],
 };
+const GROUND_FIRST = new Set([AREA.WATER, AREA.PARK, AREA.WOOD, AREA.BEACH, AREA.PITCH]);
 const heightColor = (h) => {
   const k = Math.min(1, Math.log(1 + h) / Math.log(220));
   return [240 - 170 * k, 236 - 186 * k, 228 - 128 * k]; // pale (low) -> deep blue (tall)
@@ -86,8 +90,9 @@ const heightColor = (h) => {
 
 let nB = 0;
 const decoded = manifest.tiles.map((tl) => decodeTile(new Uint8Array(fs.readFileSync(path.join(dir, tl.file))).buffer));
+for (const tile of decoded) for (const a of tile.areas) if (GROUND_FIRST.has(a.kind)) for (const p of a.polygons) fill(p, AREA_COLOR[a.kind]);
 for (const tile of decoded) for (const a of tile.areas) if (a.kind === AREA.ROAD) for (const p of a.polygons) fill(p, AREA_COLOR[a.kind]);
-for (const tile of decoded) for (const a of tile.areas) if (a.kind !== AREA.ROAD) for (const p of a.polygons) fill(p, AREA_COLOR[a.kind]);
+for (const tile of decoded) for (const a of tile.areas) if (a.kind !== AREA.ROAD && !GROUND_FIRST.has(a.kind) && AREA_COLOR[a.kind]) for (const p of a.polygons) fill(p, AREA_COLOR[a.kind]);
 const all = decoded.flatMap((tl) => tl.buildings).sort((a, b) => a.height - b.height);
 for (const b of all) { nB++; for (const p of b.polygons) fill(p, heightColor(b.height)); }
 

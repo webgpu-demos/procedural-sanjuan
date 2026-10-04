@@ -60,7 +60,7 @@ function ribbon(pts, w, emit) {
 }
 
 const WALK_WIDTH = { pedestrian: 5, footway: 2.2, path: 1.6, cycleway: 2, steps: 2.2 };
-const BARRIER_OF = { fence: BARRIER.FENCE, wall: BARRIER.WALL, retaining_wall: BARRIER.RETAINING, hedge: BARRIER.HEDGE, guard_rail: BARRIER.GUARD_RAIL };
+const BARRIER_OF = { fence: BARRIER.FENCE, wall: BARRIER.WALL, retaining_wall: BARRIER.RETAINING, hedge: BARRIER.HEDGE, guard_rail: BARRIER.GUARD_RAIL, city_wall: BARRIER.CITY_WALL };
 const WATER_WIDTH = { river: 9, canal: 6, stream: 2.5, ditch: 1 };
 
 // idx: PolyIndex { building, road, carriageway, sidewalk, water }; ground(x, z); rails: profiled railway lines
@@ -133,7 +133,7 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
     } else if (t.building === 'roof' && w.closed && !hidden(t)) {
       const ring = openRing(w.pts), cx = ring.reduce((s, p) => s + p[0], 0) / ring.length, cz = ring.reduce((s, p) => s + p[1], 0) / ring.length;
       if (!inBounds(cx, cz)) continue;
-      // A roof far above the ground is part of a larger structure (the platforms in the legs of Tokyo Tower),
+      // A roof far above the ground is part of a larger structure (a platform high in a tower or a stadium),
       // not a canopy standing on posts.
       const height = num(t.height) ?? 4.4;
       if (height > 12) continue;
@@ -163,7 +163,7 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
       for (const du of [0, 2.5]) out.marks.push({ kind: AREA.MARK_WHITE, ring: [at(u + du - 0.05, v), at(u + du + 0.05, v), at(u + du + 0.05, v + 5), at(u + du - 0.05, v + 5)] });
       const h = hash(Math.round(u * 7 + w.id), Math.round(v * 13), 3);
       if (h < 0.55) {
-        const [x, z] = at(u + 1.25, v + 2.5), type = Math.floor(hash(w.id, Math.round(u * 3), Math.round(v)) * 3), color = Math.floor(h * 100) % 4;
+        const [x, z] = at(u + 1.25, v + 2.5), type = Math.floor(hash(w.id, Math.round(u * 3), Math.round(v)) * 4), color = Math.floor(h * 100) % 4;
         out.props.push({ kind: PROP.PARKED, variant: type + 4 * color, rot: Math.atan2(sx, sz) + (hash(Math.round(u), Math.round(v), w.id) < 0.5 ? 0 : Math.PI), x, z, scale: 1 });
         tally('parked car');
       }
@@ -173,12 +173,13 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
   // ---- barriers, waterways, pools
   for (const w of ways) {
     const t = w.tags;
-    if (BARRIER_OF[t.barrier] && !hidden(t)) {
+    if ((BARRIER_OF[t.barrier] || t.historic === 'citywalls') && !hidden(t)) {
+      const type = t.historic === 'citywalls' ? BARRIER.CITY_WALL : BARRIER_OF[t.barrier];
       for (let i = 1; i < w.pts.length; i++) {
         const [ax, az] = w.pts[i - 1], [bx, bz] = w.pts[i];
-        if (inBounds((ax + bx) / 2, (az + bz) / 2) && Math.hypot(bx - ax, bz - az) > 0.3) out.barriers.push([r2(ax), r2(az), r2(bx), r2(bz), -BARRIER_OF[t.barrier]]);
+        if (inBounds((ax + bx) / 2, (az + bz) / 2) && Math.hypot(bx - ax, bz - az) > 0.3) out.barriers.push([r2(ax), r2(az), r2(bx), r2(bz), -type]);
       }
-      tally(t.barrier);
+      tally(type === BARRIER.CITY_WALL ? 'city wall' : t.barrier);
     } else if (WATER_WIDTH[t.waterway] && !hidden(t)) {
       ribbon(w.pts, num(t.width) ?? WATER_WIDTH[t.waterway], quadArea(AREA.WATER, 0)); tally(t.waterway);
     } else if (t.leisure === 'swimming_pool' && w.closed && !hidden(t)) {
@@ -197,9 +198,14 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
     if (!inBounds(x, z)) continue;
     const road = roadAt.get(p.id), h = hash(Math.round(x * 10), Math.round(z * 10), 9);
     if (t.emergency === 'fire_hydrant') {
-      // in Japan the hydrant is under a cover in the road, edged in yellow; beside the road it is a red sign on a pole
-      if (idx.carriageway.has(x, z)) out.marks.push({ kind: AREA.MARK_YELLOW, ring: [[x - 0.45, z - 0.45], [x + 0.45, z - 0.45], [x + 0.45, z + 0.45], [x - 0.45, z + 0.45]] });
-      else if (!idx.building.has(x, z)) out.props.push({ kind: PROP.HYDRANT, variant: 0, rot: h * 6.28, x, z, scale: 1 });
+      // a pillar hydrant at the kerb (one mapped in the roadway stands on the nearest sidewalk instead)
+      let [hx, hz] = [x, z];
+      if (idx.carriageway.has(x, z)) {
+        const off = [[1, 0], [-1, 0], [0, 1], [0, -1]].flatMap(([dx, dz]) => [1.5, 3, 4.5].map((d) => [x + dx * d, z + dz * d])).find(([px, pz]) => !idx.carriageway.has(px, pz) && !idx.building.has(px, pz));
+        if (!off) continue;
+        [hx, hz] = off;
+      }
+      if (!idx.building.has(hx, hz)) out.props.push({ kind: PROP.HYDRANT, variant: 0, rot: h * 6.28, x: hx, z: hz, scale: 1 });
       tally('hydrant');
     } else if (t.railway === 'level_crossing' && road) {
       out.props.push({ kind: PROP.RAIL_CROSSING, variant: 0, rot: Math.atan2(road.dx, road.dz), x, z, scale: 1 }); tally('level crossing');

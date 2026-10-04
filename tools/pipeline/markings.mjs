@@ -1,12 +1,13 @@
-// Road paint and traffic signals. Lane lines are laid out from the *measured* carriageway: at each
-// sample the distance to the kerb on both sides (PLATEAU carriageway polygons) gives the true centre
-// and width, so paint does not inherit the offset of the OSM centreline.
+// Road paint and traffic signals, as in Puerto Rico: right-hand traffic and US (MUTCD) markings — yellow
+// centre lines between opposing traffic, white lane lines and edge lines, PARE at stops. Lane lines are laid
+// out from the *measured* carriageway: at each sample the distance to the kerb on both sides gives the true
+// centre and width, so paint does not inherit the offset of the OSM centreline.
 import { AREA, PROP, DECAL } from '../../src/shared/tileformat.js';
 import { hash, forEachAlong } from './landscape.mjs';
 
 const STEP = 2.5;          // sample spacing along a road (m); dashes are 2 samples on, 2 off (5 m / 5 m)
 const LINE = 0.15;         // paint width (m)
-const MAJOR = new Set(['trunk', 'primary', 'secondary', 'tertiary']);
+const MAJOR = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary']);
 
 // OSM turn value -> arrow. Unknown values (merge lanes and the like) get no arrow.
 const TURN = {
@@ -15,10 +16,10 @@ const TURN = {
   'left;through': DECAL.THROUGH_LEFT, 'through;left': DECAL.THROUGH_LEFT, through_left: DECAL.THROUGH_LEFT,
   'through;right': DECAL.THROUGH_RIGHT, 'right;through': DECAL.THROUGH_RIGHT, through_right: DECAL.THROUGH_RIGHT,
 };
-// Untagged approaches, by lane count: the usual Japanese layout.
+// Untagged approaches, by lane count (left to right): a left-turn lane on the inside, through lanes, and
+// the kerb lane that may also turn right.
 const defaultTurns = (n) => (n === 2 ? [DECAL.THROUGH_LEFT, DECAL.THROUGH_RIGHT]
-  : [DECAL.THROUGH_LEFT, ...Array(n - 2).fill(DECAL.THROUGH), DECAL.RIGHT]);
-const SPEED = { 20: DECAL.SPEED_20, 30: DECAL.SPEED_30, 40: DECAL.SPEED_40, 50: DECAL.SPEED_50, 60: DECAL.SPEED_60 };
+  : [DECAL.LEFT, ...Array(n - 2).fill(DECAL.THROUGH), DECAL.THROUGH_RIGHT]);
 
 export function buildMarkings({ edges, pos, idx, land, inBounds }) {
   const marks = [], props = [];
@@ -47,10 +48,9 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
   };
 
   // ---- lane lines
-  const spoken = new Set(); // road + direction that already carries its speed number
   for (const e of edges) {
     const hw = e.highway.replace('_link', '');
-    if ((e.bridge && !e.span) || e.tunnel || hw === 'motorway' || e.highway.endsWith('_link')) continue;
+    if ((e.bridge && !e.span) || e.tunnel || e.flyover || e.highway.endsWith('_link')) continue;
     if (!MAJOR.has(hw) && e.lanes < 2) continue;
     const pts = e.ids.map(pos);
     // Where the carriageway is far wider than the road needs (a bus terminal, a station forecourt, one
@@ -81,15 +81,17 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
     const lw = median / lanes;
     const lines = []; // { o: lateral offset, kind, dashed }
     if (!e.oneway && lanes >= 2) {
-      const yellow = lanes === 2 && hash(e.way, 21) < 0.35;
-      lines.push({ o: 0, kind: yellow ? AREA.MARK_YELLOW : AREA.MARK_WHITE, dashed: lanes === 2 && !yellow });
+      // between opposing lanes: double solid yellow on main roads, a dashed yellow line (passing allowed) on some quiet two-lane streets
+      if (lanes === 2 && !MAJOR.has(hw) && hash(e.way, 21) < 0.5) lines.push({ o: 0, kind: AREA.MARK_YELLOW, dashed: true });
+      else for (const o of [-0.12, 0.12]) lines.push({ o, kind: AREA.MARK_YELLOW, dashed: false });
     }
     for (let k = 1; k < lanes; k++) {
       const o = -median / 2 + k * lw;
-      if (!e.oneway && Math.abs(o) < 0.4) continue; // the centre line is already there
+      if (!e.oneway && Math.abs(o) < 0.4) continue; // the centre lines are already there
       lines.push({ o, kind: AREA.MARK_WHITE, dashed: true });
     }
-    if (hw !== 'tertiary' && median > 6) for (const s of [-1, 1]) lines.push({ o: s * (median / 2 - 0.35), kind: AREA.MARK_WHITE, dashed: false });
+    // edge lines (on a one-way carriageway of a divided road the left one is yellow)
+    if (hw !== 'tertiary' && median > 6) for (const s of [-1, 1]) lines.push({ o: s * (median / 2 - 0.35), kind: e.oneway && s < 0 && (hw === 'motorway' || hw === 'trunk') ? AREA.MARK_YELLOW : AREA.MARK_WHITE, dashed: false });
     // edge lines for stretches across open asphalt, whatever the road class
     const openEdges = [-1, 1].map((s) => ({ o: s * (nominal / 2 - 0.2), kind: AREA.MARK_WHITE, dashed: false }));
     for (let i = 0; i + 1 < samples.length; i++) {
@@ -102,16 +104,16 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
       }
     }
 
-    // Symbols in the lanes. Lanes of one direction fill the road from the left kerb (left-hand traffic);
+    // Symbols in the lanes. Lanes of one direction fill the road from the right kerb (right-hand traffic);
     // `fwd` is travel along the edge, otherwise against it.
     const lanesDir = e.oneway ? lanes : Math.floor(lanes / 2);
     for (const fwd of [true, false]) {
       if (fwd ? e.oneway === -1 : e.oneway === 1) continue;
       if (lanesDir < 1) continue;
       const sign = fwd ? 1 : -1;
-      // lane j (0 = leftmost) centre, at sample i
+      // lane j (0 = leftmost of this direction) centre, at sample i
       const lane = (i, j) => {
-        const s = samples[i], o = -median / 2 + (j + 0.5) * lw;
+        const s = samples[i], o = median / 2 - (lanesDir - j - 0.5) * lw;
         return [s.x + s.nx * sign * o, s.z + s.nz * sign * o, s.nz * sign, -s.nx * sign]; // x, z, travel dx, dz
       };
       // arrows before a junction
@@ -126,16 +128,10 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
           turns.forEach((turn, j) => { if (turn != null) decal(turn, ...lane(i, j)); });
         }
       }
-      // the speed limit, once per road and direction, in the left lane
-      const speed = e.maxspeedTagged && SPEED[e.maxspeed], key = e.way + (fwd ? 'f' : 'b');
-      if (speed != null && !spoken.has(key) && samples.length * STEP > 70) {
-        const i = samples.length >> 1;
-        if (ok[i]) { spoken.add(key); decal(speed, ...lane(i, 0)); }
-      }
     }
   }
 
-  // ---- 止まれ where a side street meets a main road without signals
+  // ---- PARE where a side street meets a main road without signals
   const pointBack = (pts, fromEnd, dist) => { // point `dist` metres before one end of a polyline, with the travel direction
     const p = fromEnd ? [...pts].reverse() : pts;
     let left = dist;
@@ -182,8 +178,8 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
         const R = reach(x, z, nx, nz, 1, 8), L = reach(x, z, nx, nz, -1, 8);
         if (R == null || L == null) continue;
         const w = R + L, cx = x + nx * (R - L) / 2, cz = z + nz * (R - L) / 2;
-        // narrow or one-way streets use the whole width, wider ones the left half
-        const whole = e.oneway || w < 5.4, off = whole ? 0 : -w / 4, half = (whole ? w / 2 : w / 4) - 0.25;
+        // narrow or one-way streets use the whole width, wider ones the right half
+        const whole = e.oneway || w < 5.4, off = whole ? 0 : w / 4, half = (whole ? w / 2 : w / 4) - 0.25;
         const px = cx + nx * off, pz = cz + nz * off;
         if (isLine) quad(AREA.MARK_WHITE, [px - nx * half - dx * 0.2, pz - nz * half - dz * 0.2], [px + nx * half - dx * 0.2, pz + nz * half - dz * 0.2],
           [px + nx * half + dx * 0.2, pz + nz * half + dz * 0.2], [px - nx * half + dx * 0.2, pz - nz * half + dz * 0.2]);
@@ -192,7 +188,7 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
     }
   }
 
-  // ---- zebra crossings (Japanese style: bars parallel to the traffic) and stop lines
+  // ---- crosswalks (continental style: bars parallel to the traffic) and stop lines
   const zebraAt = [];
   const zebra = (path) => {
     // A crossing runs from kerb to kerb. A path whose ends both lie out in the carriageway (inside a bus
@@ -216,21 +212,21 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
     const [ax, az] = run[0], [bx, bz, dx, dz] = run.at(-1);
     const cx = (ax + bx) / 2, cz = (az + bz) / 2, half = Math.hypot(bx - ax, bz - az) / 2 + 0.45;
     zebraAt.push([cx, cz]);
-    // tactile paving (the yellow studded blocks) on the sidewalk at both ends of the crossing
+    // detectable warning surface (yellow truncated domes) at the curb ramps at both ends of the crossing
     for (const [ex, ez, s] of [[ax, az, -1], [bx, bz, 1]]) {
       const tx = ex + dx * s * 1.15, tz = ez + dz * s * 1.15, px = -dz, pz = dx;
       if (idx.carriageway.has(tx, tz) || idx.building.has(tx, tz)) continue;
       marks.push({ kind: AREA.TACTILE, ring: [[tx - dx * 0.3 - px * 1.5, tz - dz * 0.3 - pz * 1.5], [tx + dx * 0.3 - px * 1.5, tz + dz * 0.3 - pz * 1.5],
         [tx + dx * 0.3 + px * 1.5, tz + dz * 0.3 + pz * 1.5], [tx - dx * 0.3 + px * 1.5, tz - dz * 0.3 + pz * 1.5]] });
     }
-    // Stop lines: 2.5 m before the bars, across the left half of the road (left-hand traffic),
+    // Stop lines: 2.5 m before the bars, across the right half of the road (right-hand traffic),
     // only on the side facing away from the junction.
     const rx = -dz, rz = dx, j = nearestJunction(cx, cz, 35);
     for (const s of [-1, 1]) {
       const px = cx + rx * 4.4 * s, pz = cz + rz * 4.4 * s;
       if (j && Math.hypot(px - j[0], pz - j[1]) < Math.hypot(cx - j[0], cz - j[1])) continue;
-      // traffic here drives towards the crossing along -s * r; its left-hand side is -s * (dx, dz)
-      const lx = -dx * s, lz = -dz * s;
+      // traffic here drives towards the crossing along -s * r; its right-hand side is s * (dx, dz)
+      const lx = dx * s, lz = dz * s;
       if (!idx.carriageway.has(px + lx * half * 0.5, pz + lz * half * 0.5)) continue;
       quad(AREA.MARK_WHITE, [px - rx * 0.225, pz - rz * 0.225], [px + rx * 0.225, pz + rz * 0.225],
         [px + rx * 0.225 + lx * (half - 0.3), pz + rz * 0.225 + lz * (half - 0.3)], [px - rx * 0.225 + lx * (half - 0.3), pz - rz * 0.225 + lz * (half - 0.3)]);
@@ -249,7 +245,7 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
     if (R != null && L != null) zebra([[x - nx * (L + 0.5), z - nz * (L + 0.5)], [x + nx * (R + 0.5), z + nz * (R + 0.5)]]);
   }
 
-  // ---- traffic signals: one mast per approach, at the left kerb a few metres before the junction
+  // ---- traffic signals: one mast per approach, at the right kerb a few metres before the junction
   const taken = new Set();
   for (const id of land.signals) {
     for (const { e, i } of at.get(id) ?? []) {
@@ -262,13 +258,13 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
         const dx = (here[0] - from[0]) / len, dz = (here[1] - from[1]) / len, nx = -dz, nz = dx;
         const back = Math.min(8, len * 0.8), qx = here[0] - dx * back, qz = here[1] - dz * back;
         if (!idx.carriageway.has(qx, qz)) continue;
-        const L = reach(qx, qz, nx, nz, -1);
-        if (L == null) continue;
-        const x = qx - nx * (L + 0.4), z = qz - nz * (L + 0.4), key = Math.floor(x / 6) + ',' + Math.floor(z / 6);
+        const R = reach(qx, qz, nx, nz, 1);
+        if (R == null) continue;
+        const x = qx + nx * (R + 0.4), z = qz + nz * (R + 0.4), key = Math.floor(x / 6) + ',' + Math.floor(z / 6);
         if (!inBounds(x, z) || idx.building.has(x, z) || taken.has(key)) continue;
         taken.add(key);
         // faces the approaching traffic; the arm length (scale) reaches towards the middle of the road
-        props.push({ kind: PROP.SIGNAL, variant: 0, rot: Math.atan2(-dx, -dz), x, z, scale: Math.min(1.6, Math.max(0.7, L / 4)) });
+        props.push({ kind: PROP.SIGNAL, variant: 0, rot: Math.atan2(-dx, -dz), x, z, scale: Math.min(1.6, Math.max(0.7, R / 4)) });
       }
     }
   }

@@ -14,7 +14,7 @@ function buffers(o, out = []) {
   return out;
 }
 
-// Static mesh of a tile (PLATEAU models; format: encodeMesh in tools/pipeline/meshes.mjs) -> flat-shaded arrays.
+// Static mesh of a tile (x_<x>_<z>.bin: u32 triangle vertex count, f32 positions, u8 sRGB colours) -> flat-shaded arrays.
 async function models(url) {
   const res = await fetch(url);
   if (!res.ok) return null;

@@ -10,10 +10,12 @@ const DEFAULT_LANES = {
   residential: 1, living_street: 1, service: 1,
 };
 const MINOR = new Set(['unclassified', 'residential', 'living_street', 'service']);
-// Japanese defaults when maxspeed is untagged (km/h).
-const DEFAULT_SPEED = { motorway: 60, trunk: 50, primary: 50, secondary: 40, tertiary: 40 };
+// Puerto Rico's limits when maxspeed is untagged, in km/h (signed in mph: 55, 45, 35, 30, 25).
+const DEFAULT_SPEED = { motorway: 88, trunk: 72, primary: 56, secondary: 48, tertiary: 40 };
 
 const intTag = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
+// km/h; Puerto Rico tags its limits in mph ("25 mph")
+const speedTag = (v) => { const n = intTag(v); return n == null ? null : /mph/.test(v) ? Math.round(n * 1.609) : n; };
 
 export function readOsm(file) {
   const { elements } = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -39,7 +41,7 @@ function roadAttrs(t) {
   return {
     highway: t.highway, oneway, lanes,
     lanesForward: intTag(t['lanes:forward']), lanesBackward: intTag(t['lanes:backward']),
-    maxspeed: intTag(t.maxspeed) ?? DEFAULT_SPEED[hw] ?? 30, maxspeedTagged: intTag(t.maxspeed) != null,
+    maxspeed: speedTag(t.maxspeed) ?? DEFAULT_SPEED[hw] ?? 40, maxspeedTagged: speedTag(t.maxspeed) != null,
     // lane arrows, left to right in the direction of travel ("left;through|through|right")
     turnLanes: t['turn:lanes'] ?? null, turnLanesForward: t['turn:lanes:forward'] ?? null, turnLanesBackward: t['turn:lanes:backward'] ?? null,
     width: Number.parseFloat(t.width) || null,

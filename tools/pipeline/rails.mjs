@@ -14,7 +14,7 @@ const DECK_RUN = 15;                  // metres: a deck shorter than this along 
 // lines: [{ ids: [node id], pts: [[x, z]], bridge, layer, ... }]; ground(x, z) -> terrain height.
 // Returns the lines with pts as flat [x, y, z, ...], y = top of rail bed.
 // unreliable(x, z): true where the terrain height is not the track bed (under a road bridge).
-// deckTop(x, z): height of the surveyed bridge deck there (PLATEAU), if any. Each line also gets
+// deckTop(x, z): height of a surveyed bridge deck there, if any. Each line also gets
 // deck: [[from, to]], the stretches (metres along it) where the track lies on such a deck.
 export function profileRailways(lines, ground, inBounds, unreliable = () => false, deckTop = () => null) {
   // keep the stretch inside the area, plus one point beyond each end

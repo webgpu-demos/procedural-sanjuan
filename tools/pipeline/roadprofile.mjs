@@ -17,7 +17,8 @@ const SPAN_DIP = 2.5;
 export const BANK = 14; // metres beyond each end of a span that still belong to the bridge approach
 
 // Returns { level: Map node id -> road level, spans: Set of edges that are bank-to-bank bridges }.
-export function profileRoads(edges, pos, ground) {
+// wet(x, z): true over the sea or a lagoon. A bridge over water is a span however low its banks are.
+export function profileRoads(edges, pos, ground, wet = () => false) {
   const y = new Map(), pinned = new Set(), spans = new Set();
   const g = (id) => { const p = pos(id); return ground(p[0], p[1]); };
   for (const e of edges) {
@@ -32,13 +33,17 @@ export function profileRoads(edges, pos, ground) {
       return top;
     };
     const ends = [bank(pts[0], pts[1]), bank(pts.at(-1), pts.at(-2))];
-    let low = Infinity, total = 0;
+    let low = Infinity, total = 0, water = false;
     for (let i = 1; i < pts.length; i++) {
       const len = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-      for (let s = 0; s <= len; s += 3) low = Math.min(low, ground(pts[i - 1][0] + ((pts[i][0] - pts[i - 1][0]) * s) / (len || 1), pts[i - 1][1] + ((pts[i][1] - pts[i - 1][1]) * s) / (len || 1)));
+      for (let s = 0; s <= len; s += 3) {
+        const x = pts[i - 1][0] + ((pts[i][0] - pts[i - 1][0]) * s) / (len || 1), z = pts[i - 1][1] + ((pts[i][1] - pts[i - 1][1]) * s) / (len || 1);
+        low = Math.min(low, ground(x, z));
+        water ||= wet(x, z);
+      }
       total += len;
     }
-    if (Math.min(...ends) - low > SPAN_DIP) { e.spanLength = total; e.spanEnds = ends; spans.add(e); }
+    if (Math.min(...ends) - low > (water ? 0.8 : SPAN_DIP)) { e.spanLength = total; e.spanEnds = ends; spans.add(e); }
   }
   for (const e of edges) {
     if (spans.has(e)) continue;

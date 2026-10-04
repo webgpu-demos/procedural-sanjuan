@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Trains } from './trains.js';
 
 const STEP = 3;            // metres between cross-sections
-const GAUGE = 1.067;       // Japanese narrow gauge
+const GAUGE = 1.435;       // standard gauge (Tren Urbano)
 const VIADUCT_ABOVE = 2.0; // rail level this far above the ground gets a deck on piers; lower, walled fill
 const PIER_SPACING = 16, MAST_SPACING = 40;
 

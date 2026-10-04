@@ -1,39 +1,45 @@
-// Areas the pipeline can build. An area is a block of PLATEAU 3rd-level meshes (~1.1 x 0.9 km each)
-// around a centre; the world origin (0, 0, 0) sits on `origin`.
+// Areas the pipeline can build. An area is a rectangle given by its bounding box; the world origin
+// (0, 0, 0) sits on `origin`, which need not be its centre.
+//   view      default camera for the client: [x, z, distance, azimuth°, elevation°] around the origin
+//   heritage  [[lon, lat], ...] outline of a historic district: its buildings get the colonial palette
+//   ads       how many invented billboards and screens (1 = as dense as a Tokyo shopping street, where this code began)
 import path from 'node:path';
-import { meshBlock, meshBounds3 } from '../../src/shared/geo.js';
 
 export const AREAS = {
-  shibuya: {
-    name: 'Shibuya',
-    origin: [139.70045, 35.65948], // Shibuya Scramble Crossing [lon, lat]
-    radius: 1,                     // 3 x 3 meshes, about 3.4 x 2.8 km
+  viejosanjuan: {
+    name: 'Old San Juan',
+    origin: [-66.11656, 18.46530], // Plaza de Armas [lon, lat]
+    bbox: { west: -66.1290, south: 18.4560, east: -66.0930, north: 18.4750 },
+    view: [-180, 40, 900, 200, 30],
+    // the walled city, from El Morro to the Plaza Colón / San Cristóbal gate, La Perla included
+    heritage: [[-66.1262, 18.4716], [-66.1180, 18.4718], [-66.1095, 18.4690], [-66.1080, 18.4660], [-66.1090, 18.4635],
+      [-66.1135, 18.4610], [-66.1190, 18.4600], [-66.1225, 18.4625], [-66.1262, 18.4680]],
+    ads: 0.06,
   },
-  tokyo: {
-    name: 'Tokyo',
-    origin: [139.76712, 35.68124], // Tokyo Station, between Marunouchi and Yaesu
-    radius: 1,
+  condado: {
+    name: 'Condado',
+    origin: [-66.07165, 18.45604], // Avenida Ashford, between La Concha and Calle Magdalena
+    bbox: { west: -66.0890, south: 18.4440, east: -66.0560, north: 18.4655 },
+    view: [0, 0, 900, 195, 30],
+    ads: 0.25,
   },
-  shiba: {
-    name: 'Shiba (Tokyo Tower)',
-    origin: [139.74543, 35.65858], // Tokyo Tower
-    radius: 1,
+  hatorey: {
+    name: 'Hato Rey (Milla de Oro)',
+    origin: [-66.06290, 18.42360], // Avenida Ponce de León in the Golden Mile
+    bbox: { west: -66.0800, south: 18.4100, east: -66.0460, north: 18.4340 },
+    view: [430, -200, 950, 345, 24], // the towers of the Milla de Oro, looking north to the Condado and the sea
+    ads: 0.35,
   },
 };
+export const DEFAULT_AREA = 'viejosanjuan';
 
 export const ROOT = path.resolve(import.meta.dirname, '../..');
 export const RAW = path.join(ROOT, 'data/raw');
 
 export function resolveArea(argv = process.argv) {
   const arg = argv.find((a) => a.startsWith('--area='));
-  const id = arg ? arg.split('=')[1] : 'shibuya';
+  const id = arg ? arg.split('=')[1] : DEFAULT_AREA;
   const area = AREAS[id];
   if (!area) throw new Error(`unknown area "${id}" (known: ${Object.keys(AREAS).join(', ')})`);
-  const meshes = meshBlock(area.origin[0], area.origin[1], area.radius);
-  const b = meshes.map(meshBounds3);
-  const bbox = {
-    south: Math.min(...b.map((m) => m.south)), west: Math.min(...b.map((m) => m.west)),
-    north: Math.max(...b.map((m) => m.north)), east: Math.max(...b.map((m) => m.east)),
-  };
-  return { id, ...area, meshes, bbox, rawDir: path.join(RAW, id), outDir: path.join(ROOT, 'public/tiles', id) };
+  return { id, ...area, bbox: { ...area.bbox }, rawDir: path.join(RAW, id), outDir: path.join(ROOT, 'public/tiles', id) };
 }

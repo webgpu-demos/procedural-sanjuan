@@ -1,6 +1,6 @@
-// Procedural Tokyo client: streams the compiled city and renders it. Free camera for now; the car comes next.
+// Procedural San Juan client: streams the compiled city and renders it. Free camera for now; the car comes next.
 //
-// URL parameters: ?area=shibuya  ?time=18.5 (Tokyo hour; default: now)  ?night=1  ?cam=x,z,distance,azimuthDeg,elevationDeg  ?radius=3000  ?traffic=0  ?ortho=0  ?clouds=0.25 (on, with that cover)  ?birds=150  ?cars=600
+// URL parameters: ?area=viejosanjuan  ?time=18.5 (San Juan hour; default: now)  ?night=1  ?cam=x,z,distance,azimuthDeg,elevationDeg  ?radius=3000  ?traffic=0  ?ortho=0  ?clouds=0.25 (on, with that cover)  ?birds=150  ?cars=600
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import GUI from 'lil-gui';
@@ -15,6 +15,7 @@ import { buildFlyovers } from './world/flyovers.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { buildStructures } from './world/structures.js';
 import { loadOrtho } from './world/ortho.js';
+import { buildSurroundings } from './world/far.js';
 import { Environment } from './world/environment.js';
 import { Atmosphere } from './world/atmosphere.js';
 import { createBirds, MAX_BIRDS } from './world/birds.js';
@@ -23,7 +24,7 @@ import { LampLight, installLampLight } from './world/lamplight.js';
 installLampLight(); // (before any material is compiled)
 
 const params = new URLSearchParams(location.search);
-const AREA = params.get('area') || 'shibuya';
+const AREA = params.get('area') || 'viejosanjuan';
 
 // The loading screen (index.html): the city's name, a bar and what is being done.
 const loader = {
@@ -35,8 +36,8 @@ const loader = {
 loader.show(null, 'textures'); // (index.html has already written the city's name)
 const USAGE = {
   401: 'office', 402: 'commercial', 403: 'hotel', 404: 'commercial complex', 411: 'house', 412: 'apartments',
-  413: 'house + shop', 414: 'apartments + shop', 415: 'house + workshop', 421: 'government', 422: 'school / hospital / culture',
-  431: 'transport / warehouse', 441: 'factory', 452: 'utility', 454: 'other', 461: 'unknown',
+  413: 'house + shop', 414: 'shops + homes', 415: 'house + workshop', 421: 'government', 422: 'school / hospital / church / culture',
+  431: 'transport / warehouse', 441: 'industrial', 452: 'utility', 454: 'fortification / other', 461: 'unknown',
 };
 
 // ---------------------------------------------------------------- renderer, scene, camera
@@ -60,15 +61,15 @@ controls.maxDistance = 3500;
 controls.enableZoom = false; // the wheel is handled below, with inertia
 
 const env = new Environment(scene, renderer);
-// Time of day, as Tokyo's clock (JST = UTC + 9 h): the real time, or an hour set by hand.
+// Time of day, as San Juan's clock (Atlantic Standard Time all year, AST = UTC - 4 h): the real time, or an hour set by hand.
 const clockTime = {
   live: params.get('time') == null && params.get('night') !== '1',
   hour: params.get('time') != null ? Number(params.get('time')) : params.get('night') === '1' ? 22 : 12,
-  // the moment on today's Tokyo date at which its clock shows `hour`
+  // the moment on today's San Juan date at which its clock shows `hour`
   date() {
-    const JST = 9 * 3600e3, now = Date.now();
-    if (this.live) { const t = new Date(now + JST); this.hour = t.getUTCHours() + t.getUTCMinutes() / 60 + t.getUTCSeconds() / 3600; return new Date(now); }
-    const midnight = Math.floor((now + JST) / 864e5) * 864e5 - JST;
+    const AST = -4 * 3600e3, now = Date.now();
+    if (this.live) { const t = new Date(now + AST); this.hour = t.getUTCHours() + t.getUTCMinutes() / 60 + t.getUTCSeconds() / 3600; return new Date(now); }
+    const midnight = Math.floor((now + AST) / 864e5) * 864e5 - AST;
     return new Date(midnight + this.hour * 3600e3);
   },
   // the hour and the minute on their own, for the panel; setting either stops the live clock
@@ -87,14 +88,18 @@ loader.set(0.08, 'terrain');
 const manifest = await streamer.init();
 loader.set(0.14, 'railways and roads');
 const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
-// Beyond the area: plain ground in the grey of the area's own unbuilt land, out to the haze of the horizon.
+// Beyond the area: the rest of the island (far.js) over the sea, out to the haze of the horizon; without the
+// surroundings, plain ground in the grey of the area's own unbuilt land unless the area has a coast.
 {
-  const b = manifest.bounds, plain = new THREE.Mesh(new THREE.CircleGeometry(50000, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x8a8a86, roughness: 0.95, metalness: 0 }));
-  plain.position.set((b.minX + b.maxX) / 2, manifest.terrain.min - 1, (b.minZ + b.maxZ) / 2); // just under the lowest ground
+  const b = manifest.bounds, coastal = manifest.sea != null || manifest.far != null;
+  const plain = new THREE.Mesh(new THREE.CircleGeometry(50000, 64).rotateX(-Math.PI / 2), coastal ? materials.sea
+    : new THREE.MeshStandardMaterial({ color: 0x8a8a86, roughness: 0.95, metalness: 0 }));
+  plain.position.set((b.minX + b.maxX) / 2, coastal ? (manifest.sea ?? 0) - 0.15 : manifest.terrain.min - 1, (b.minZ + b.maxZ) / 2); // just under the sea in the tiles, or the lowest ground
   plain.receiveShadow = true;
   plain.name = 'plain';
   scene.add(plain);
 }
+buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj, (x, z) => streamer.ground(x, z)).then((m) => m && scene.add(m));
 const birds = createBirds(manifest.bounds, streamer.ground(0, 0));
 if (params.get('birds') != null) birds.geometry.instanceCount = Math.min(MAX_BIRDS, Number(params.get('birds')) || 0);
 scene.add(birds);
@@ -106,7 +111,7 @@ const ao = atmosphere.ao;
 if (params.get('reflect') === '0') atmosphere.reflect = false;
 if (Number(params.get('clouds')) > 0) { atmosphere.coverage = Number(params.get('clouds')); atmosphere.cloudsOn = true; }
 let orthoLoaded = false, orthoWanted = true; // (the photo fills in when the tiles arrive; the panel may have switched it off by then)
-if (params.get('ortho') !== '0') loadOrtho(`ortho/${AREA}`, proj, manifest.bounds, renderer).then((ok) => { orthoLoaded = ok; shared.uOrthoOn.value = ok && orthoWanted ? 1 : 0; });
+if (params.get('ortho') !== '0') loadOrtho(`ortho/${AREA}`, proj, manifest.extent ?? manifest.bounds, renderer).then((ok) => { orthoLoaded = ok; shared.uOrthoOn.value = ok && orthoWanted ? 1 : 0; });
 const railways = await buildRailways(`tiles/${AREA}/${manifest.rails}`, (x, z) => streamer.ground(x, z), streamer.cover);
 scene.add(railways);
 scene.add(await buildFlyovers(`tiles/${AREA}/${manifest.roads}`, (x, z) => streamer.ground(x, z)));
@@ -116,8 +121,8 @@ if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params
 if (params.get('traffic') !== '0') scene.add(traffic.group);
 document.getElementById('credits').textContent = manifest.attribution.map((a) => a.split(' (')[0]).join(' · ');
 
-// initial view: over the Scramble Crossing, looking north-west towards the station
-const [cx, cz, dist, az, el] = (params.get('cam') || '0,0,420,215,32').split(',').map(Number);
+// initial view: the area's own (manifest.view), or over the origin
+const [cx, cz, dist, az, el] = (params.get('cam') || (manifest.view ?? [0, 0, 600, 200, 32]).join(',')).split(',').map(Number);
 controls.target.set(cx, streamer.ground(cx, cz), cz);
 camera.position.copy(controls.target).add(new THREE.Vector3().setFromSphericalCoords(
   dist, THREE.MathUtils.degToRad(90 - el), THREE.MathUtils.degToRad(az)));
@@ -146,7 +151,7 @@ let guiState, clockText;
   };
   guiState = state;
   // the names of the cities, for the loading screen of the next visit (index.html reads them)
-  try { for (const a of areas) localStorage.setItem(`procedural-tokyo:name:${a.id}`, a.name); } catch { /* storage unavailable */ }
+  try { for (const a of areas) localStorage.setItem(`procedural-sanjuan:name:${a.id}`, a.name); } catch { /* storage unavailable */ }
   const gui = new GUI({ title: 'Scene' });
   gui.add(state, 'city', Object.fromEntries(areas.map((a) => [a.name, a.id]))).onChange((id) => {
     const url = new URL(location.href);
@@ -155,7 +160,7 @@ let guiState, clockText;
     loader.show(areas.find((a) => a.id === id)?.name ?? id, 'leaving for the next city');
     setTimeout(() => { location.href = url.href; }, 60); // (let the screen appear first)
   });
-  const time = gui.addFolder('Time (Tokyo)');
+  const time = gui.addFolder('Time (San Juan)');
   time.add(clockTime, 'live').name('live clock').listen();
   // one slider over the day, with the clock time written beside it in place of the number box
   const slider = time.add(clockTime, 'hour', 0, 24, 1 / 60).name('time').listen().onChange(() => { clockTime.live = false; });
@@ -183,10 +188,6 @@ let guiState, clockText;
   rooms.add(shared.uWindowLife.value, 'y', 0.2, 30, 0.1).name('pace');
   rooms.add(shared.uCityGlass, 'value', 0, 3, 0.05).name('city in tower glass');
   rooms.add(shared.uNightBlue, 'value', 0, 1, 0.05).name('blue lights');
-  const walls = gui.addFolder('Wall photos');
-  walls.add(shared.uPhotoMix, 'value', 0, 1, 0.05).name('amount');
-  walls.add(shared.uPhotoRange.value, 'x', 0, 1000, 10).name('from (m)');
-  walls.add(shared.uPhotoRange.value, 'y', 10, 2000, 10).name('full at (m)');
   const quality = gui.addFolder('Rendering');
   quality.add(state, 'whole').name('whole city');
   quality.add(state, 'radius', 300, 3000, 50).name('view radius (m), if not');
@@ -198,7 +199,7 @@ let guiState, clockText;
 
   // The panel's settings are kept (in this browser) and are the same for every city: what is switched off in
   // one is off in the next. A URL that sets something itself (?time=, ?cars=, ...) is taken as it stands.
-  const KEY = 'procedural-tokyo:settings';
+  const KEY = 'procedural-sanjuan:settings';
   const explicit = [...params.keys()].some((k) => k !== 'area');
   const strip = (saved) => { delete saved.controllers?.city; return saved; }; // (the city is the page's, not a setting)
   if (!explicit) {
@@ -207,7 +208,7 @@ let guiState, clockText;
       if (saved) {
         gui.load(strip(saved));
         // (loading the time moved the slider, which stops the live clock: put the saved choice back)
-        const live = saved.folders?.['Time (Tokyo)']?.controllers?.['live clock'];
+        const live = saved.folders?.['Time (San Juan)']?.controllers?.['live clock'];
         if (live != null) clockTime.live = live;
       }
     } catch (e) { console.warn('settings not restored:', e.message); }
@@ -329,8 +330,8 @@ function frame() {
   const s = streamer.stats, info = renderer.info.render;
   const [lon, lat] = proj.unproject(controls.target.x, controls.target.z);
   hud.textContent =
-    `${manifest.name}  ${lat.toFixed(5)}N ${lon.toFixed(5)}E  ${controls.target.y.toFixed(1)} m\n` +
-    `Tokyo ${clockTime.label()}${clockTime.live ? ' (live)' : ''} · sun ${env.elevation.toFixed(0)}°\n` +
+    `${manifest.name}  ${Math.abs(lat).toFixed(5)}${lat < 0 ? 'S' : 'N'} ${Math.abs(lon).toFixed(5)}${lon < 0 ? 'W' : 'E'}  ${controls.target.y.toFixed(1)} m\n` +
+    `San Juan ${clockTime.label()}${clockTime.live ? ' (live)' : ''} · sun ${env.elevation.toFixed(0)}°\n` +
     `${fps.toFixed(0)} fps · ${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)}M tris\n` +
     `tiles ${s.loaded}/${manifest.tiles.length}${streamer.pending ? ` (+${streamer.pending})` : ''} · ${s.buildings} buildings\n` +
     (picked ? `\n▸ ${USAGE[picked.usage] ?? 'usage ' + picked.usage}, ${picked.height.toFixed(1)} m` +

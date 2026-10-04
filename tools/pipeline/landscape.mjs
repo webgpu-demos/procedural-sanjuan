@@ -1,5 +1,5 @@
 // Green space, water and street objects: OSM areas -> ground polygons, and the placement of props
-// (trees, utility poles and their wires, street lights, vending machines).
+// (trees, utility poles and their wires, street lights, mapped vending machines).
 import fs from 'node:fs';
 import { AREA, PROP, SPORT } from '../../src/shared/tileformat.js';
 
@@ -43,7 +43,8 @@ export const hash = (a, b, c = 0) => {
 // ---------------------------------------------------------------- OSM land cover
 function landKind(t) {
   if (t.natural === 'water') return AREA.WATER;
-  if (t.natural === 'wood' || t.landuse === 'forest' || t.natural === 'scrub') return AREA.WOOD;
+  if (t.natural === 'beach' || t.natural === 'sand') return AREA.BEACH;
+  if (t.natural === 'wood' || t.landuse === 'forest' || t.natural === 'scrub' || t.natural === 'wetland') return AREA.WOOD; // (wetland here: mangrove)
   if (t.leisure === 'pitch' || t.leisure === 'playground') return AREA.PITCH;
   if (t.leisure || t.landuse || t.natural === 'grassland') return AREA.PARK;
   return null;
@@ -51,8 +52,14 @@ function landKind(t) {
 
 const sportOf = (t) => (/tennis/.test(t.sport ?? '') ? SPORT.TENNIS : /soccer|futsal|multi|american_football|rugby/.test(t.sport ?? '') ? SPORT.TURF
   : /baseball|softball/.test(t.sport ?? '') ? SPORT.DIRT : SPORT.OTHER);
-// Tree models by genus: 1 ginkgo, 2 cherry, 0 anything else (see TREES in src/world/props.js).
-const genusOf = (t) => { const g = `${t.genus ?? ''} ${t.species ?? ''} ${t['species:ja'] ?? ''}`.toLowerCase(); return /ginkgo|イチョウ/.test(g) ? 1 : /cerasus|prunus|サクラ|桜/.test(g) ? 2 : 0; };
+// Tree models by genus: 1 coconut palm (and palms in general), 2 flamboyán, 3 royal palm, 0 anything else
+// (see TREES in src/world/props.js).
+export const GENUS = { ANY: 0, COCONUT: 1, FLAMBOYAN: 2, ROYAL_PALM: 3 };
+const genusOf = (t) => {
+  const g = `${t.genus ?? ''} ${t.species ?? ''} ${t.taxon ?? ''} ${t['species:es'] ?? ''} ${t['species:en'] ?? ''}`.toLowerCase();
+  return /roystonea|royal palm|palma real/.test(g) ? GENUS.ROYAL_PALM : /delonix|flamboy/.test(g) ? GENUS.FLAMBOYAN
+    : /cocos|coco|palm|arecaceae|phoenix|washingtonia|veitchia|adonidia|sabal/.test(g) || t.leaf_type === 'palm' ? GENUS.COCONUT : GENUS.ANY;
+};
 
 // Joins the outer member ways of a multipolygon relation into closed rings of node ids.
 function stitch(ways) {
@@ -131,7 +138,7 @@ export function clipRing(ring, x0, z0, x1, z1) {
 }
 
 // ---------------------------------------------------------------- props
-const TREE_SPACING = { [AREA.PARK]: [15, 0.5], [AREA.WOOD]: [8.5, 0.85] }; // grid step (m), fill probability
+const TREE_SPACING = { [AREA.PARK]: [15, 0.5], [AREA.WOOD]: [8.5, 0.85], [AREA.BEACH]: [15, 0.18] }; // grid step (m), fill probability
 const AVENUE = new Set(['trunk', 'primary', 'secondary', 'tertiary']);
 const BACKSTREET = new Set(['residential', 'unclassified', 'living_street', 'tertiary']);
 
@@ -144,15 +151,22 @@ export function placeProps({ land, trees, treeRows, vending, edges, idx, inBound
   const tree = (x, z, street, genus = 0) => {
     if (!inBounds(x, z) || idx.building.has(x, z) || idx.carriageway.has(x, z) || idx.water.has(x, z) || !free(x, z, 3.5)) return;
     const h = hash(x * 10, z * 10, 1);
+    // a tree of unknown kind: San Juan's streets and parks are a mix of palms, flamboyanes and broad shade trees
+    if (!genus) {
+      const g = hash(x * 10, z * 10, 13);
+      genus = g < (street ? 0.28 : 0.18) ? GENUS.COCONUT : g < (street ? 0.4 : 0.26) ? GENUS.ROYAL_PALM : g < (street ? 0.52 : 0.34) ? GENUS.FLAMBOYAN : GENUS.ANY;
+    }
     // street trees are smaller, pruned shapes (variants 0-1); park trees use every variant
-    props.push({ kind: PROP.TREE, variant: genus ? 3 + genus : street ? Math.floor(h * 2) : Math.floor(h * 4), rot: h * 40, x, z, scale: street ? 0.6 + 0.3 * hash(x, z, 2) : 0.75 + 0.6 * hash(x, z, 2) });
+    const palm = genus === GENUS.COCONUT || genus === GENUS.ROYAL_PALM;
+    props.push({ kind: PROP.TREE, variant: genus ? 3 + genus : street ? Math.floor(h * 2) : Math.floor(h * 4), rot: h * 40, x, z,
+      scale: palm ? 0.8 + 0.4 * hash(x, z, 2) : street ? 0.6 + 0.3 * hash(x, z, 2) : 0.75 + 0.6 * hash(x, z, 2) });
   };
 
   // mapped trees and tree rows
   for (const [x, z, genus] of trees) tree(x, z, true, genus);
   for (const row of treeRows) forEachAlong(row, 7, (x, z) => tree(x, z, true, row.genus));
 
-  // parks and woods: a jittered grid inside each polygon
+  // parks, woods and beaches: a jittered grid inside each polygon (coconut palms on the sand)
   for (const { kind, ring } of land) {
     const sp = TREE_SPACING[kind];
     if (!sp) continue;
@@ -163,14 +177,14 @@ export function placeProps({ land, trees, treeRows, vending, edges, idx, inBound
       for (let j = Math.floor(z0 / step); j <= Math.floor(z1 / step); j++) {
         if (hash(i, j, 5) > fill) continue;
         const x = (i + 0.15 + 0.7 * hash(i, j, 6)) * step, z = (j + 0.15 + 0.7 * hash(i, j, 7)) * step;
-        if (inRings(x, z, [ring]) && !idx.road.has(x, z)) tree(x, z, false);
+        if (inRings(x, z, [ring]) && !idx.road.has(x, z)) tree(x, z, false, kind === AREA.BEACH ? GENUS.COCONUT : 0);
       }
   }
 
   // along the roads
   let lastWay = null, carry = 0, prevPole = null;
   edges.forEach((e, ei) => {
-    if ((e.bridge && !e.span) || e.tunnel || e.highway.startsWith('motorway')) return;
+    if ((e.bridge && !e.span) || e.tunnel || e.flyover || e.highway === 'motorway_link') return;
     const hw = e.highway.replace('_link', '');
     const pts = [];
     for (let i = 0; i < e.pts.length; i += 3) pts.push([e.pts[i], e.pts[i + 2]]);
@@ -183,7 +197,7 @@ export function placeProps({ land, trees, treeRows, vending, edges, idx, inBound
       return null;
     };
 
-    if (AVENUE.has(hw)) {
+    if (AVENUE.has(hw) || hw === 'motorway') {
       // street lights at the kerb on both sides, staggered; street trees a little further in
       forEachAlong(pts, 17, (x, z, dx, dz, n) => {
         const side = n % 2 ? 1 : -1, nx = -dz, nz = dx;
@@ -200,13 +214,13 @@ export function placeProps({ land, trees, treeRows, vending, edges, idx, inBound
           const nx = -dz, nz = dx, kerb = reach(idx.carriageway, x, z, nx, nz, side, 16);
           if (kerb == null) continue;
           const tx = x + nx * (kerb + 1.1) * side, tz = z + nz * (kerb + 1.1) * side;
-          if (idx.sidewalk.has(tx, tz) && hash(n, ei, side) < 0.75) tree(tx, tz, true);
+          if (hw !== 'motorway' && idx.sidewalk.has(tx, tz) && hash(n, ei, side) < 0.75) tree(tx, tz, true);
         }
       }, 3 + (ei % 5));
     }
 
     if (BACKSTREET.has(hw)) {
-      // utility poles along one side of the street, joined by wires; a vending machine by some of them
+      // utility poles along one side of the street, joined by wires
       const side = hash(e.way, 3) < 0.5 ? 1 : -1;
       carry = forEachAlong(pts, 30, (x, z, dx, dz) => {
         const nx = -dz, nz = dx, edge = reach(idx.road, x, z, nx, nz, side, 12);
@@ -216,11 +230,6 @@ export function placeProps({ land, trees, treeRows, vending, edges, idx, inBound
         props.push({ kind: PROP.POLE, variant: hash(px, pz, 4) < 0.35 ? 1 : 0, rot: Math.atan2(dx, dz), x: px, z: pz, scale: 1 });
         if (prevPole && Math.hypot(px - prevPole[0], pz - prevPole[1]) < 55) wires.push([prevPole[0], prevPole[1], px, pz]);
         prevPole = [px, pz];
-        if (hash(px, pz, 9) < 0.14) {
-          const vx = x + nx * (edge + 0.45) * side + dx * 2.2, vz = z + nz * (edge + 0.45) * side + dz * 2.2;
-          if (!idx.building.has(vx, vz) && !idx.road.has(vx, vz))
-            props.push({ kind: PROP.VENDING, variant: Math.floor(hash(vx, vz, 8) * 4), rot: Math.atan2(-nx * side, -nz * side), x: vx, z: vz, scale: 1 });
-        }
       }, carry);
     }
   });

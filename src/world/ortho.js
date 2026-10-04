@@ -1,13 +1,28 @@
-// Aerial photo of the area (GSI seamlessphoto tiles fetched by tools/pipeline/fetch.mjs into
+// Aerial photo of the area (USGS orthoimagery tiles fetched by tools/pipeline/fetch.mjs into
 // public/ortho/<area>/), stitched into one texture that the terrain material drapes over the open ground.
 import * as THREE from 'three';
 import { shared } from './materials.js';
 
-const MAX = 4096; // texture pixels along the longer side (about 0.8 m per pixel for Shibuya)
+const MAX = 4096; // texture pixels along the longer side (about 0.9 m per pixel for Old San Juan; the photo itself is 2.3 m)
 
 // Web Mercator tile corner -> lon / lat
 const tileLon = (x, z) => (x / 2 ** z) * 360 - 180;
 const tileLat = (y, z) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
+
+// Colour grade of the stitched photo, in place. The shadows of buildings in the photo would lie on the ground
+// beside the real ones, blue with the sky they were lit by: they lose their blue cast and are lifted, and
+// the whole is a little desaturated so the textured roads and buildings stand out from it.
+export function gradePhoto(canvas) {
+  const g = canvas.getContext('2d'), img = g.getImageData(0, 0, canvas.width, canvas.height), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], gr = d[i + 1], b = d[i + 2];
+    const warm = Math.max(r, gr);
+    if (b > warm) b = warm + (b - warm) * 0.25;                // no blue shadows
+    const l = 0.3 * r + 0.59 * gr + 0.11 * b, l2 = 62 + 0.66 * l; // the tonal range squeezed: no black shadows, no glaring roofs
+    d[i] = l2 + (r - l) * 0.75; d[i + 1] = l2 + (gr - l) * 0.75; d[i + 2] = l2 + (b - l) * 0.75;
+  }
+  g.putImageData(img, 0, 0);
+}
 
 // proj: makeProjection() of the area; bounds: manifest.bounds. Resolves to true if a photo was loaded.
 export async function loadOrtho(base, proj, bounds, renderer) {
@@ -30,6 +45,7 @@ export async function loadOrtho(base, proj, bounds, renderer) {
     }).catch(() => {}));
   }
   await Promise.all(jobs);
+  gradePhoto(canvas);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());

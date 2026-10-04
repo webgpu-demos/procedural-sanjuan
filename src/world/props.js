@@ -26,7 +26,7 @@ const tube = (r0, r1, h, x, y, z, rgb, seg = 8) => colored(new THREE.CylinderGeo
 
 const CONCRETE = [0.6, 0.6, 0.58], STEEL = [0.36, 0.38, 0.4], DARK = [0.16, 0.17, 0.18];
 
-// Japanese utility pole: concrete mast, two crossarms, a street lamp on a short arm (local +x),
+// Utility pole (concrete, like most of Puerto Rico's): two crossarms, a street lamp on a short arm (local +x),
 // optionally a pole-top transformer.
 const POLE_LAMP = { x: 1.0, y: 5.6 };
 function poleGeometry(transformer) {
@@ -53,16 +53,20 @@ function lightGeometry() {
 }
 const LAMP = { y: 8.5, z: 2.25 };
 
-// Signal mast: pole at the kerb, arm over the road (local -x), horizontal three-lens head facing +z.
-const SIGNAL = { arm: 3.4, y: 5.6 };
+// Signal mast: pole at the kerb, arm over the road (local -x), a vertical three-lens head (red on top) hung
+// from it near its end, facing +z.
+const SIGNAL = { arm: 3.4, y: 5.4 };
 function signalGeometry() {
-  const { arm, y } = SIGNAL;
-  return mergeGeometries([
-    tube(0.12, 0.09, 6.3, 0, 0, 0, STEEL),
-    colored(new THREE.CylinderGeometry(0.05, 0.05, arm, 6).rotateZ(Math.PI / 2).translate(-arm / 2, y + 0.45, 0), STEEL),
-    box(1.3, 0.46, 0.22, -arm + 0.35, y, 0, [0.72, 0.73, 0.72]),
-    box(1.34, 0.05, 0.3, -arm + 0.35, y + 0.25, 0.13, DARK), // visor
-  ]);
+  const { arm, y } = SIGNAL, x = -arm + 0.35, yellow = [0.86, 0.68, 0.1];
+  const parts = [
+    tube(0.13, 0.1, 6.6, 0, 0, 0, STEEL),
+    colored(new THREE.CylinderGeometry(0.06, 0.06, arm, 6).rotateZ(Math.PI / 2).translate(-arm / 2, y + 0.95, 0), STEEL),
+    box(0.06, 0.25, 0.06, x, y + 0.78, 0, STEEL),          // hanger
+    box(0.42, 1.32, 0.24, x, y, 0, yellow),                // the housing, painted yellow
+    box(0.62, 1.5, 0.03, x, y, -0.13, DARK),               // backplate
+  ];
+  for (let k = -1; k <= 1; k++) parts.push(box(0.36, 0.04, 0.2, x, y + k * 0.4 + 0.2, 0.2, DARK)); // visors
+  return mergeGeometries(parts);
 }
 
 // ---- mapped street furniture; all models face local +z (towards the street)
@@ -89,10 +93,13 @@ const benchGeometry = () => mergeGeometries([
   box(0.06, 0.43, 0.42, -0.7, 0.215, 0, STEEL), box(0.06, 0.43, 0.42, 0.7, 0.215, 0, STEEL),
 ]);
 const bollardGeometry = () => mergeGeometries([tube(0.075, 0.075, 0.85, 0, 0, 0, [0.3, 0.31, 0.33], 10), tube(0.08, 0.08, 0.1, 0, 0.62, 0, [0.9, 0.9, 0.86], 10)]);
-// Japan Post box: red, on a short pedestal.
+// USPS collection box: blue, a rounded top, on four short legs.
+const USPS_BLUE = [0.05, 0.22, 0.47];
 const postBoxGeometry = () => mergeGeometries([
-  box(0.3, 0.75, 0.28, 0, 0.375, 0, RED), box(0.52, 0.72, 0.46, 0, 1.11, 0, RED), box(0.56, 0.05, 0.5, 0, 1.49, 0, RED),
-  box(0.3, 0.04, 0.02, 0, 1.3, 0.235, DARK),
+  ...[[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]].map(([x, z]) => box(0.05, 0.2, 0.05, x, 0.1, z, USPS_BLUE)),
+  box(0.48, 0.8, 0.5, 0, 0.6, 0, USPS_BLUE),
+  colored(new THREE.CylinderGeometry(0.25, 0.25, 0.48, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 1.0, 0), USPS_BLUE),
+  box(0.3, 0.05, 0.03, 0, 0.95, 0.26, [0.7, 0.72, 0.74]), // the pull-down slot
 ]);
 const phoneGeometry = () => mergeGeometries([
   box(0.95, 0.12, 0.95, 0, 2.2, 0, [0.4, 0.45, 0.44]), box(0.95, 0.1, 0.95, 0, 0.05, 0, [0.4, 0.45, 0.44]),
@@ -106,28 +113,23 @@ const subwayGeometry = () => mergeGeometries([
   ...[[-1.1, 2.2], [1.1, 2.2], [-1.1, -2.2], [1.1, -2.2]].map(([x, z]) => tube(0.05, 0.05, 2.6, x, 0, z, STEEL)),
   box(2.6, 0.12, 5.0, 0, 2.66, 0, [0.85, 0.86, 0.87]), box(2.6, 0.42, 0.1, 0, 2.42, 2.5, [0.06, 0.4, 0.75]),
 ]);
-// Statues: 0 a figure on a plinth, 1 Hachikō (a seated dog on its granite base), 2 the Moyai stone head.
+// Statues: 0 a figure on a plinth, 1 a figure high on a column (Columbus over Plaza Colón), 2 a bust on a pedestal.
 function statueGeometry(variant) {
+  const figure = (y, k = 1) => [
+    shape(new THREE.SphereGeometry(0.5, 10, 8), BRONZE, 0, y + 0.55 * k, 0, 0.5 * k, 1.1 * k, 0.4 * k),
+    shape(new THREE.SphereGeometry(0.5, 8, 6), BRONZE, 0, y + 1.25 * k, 0, 0.3 * k, 0.32 * k, 0.3 * k),
+  ];
   if (variant === 1) return mergeGeometries([
-    box(1.5, 1.35, 1.1, 0, 0.675, 0, STONE), box(1.7, 0.12, 1.3, 0, 0.06, 0, STONE),
-    shape(new THREE.SphereGeometry(0.5, 12, 8), BRONZE, 0, 1.75, -0.12, 0.62, 0.75, 0.85),   // haunches
-    shape(new THREE.SphereGeometry(0.5, 12, 8), BRONZE, 0, 2.05, 0.12, 0.5, 0.8, 0.5),       // chest
-    shape(new THREE.SphereGeometry(0.5, 12, 8), BRONZE, 0, 2.55, 0.2, 0.42, 0.42, 0.46),     // head
-    shape(new THREE.SphereGeometry(0.5, 8, 6), BRONZE, 0, 2.5, 0.42, 0.2, 0.18, 0.3),        // muzzle
-    shape(new THREE.ConeGeometry(0.5, 1, 6), BRONZE, -0.13, 2.82, 0.14, 0.16, 0.2, 0.12),    // ears
-    shape(new THREE.ConeGeometry(0.5, 1, 6), BRONZE, 0.13, 2.78, 0.14, 0.16, 0.14, 0.12),    // (the left one drooped)
-    ...[-0.14, 0.14].map((x) => shape(new THREE.CylinderGeometry(0.5, 0.5, 1, 8), BRONZE, x, 1.72, 0.3, 0.13, 0.75, 0.13)), // forelegs
-    shape(new THREE.TorusGeometry(0.5, 0.2, 6, 10, Math.PI * 1.4), BRONZE, 0, 1.75, -0.48, 0.3, 0.3, 0.3),                 // curled tail
+    box(3.2, 0.5, 3.2, 0, 0.25, 0, STONE), box(2.2, 2.4, 2.2, 0, 1.7, 0, STONE), box(2.5, 0.3, 2.5, 0, 3.05, 0, STONE),
+    tube(0.55, 0.45, 9.5, 0, 3.2, 0, [0.82, 0.8, 0.74], 14), box(1.4, 0.4, 1.4, 0, 12.85, 0, STONE),
+    ...figure(13.05, 1.5),
   ]);
   if (variant === 2) return mergeGeometries([
-    shape(new THREE.SphereGeometry(0.5, 12, 10), [0.35, 0.34, 0.33], 0, 1.35, 0, 1.5, 2.7, 1.3),
-    box(0.3, 0.9, 0.4, 0, 1.45, 0.62, [0.33, 0.32, 0.31]), box(1.0, 0.12, 0.2, 0, 1.95, 0.6, [0.28, 0.27, 0.26]),
+    box(0.7, 1.5, 0.7, 0, 0.75, 0, STONE), box(0.9, 0.12, 0.9, 0, 0.06, 0, STONE),
+    shape(new THREE.SphereGeometry(0.5, 10, 8), BRONZE, 0, 1.75, 0, 0.6, 0.4, 0.4),
+    shape(new THREE.SphereGeometry(0.5, 10, 8), BRONZE, 0, 2.15, 0.02, 0.36, 0.44, 0.38),
   ]);
-  return mergeGeometries([
-    box(0.9, 1.0, 0.9, 0, 0.5, 0, STONE),
-    shape(new THREE.SphereGeometry(0.5, 10, 8), BRONZE, 0, 1.55, 0, 0.5, 1.1, 0.4),
-    shape(new THREE.SphereGeometry(0.5, 8, 6), BRONZE, 0, 2.25, 0, 0.3, 0.32, 0.3),
-  ]);
+  return mergeGeometries([box(0.9, 1.0, 0.9, 0, 0.5, 0, STONE), ...figure(1.0)]);
 }
 // A rack of parked bicycles.
 function bikesGeometry() {
@@ -148,11 +150,13 @@ const shrineGeometry = () => mergeGeometries([
 ]);
 
 // ---- more mapped objects (tools/pipeline/extras.mjs)
-// A fire hydrant marker: the round red 消火栓 sign on a pole.
+// A pillar fire hydrant at the kerb: yellow barrel, red bonnet and outlet caps.
+const HYDRANT_YELLOW = [0.92, 0.74, 0.12];
 const hydrantGeometry = () => mergeGeometries([
-  tube(0.035, 0.035, 2.6, 0, 0, 0, [0.85, 0.85, 0.82]),
-  colored(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 18).rotateX(Math.PI / 2).translate(0, 2.4, 0), RED),
-  colored(new THREE.CylinderGeometry(0.2, 0.2, 0.05, 16).rotateX(Math.PI / 2).translate(0, 2.4, 0), [0.95, 0.95, 0.92]),
+  tube(0.17, 0.17, 0.08, 0, 0, 0, HYDRANT_YELLOW, 10), tube(0.12, 0.11, 0.55, 0, 0.08, 0, HYDRANT_YELLOW, 10),
+  colored(new THREE.SphereGeometry(0.12, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0.63, 0), RED), tube(0.03, 0.03, 0.06, 0, 0.73, 0, RED, 6),
+  ...[-1, 1].map((sx) => colored(new THREE.CylinderGeometry(0.045, 0.045, 0.12, 8).rotateZ(Math.PI / 2).translate(sx * 0.15, 0.45, 0), RED)),
+  colored(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 8).rotateX(Math.PI / 2).translate(0, 0.42, 0.14), RED),
 ]);
 const infoGeometry = () => mergeGeometries([
   tube(0.04, 0.04, 1.9, -0.55, 0, 0, STEEL), tube(0.04, 0.04, 1.9, 0.55, 0, 0, STEEL),
@@ -274,7 +278,7 @@ function decalTexture() {
   cell(DECAL.THROUGH, arrow(true, 0)); cell(DECAL.LEFT, arrow(false, -1)); cell(DECAL.RIGHT, arrow(false, 1));
   cell(DECAL.THROUGH_LEFT, arrow(true, -1)); cell(DECAL.THROUGH_RIGHT, arrow(true, 1));
   // Text is stretched along the road, as painted, so it reads from a low viewpoint.
-  const font = (px) => `900 ${px}px "Yu Gothic", "Meiryo", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif`;
+  const font = (px) => `900 ${px}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
   const fit = (text, x, y, w, h, color) => {
     g.save();
     g.font = font(200); g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = color;
@@ -283,7 +287,8 @@ function decalTexture() {
     g.fillText(text, 0, -m.actualBoundingBoxDescent);
     g.restore();
   };
-  cell(DECAL.STOP, () => [...'止まれ'].forEach((ch, i) => fit(ch, 14, 10 + i * 168, CELL_W - 28, 150, '#fff')));
+  // PARE (Puerto Rico's STOP): one word across the lane, its letters drawn tall
+  cell(DECAL.STOP, () => fit('PARE', 10, CELL_H * 0.3, CELL_W - 20, CELL_H * 0.42, '#fff'));
   for (const [v, text] of [[DECAL.SPEED_20, '20'], [DECAL.SPEED_30, '30'], [DECAL.SPEED_40, '40'], [DECAL.SPEED_50, '50'], [DECAL.SPEED_60, '60']])
     cell(v, () => [...text].forEach((ch, i) => fit(ch, 10 + i * 124, 12, 112, CELL_H - 24, '#f2a31b')));
   const t = new THREE.CanvasTexture(c);
@@ -317,13 +322,15 @@ function lensMaterial() {
 // ---------------------------------------------------------------- trees
 // Variants 0-1 are street trees, 2-3 park trees. `height` is the model height in metres at scale 1.
 const TREES = [
-  { preset: 'Ash Medium', seed: 11, height: 9, tint: 0xb5c890 },
-  { preset: 'Oak Small', seed: 23, height: 8, tint: 0xc0d09a },
-  { preset: 'Oak Medium', seed: 5, height: 13, tint: 0x9fb87f },
-  { preset: 'Oak Large', seed: 42, height: 17, tint: 0x8fae78 },
-  // by genus (OSM): 4 ginkgo — tall and narrow, fresh green; 5 cherry — low and spreading, in blossom
-  { preset: 'Aspen Medium', seed: 7, height: 13, tint: 0xa9c24f, recolor: true },
-  { preset: 'Ash Small', seed: 31, height: 7, tint: 0xf4b6cf, recolor: true },
+  { preset: 'Ash Medium', seed: 11, height: 9, tint: 0xa9c486 },
+  { preset: 'Oak Small', seed: 23, height: 8, tint: 0xb3cc8e },
+  { preset: 'Oak Medium', seed: 5, height: 13, tint: 0x94b874 },
+  { preset: 'Oak Large', seed: 42, height: 17, tint: 0x86ac6c },
+  // by genus (tools/pipeline/landscape.mjs GENUS): 4 coconut palm; 5 flamboyán — low, spreading, in flame-red
+  // flower; 6 royal palm — tall, straight, with its green crownshaft
+  { palm: 'coconut', seed: 3, height: 10.5 },
+  { preset: 'Oak Small', seed: 17, height: 7.5, tint: 0xee4a26, recolor: true, spread: 1.45 },
+  { palm: 'royal', seed: 9, height: 16 },
 ];
 
 // Leaves: ez-tree's own leaf material moves vertices without the instance matrix, so it cannot be
@@ -356,6 +363,7 @@ function leafMaterial(map, tint, recolor = false) {
 }
 
 function buildTree(def) {
+  if (def.palm) return buildPalm(def);
   const tree = new Tree();
   tree.loadPreset(def.preset);
   const o = tree.options;
@@ -368,13 +376,162 @@ function buildTree(def) {
   for (const k of Object.keys(o.branch.segments)) o.branch.segments[k] = Math.max(3, Math.round(o.branch.segments[k] * 0.6));
   tree.generate();
   const size = new THREE.Box3().setFromObject(tree).getSize(new THREE.Vector3());
-  const s = def.height / size.y;
-  const prep = (mesh) => { const g = mesh.geometry.clone(); g.scale(s, s, s); g.computeBoundingSphere(); return g; };
+  const s = def.height / size.y, k = def.spread ?? 1; // spread: a wider, flatter crown
+  const prep = (mesh) => { const g = mesh.geometry.clone(); g.scale(s * k, s, s * k); g.computeBoundingSphere(); return g; };
   return {
-    radius: (Math.max(size.x, size.z) * s) / 2, height: def.height,
+    radius: (Math.max(size.x, size.z) * s * k) / 2, height: def.height,
     branches: prep(tree.branchesMesh), leaves: prep(tree.leavesMesh),
     branchMat: new THREE.MeshStandardMaterial({ map: tree.branchesMesh.material.map, roughness: 0.95 }),
     leafMat: leafMaterial(tree.leavesMesh.material.map, def.tint, def.recolor),
+  };
+}
+
+// ---------------------------------------------------------------- palms
+// A palm frond: a leaf card with leaflets combed out either side of the midrib (alpha-tested), drawn once.
+function frondTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 512;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 128, 512);
+  g.lineCap = 'round';
+  // the tip is at the top (v = 1); leaflets are longest in the middle of the frond and point towards the tip
+  for (let y = 18; y < 500; y += 7) {
+    const t = 1 - y / 512, len = 58 * Math.sin(Math.min(1, t * 1.15) * Math.PI) ** 0.7 + 4;
+    for (const side of [-1, 1]) {
+      const shade = 70 + ((y * 37 + (side > 0 ? 13 : 0)) % 40);
+      g.strokeStyle = `rgb(${shade - 30}, ${shade + 60}, ${shade - 45})`;
+      g.lineWidth = 3.2;
+      g.beginPath(); g.moveTo(64, y); g.quadraticCurveTo(64 + side * len * 0.55, y - len * 0.25, 64 + side * len, y - len * 0.55 + 6); g.stroke();
+    }
+  }
+  g.strokeStyle = '#8a8a4a'; g.lineWidth = 4; g.beginPath(); g.moveTo(64, 512); g.lineTo(64, 10); g.stroke(); // midrib
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+// Ringed trunk bark: grey-brown with the scars of old fronds (coconut), or smooth pale grey (royal).
+function trunkTexture(royal) {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = royal ? '#b8b4aa' : '#8a7a64'; g.fillRect(0, 0, 64, 256);
+  for (let y = 0; y < 256; y += royal ? 18 : 9) {
+    g.fillStyle = royal ? 'rgba(80,76,70,0.25)' : 'rgba(50,40,30,0.45)';
+    g.fillRect(0, y, 64, royal ? 1.5 : 3);
+  }
+  for (let i = 0; i < 300; i++) { g.fillStyle = `rgba(${i % 2 ? 255 : 0},${i % 2 ? 250 : 0},${i % 2 ? 240 : 0},0.06)`; g.fillRect((i * 37) % 64, (i * 91) % 256, 3, 2); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+let frondMap = null;
+// Coconut palm: a slender trunk that leans and curves, a round crown of long drooping fronds and a cluster
+// of nuts. Royal palm: a straight pale column, swollen at the foot, a smooth green crownshaft, and fronds
+// that rise before they fall. Same shape as an ez-tree model: { radius, height, branches, leaves, far, ... }.
+function buildPalm(def) {
+  const royal = def.palm === 'royal', H = def.height;
+  let seed = def.seed * 9301 + 49297;
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  // trunk centreline: a gentle bow for the coconut palm, straight for the royal
+  const lean = royal ? 0 : 1.6, crownY = royal ? H - 3.4 : H - 1.2;
+  const axis = (t) => [lean * t * t, crownY * t, 0];
+  const parts = [], SEG = 10, SIDES = 9;
+  {
+    const pos = [], uv = [], idx = [];
+    for (let i = 0; i <= SEG; i++) {
+      const t = i / SEG, [cx, cy, cz] = axis(t);
+      const r = royal ? 0.24 + 0.16 * Math.exp(-t * 9) + 0.03 * Math.sin(t * Math.PI) : 0.2 - 0.06 * t + 0.05 * Math.exp(-t * 12);
+      for (let k = 0; k <= SIDES; k++) {
+        const a = (k / SIDES) * Math.PI * 2;
+        pos.push(cx + Math.cos(a) * r, cy, cz + Math.sin(a) * r);
+        uv.push(k / SIDES, (t * crownY) / 4);
+      }
+    }
+    for (let i = 0; i < SEG; i++) for (let k = 0; k < SIDES; k++) {
+      const a = i * (SIDES + 1) + k, b = a + SIDES + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    parts.push(g);
+  }
+  const top = axis(1);
+  const extra = [];
+  if (royal) { // the crownshaft: smooth, glossy green, a little wider than the trunk top
+    const shaft = new THREE.CylinderGeometry(0.27, 0.3, 2.6, 10, 1, true).translate(top[0], top[1] + 1.3, top[2]);
+    extra.push(colored(shaft, [0.36, 0.52, 0.22]));
+  } else { // coconuts under the crown
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.3;
+      extra.push(colored(new THREE.SphereGeometry(0.13, 6, 5).translate(top[0] + Math.cos(a) * 0.22, top[1] - 0.15 - (i % 2) * 0.12, top[2] + Math.sin(a) * 0.22), [0.42, 0.4, 0.16]));
+    }
+  }
+  // fronds: curved leaf cards radiating from the crown; v runs from the base (0) to the tip (1)
+  const fronds = [], N = royal ? 13 : 15, base = royal ? [top[0], top[1] + 2.5, top[2]] : top;
+  for (let f = 0; f < N; f++) {
+    const az = (f / N) * Math.PI * 2 + rnd() * 0.4;
+    const len = (royal ? 4.2 : 4.8) * (0.85 + rnd() * 0.3), w = royal ? 1.05 : 1.2;
+    // elevation of the frond at its base, then it arches over and droops towards the tip
+    const rise = royal ? 0.9 - rnd() * 0.9 : 0.55 - rnd() * 1.1, droop = royal ? 1.5 : 1.9;
+    const S = 7, pos = [], uv = [], idx = [];
+    const dir = [Math.cos(az), Math.sin(az)];
+    let px = 0, py = 0;
+    for (let i = 0; i <= S; i++) {
+      const t = i / S, ang = rise - droop * t * t, step = len / S;
+      if (i > 0) { px += Math.cos(ang) * step; py += Math.sin(ang) * step; }
+      const half = (w / 2) * Math.sin(Math.min(1, t * 1.25 + 0.08) * Math.PI) ** 0.6;
+      // a shallow V across the leaf: the leaflets hang a little below the midrib
+      const cx = base[0] + dir[0] * px, cy = base[1] + py, cz = base[2] + dir[1] * px;
+      const sx = -dir[1] * half, sz = dir[0] * half, sag = -half * 0.35;
+      pos.push(cx - sx, cy + sag, cz - sz, cx, cy, cz, cx + sx, cy + sag, cz + sz);
+      uv.push(0, t, 0.5, t, 1, t);
+    }
+    for (let i = 0; i < S; i++) {
+      const a = i * 3;
+      idx.push(a, a + 3, a + 1, a + 1, a + 3, a + 4, a + 1, a + 4, a + 2, a + 2, a + 4, a + 5);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    fronds.push(g.toNonIndexed());
+  }
+  const leaves = mergeGeometries(fronds);
+  leaves.computeVertexNormals();
+  leaves.computeBoundingSphere();
+  const branches = mergeGeometries(parts);
+  branches.computeBoundingSphere();
+  const trunkMat = new THREE.MeshStandardMaterial({ map: trunkTexture(royal), roughness: 0.9 });
+  // what is not bark (crownshaft, nuts) is one more mesh with vertex colours, drawn with the branches
+  const solid = mergeGeometries(extra);
+  frondMap ??= frondTexture();
+  // far away: a stick and a star of drooping blades for a crown (seen from both sides)
+  const blades = [];
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 7) * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a), L = royal ? 3.8 : 4.6, w = 0.55;
+    const P = (r, y, side) => [base[0] + c * r - sn * side, base[1] + y, base[2] + sn * r + c * side];
+    const pts = [P(0, 0.2, -w * 0.3), P(L * 0.55, royal ? 0.5 : 0.2, -w), P(L, royal ? -0.9 : -1.6, 0), P(L * 0.55, royal ? 0.5 : 0.2, w), P(0, 0.2, w * 0.3)];
+    const tri = [0, 1, 2, 0, 2, 3, 0, 3, 4], pos = [];
+    for (const i of [...tri, ...[...tri].reverse()]) pos.push(...pts[i]);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    blades.push(g);
+  }
+  const crown = mergeGeometries(blades);
+  const far = mergeGeometries([
+    colored(crown, [0.2, 0.34, 0.12]),
+    colored(new THREE.CylinderGeometry(0.18, 0.28, crownY, 5).translate(lean * 0.4, crownY / 2, 0), royal ? [0.42, 0.41, 0.38] : [0.28, 0.24, 0.18]),
+  ]);
+  return {
+    radius: royal ? 4.2 : 5.2, height: H, palm: true,
+    branches, leaves, solid, far,
+    branchMat: trunkMat,
+    leafMat: leafMaterial(frondMap, royal ? 0xd8f0b0 : 0xc8e6a0),
   };
 }
 
@@ -483,7 +640,9 @@ export class Props {
         const t = this.trees[variant % this.trees.length];
         instanced(rows, t.branches, t.branchMat, { parent: near });
         instanced(rows, t.leaves, t.leafMat, { parent: near });
-        instanced(rows, this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] });
+        if (t.solid) instanced(rows, t.solid, this.mats.metal, { parent: near });
+        if (t.far) instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false });
+        else instanced(rows, this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] });
       } else if (kind === PROP.POLE) {
         instanced(rows, this.models.pole[variant % 2], this.mats.metal);
         instanced(rows, this.models.lamp, this.mats.lamp, { shadow: false, local: [POLE_LAMP.x, POLE_LAMP.y - 0.02, 0], scale: () => [1.6, 1, 0.3] });
@@ -509,7 +668,7 @@ export class Props {
         // three lenses per head; crossing directions alternate phase
         for (let lens = 0; lens < 3; lens++) {
           const mesh = instanced(rows, this.models.lens, this.mats.lens, {
-            lift: 0.15, shadow: false, local: [-SIGNAL.arm + 0.35 + (lens - 1) * -0.4, SIGNAL.y, 0.115], scale: (i) => props[i + 5],
+            lift: 0.15, shadow: false, local: [-SIGNAL.arm + 0.35, SIGNAL.y + (lens - 1) * 0.4, 0.125], scale: (i) => props[i + 5],
           });
           const a = new Float32Array(rows.length * 2);
           rows.forEach((i, n) => { a[n * 2] = lens; a[n * 2 + 1] = Math.round(props[i + 2] / (Math.PI / 2)) % 2; });
@@ -535,7 +694,7 @@ export class Props {
       g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
       near.add(new THREE.LineSegments(g, this.mats.wire)); // hair-thin: only worth drawing close up
     }
-    return { group, near, far, count: (by.get(PROP.TREE * 16) ?? []).length + (by.get(PROP.TREE * 16 + 1) ?? []).length + (by.get(PROP.TREE * 16 + 2) ?? []).length + (by.get(PROP.TREE * 16 + 3) ?? []).length };
+    return { group, near, far, count: this.trees.reduce((n, _, v) => n + (by.get(PROP.TREE * 16 + v) ?? []).length, 0) };
   }
 
   static lodDistance = TREE_LOD_DISTANCE;

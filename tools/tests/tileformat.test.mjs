@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { encodeTile, decodeTile, AREA, BFLAG, PROP } from '../../src/shared/tileformat.js';
-import { meshCode3, meshBounds3, meshBlock } from '../../src/shared/geo.js';
-import { ROOT } from '../pipeline/config.mjs';
+import { makeProjection } from '../../src/shared/geo.js';
+import { ROOT, AREAS } from '../pipeline/config.mjs';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed++; console.log('ok  ', name); };
@@ -32,18 +32,19 @@ test('encode -> decode round trip', () => {
   assert.deepEqual([...out.wires], [0, 0, 30, -2.5]);
 });
 
-test('JIS mesh codes', () => {
-  assert.equal(meshCode3(139.70045, 35.65948), '53393596'); // Shibuya Scramble Crossing
-  const b = meshBounds3('53393596');
-  assert.ok(b.south <= 35.65948 && 35.65948 < b.north && b.west <= 139.70045 && 139.70045 < b.east);
-  const block = meshBlock(139.70045, 35.65948, 1);
-  assert.equal(new Set(block).size, 9);
-  assert.ok(block.includes('53394506') && block.includes('53393585'));
+test('local projection', () => {
+  const proj = makeProjection(-66.11656, 18.4653); // Plaza de Armas, Old San Juan
+  assert.deepEqual(proj.project(-66.11656, 18.4653), [0, -0]);
+  const [x, z] = proj.project(-66.1236, 18.4709); // El Morro: about 740 m west and 620 m north
+  assert.ok(Math.abs(x + 739) < 5 && Math.abs(z + 619) < 5, `${x}, ${z}`);
+  const [lon, lat] = proj.unproject(x, z);
+  assert.ok(Math.abs(lon + 66.1236) < 1e-9 && Math.abs(lat - 18.4709) < 1e-9);
 });
 
-const dir = path.join(ROOT, 'public/tiles/shibuya');
-if (fs.existsSync(path.join(dir, 'manifest.json'))) {
-  test('compiled shibuya tiles are well formed', () => {
+for (const id of Object.keys(AREAS)) {
+  const dir = path.join(ROOT, 'public/tiles', id);
+  if (!fs.existsSync(path.join(dir, 'manifest.json'))) { console.log(`skip  ${id}: no compiled tiles (run npm run fetch && npm run compile -- --area=${id})`); continue; }
+  test(`compiled ${id} tiles are well formed`, () => {
     const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
     const areaEN = (r) => { let s = 0; for (let i = 0, n = r.length / 2; i < n; i++) { const j = (i + 1) % n; s += r[j * 2] * r[i * 2 + 1] - r[i * 2] * r[j * 2 + 1]; } return s / 2; };
     let nB = 0;
@@ -70,6 +71,6 @@ if (fs.existsSync(path.join(dir, 'manifest.json'))) {
     for (const e of roads.edges) assert.ok(e.a < roads.nodes.length && e.b < roads.nodes.length && e.pts.length >= 6);
     console.log(`      ${m.tiles.length} tiles, ${nB} buildings, ${roads.edges.length} road edges checked`);
   });
-} else console.log('skip  compiled tiles (run npm run fetch && npm run compile)');
+}
 
 console.log(`${passed} passed`);

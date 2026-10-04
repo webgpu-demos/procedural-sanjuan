@@ -174,7 +174,7 @@ export class Streamer {
       m.userData = { tile: msg.key, info, ends: buildings.ends, facade: true };
       group.add(m);
     }
-    if (models) { // PLATEAU's own models of bridges, street furniture and trees
+    if (models) { // a tile's static models (bridges, street furniture, trees), where the compiler wrote any
       const m = new THREE.Mesh(geometry(models, [['position', 3], ['normal', 3], ['color', 3]]), this.materials.models);
       m.castShadow = m.receiveShadow = true;
       group.add(m);

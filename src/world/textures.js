@@ -24,6 +24,8 @@ export const GROUND_LAYERS = [
   { key: 'pavers', scale: 2.2 },
   { key: 'grass', scale: 3.0 },
   { key: 'ground', scale: 4.0 },
+  { key: 'sand', scale: 3.5 },
+  { key: 'cobble', scale: 2.4 },
 ];
 
 async function pixels(url) {

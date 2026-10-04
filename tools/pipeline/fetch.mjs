@@ -1,28 +1,31 @@
 // Downloads the raw data for an area into data/raw/<area>/. Cached files are skipped.
-//   PLATEAU CityGML  buildings (bldg) and road surfaces (tran), per 3rd-level mesh
-//   OpenStreetMap    drivable road network and railways (Overpass API)
-//   GSI DEM          5 m terrain tiles (dem5a), 10 m tiles (dem10b) to fill gaps
-//   GSI aerial photo seamlessphoto tiles, into public/ortho/<area>/ (the client drapes them on the ground)
-// Usage: node tools/pipeline/fetch.mjs [--area=shibuya] [--force]
+//   OpenStreetMap    buildings, drivable road network, railways, coastline, land cover, paths and named
+//                    places (Overpass API)
+//   FEMA / ORNL      USA Structures: building outlines with a LiDAR height and an occupancy class
+//                    (ArcGIS feature service), used for the heights and uses OSM does not record
+//   AWS Terrain      terrarium elevation tiles (USGS 3DEP on land)
+//   USGS imagery     The National Map orthoimagery tiles, into public/ortho/<area>/ (the client drapes them on the ground)
+// Usage: node tools/pipeline/fetch.mjs [--area=viejosanjuan] [--force]
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveArea, ROOT } from './config.mjs';
-import { demTileRange, DEM_SOURCES } from './terrain.mjs';
+import { demTileRange, DEM_SOURCES, FAR_DEM } from './terrain.mjs';
 
 const area = resolveArea();
 const FORCE = process.argv.includes('--force');
-const UA = 'procedural-tokyo/0.1 (city compiler; https://github.com/)';
-const PLATEAU_API = 'https://api.plateau.reearth.io/datacatalog/citygml/m:';
+const UA = 'procedural-sanjuan/0.1 (city compiler; https://github.com/jeantimex/tokyo fork)';
 const OVERPASS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
 ];
-const PLATEAU_TYPES = ['bldg', 'tran', 'brid', 'frn', 'veg'];
+const FEMA = 'https://services2.arcgis.com/FiaPA4ga0iQKduv3/ArcGIS/rest/services/USA_Structures_View/FeatureServer/0/query';
+const ORTHO = (z, x, y) => `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/${z}/${y}/${x}`;
 
 const t0 = Date.now();
 const log = (...a) => console.log(((Date.now() - t0) / 1000).toFixed(1).padStart(6) + 's', ...a);
 const exists = (f) => !FORCE && fs.existsSync(f) && fs.statSync(f).size > 0;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function download(url, file, { retries = 3, ...init } = {}) {
   for (let attempt = 1; ; attempt++) {
@@ -30,13 +33,15 @@ async function download(url, file, { retries = 3, ...init } = {}) {
       const res = await fetch(url, { headers: { 'User-Agent': UA }, ...init });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buf = Buffer.from(await res.arrayBuffer());
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file + '.part', buf);
-      fs.renameSync(file + '.part', file);
+      if (file) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file + '.part', buf);
+        fs.renameSync(file + '.part', file);
+      }
       return buf;
     } catch (e) {
-      if (attempt >= retries) throw new Error(`${url}: ${e.message}`);
-      await new Promise((r) => setTimeout(r, 1500 * attempt));
+      if (attempt >= retries) throw new Error(`${url.slice(0, 120)}: ${e.message}`);
+      await sleep(1500 * attempt);
     }
   }
 }
@@ -47,60 +52,32 @@ async function pool(items, n, fn) {
   await Promise.all(Array.from({ length: n }, async () => { while (queue.length) await fn(queue.shift()); }));
 }
 
-async function fetchPlateau() {
-  const dir = path.join(area.rawDir, 'plateau');
-  const jobs = [];
-  for (const mesh of area.meshes) {
-    const catFile = path.join(dir, `catalog_${mesh}.json`);
-    const cat = exists(catFile)
-      ? JSON.parse(fs.readFileSync(catFile, 'utf8'))
-      : JSON.parse(await download(PLATEAU_API + mesh, catFile));
-    // The same mesh file is listed under every ward it touches; keep one URL per type.
-    for (const type of PLATEAU_TYPES) {
-      const urls = new Set();
-      for (const city of cat.cities ?? [])
-        for (const f of city.files?.[type] ?? []) if (f.code === mesh) urls.add(f.url);
-      if (urls.size === 0) { log(`plateau ${mesh} ${type}: none`); continue; }
-      // Different wards occasionally publish different files for a shared mesh; they are
-      // deduplicated by gml:id at compile time, so download all of them.
-      [...urls].forEach((url, i) => jobs.push({ url, file: path.join(dir, `${mesh}_${type}${i ? '_' + i : ''}.gml`) }));
-    }
-  }
-  const todo = jobs.filter((j) => !exists(j.file));
-  log(`plateau: ${jobs.length} files, ${todo.length} to download`);
-  await pool(todo, 3, async (j) => {
-    const buf = await download(j.url, j.file);
-    log(`  ${path.basename(j.file)} ${(buf.length / 1e6).toFixed(1)} MB`);
-  });
-  // Photo textures of the LOD2 buildings (one roof and one wall image each), named relative to the building file.
-  const images = new Map();
-  for (const j of jobs) {
-    if (!/_bldg/.test(path.basename(j.file))) continue;
-    for (const m of fs.readFileSync(j.file, 'utf8').matchAll(/<app:imageURI>([^<]*\/(?:Roof|Wall)SurfaceTexture[^<]*)</g))
-      if (!images.has(m[1])) images.set(m[1], { url: new URL(m[1], j.url).href, file: path.join(dir, m[1]) });
-  }
-  const want = [...images.values()].filter((j) => !exists(j.file));
-  log(`plateau textures: ${images.size} images, ${want.length} to download`);
-  let failed = 0;
-  await pool(want, 8, async (j) => { try { await download(j.url, j.file); } catch { failed++; } });
-  if (failed) log(`  ${failed} images could not be downloaded (those buildings stay untextured)`);
-}
-
-// Overpass queries, one cached file each. `{bb}` is replaced by the area bounding box.
+// Overpass queries, one cached file each. `{bb}` is replaced by the area bounding box, `{bbw}` by the
+// bounding box with a margin (for lines that must be followed past the edge: the coastline).
 const OSM_QUERIES = {
   // drivable roads and railways
   'osm.json': `(
   way["highway"~"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|living_street|service)$"]({bb});
   way["railway"~"^(rail|light_rail|subway|monorail|narrow_gauge)$"]({bb});
 );`,
-  // green space, water, mapped trees, pedestrian crossings and street objects
+  // buildings and the parts of buildings that are mapped in 3D
+  'osm_buildings.json': `(
+  way["building"]({bb});
+  relation["building"]["type"="multipolygon"]({bb});
+  way["building:part"]({bb});
+);`,
+  // the coastline: the sea is whatever lies on its right
+  'osm_coast.json': `(
+  way["natural"="coastline"]({bbw});
+);`,
+  // green space, water, beaches, mapped trees, pedestrian crossings and street objects
   'osm_land.json': `(
   way["leisure"~"^(park|garden|playground|pitch)$"]({bb});
   relation["leisure"~"^(park|garden)$"]({bb});
   way["landuse"~"^(grass|forest|cemetery|religious|recreation_ground|village_green|meadow)$"]({bb});
   relation["landuse"~"^(grass|forest|religious)$"]({bb});
-  way["natural"~"^(wood|water|scrub|grassland)$"]({bb});
-  relation["natural"~"^(wood|water)$"]({bb});
+  way["natural"~"^(wood|water|scrub|grassland|beach|sand|wetland)$"]({bb});
+  relation["natural"~"^(wood|water|beach)$"]({bb});
   way["natural"="tree_row"]({bb});
   node["natural"="tree"]({bb});
   node["highway"~"^(traffic_signals|crossing)$"]({bb});
@@ -114,14 +91,14 @@ const OSM_QUERIES = {
   way["railway"="platform"]({bb});
   way["public_transport"="platform"]({bb});
   way["amenity"="parking"]({bb});
-  way["barrier"~"^(fence|hedge|wall|retaining_wall|guard_rail)$"]({bb});
+  way["barrier"~"^(fence|hedge|wall|retaining_wall|guard_rail|city_wall)$"]({bb});
+  way["historic"="citywalls"]({bb});
   way["waterway"~"^(river|stream|canal|ditch)$"]({bb});
-  way["man_made"~"^(bridge|ceremonial_gate)$"]({bb});
+  way["man_made"~"^(bridge|pier)$"]({bb});
   way["building"="roof"]({bb});
   way["leisure"="swimming_pool"]({bb});
   node["highway"="stop"]({bb});
   node["railway"="level_crossing"]({bb});
-  node["man_made"="ceremonial_gate"]({bb});
   node["emergency"="fire_hydrant"]({bb});
   node["tourism"="information"]["information"~"^(map|board)$"]({bb});
   node["leisure"="picnic_table"]({bb});
@@ -136,7 +113,7 @@ const OSM_QUERIES = {
   nwr["name"]["amenity"]({bb});
   nwr["name"]["tourism"]({bb});
   nwr["name"]["office"]({bb});
-  nwr["name"]["leisure"~"^(fitness_centre|sports_centre|amusement_arcade|adult_gaming_centre|dance|bowling_alley)$"]({bb});
+  nwr["name"]["leisure"~"^(fitness_centre|sports_centre|amusement_arcade|dance|bowling_alley)$"]({bb});
   nwr["name"]["building"]({bb});
   node["railway"~"^(station|subway_entrance)$"]({bb});
   node["highway"="bus_stop"]({bb});
@@ -149,36 +126,72 @@ out center tags;`,
 };
 
 async function fetchOsm() {
-  for (const [name, body] of Object.entries(OSM_QUERIES)) await fetchOverpass(name, body);
+  let first = true;
+  for (const [name, body] of Object.entries(OSM_QUERIES)) {
+    if (exists(path.join(area.rawDir, name))) { log(`osm ${name}: cached`); continue; }
+    if (!first) await sleep(6000); // (the public Overpass servers rate-limit back-to-back queries)
+    first = false;
+    await fetchOverpass(name, body);
+  }
 }
 
 async function fetchOverpass(name, body) {
   const file = path.join(area.rawDir, name);
-  if (exists(file)) return log(`osm ${name}: cached`);
-  const { south, west, north, east } = area.bbox;
+  const { south, west, north, east } = area.bbox, m = 0.012;
   // queries end with their own "out" statement, or get the default: the elements with all their nodes
-  const filled = body.replaceAll('{bb}', `${south},${west},${north},${east}`);
-  const query = `[out:json][timeout:180];\n${filled}${/\bout\b/.test(filled) ? '' : '\n(._;>;);\nout body;'}`;
-  for (const url of OVERPASS) {
-    try {
-      log(`osm ${name}: querying ${new URL(url).host}`);
-      const buf = await download(url, file, {
-        retries: 2, method: 'POST',
-        headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query),
-      });
-      const n = JSON.parse(buf).elements.length;
-      return log(`osm ${name}: ${n} elements, ${(buf.length / 1e6).toFixed(1)} MB`);
-    } catch (e) {
-      log(`osm ${name}: ${e.message}`);
+  const filled = body.replaceAll('{bbw}', `${south - m},${west - m},${north + m},${east + m}`).replaceAll('{bb}', `${south},${west},${north},${east}`);
+  const query = `[out:json][timeout:240];\n${filled}${/\bout\b/.test(filled) ? '' : '\n(._;>;);\nout body;'}`;
+  for (let round = 0; round < 2; round++)
+    for (const url of OVERPASS) {
+      try {
+        log(`osm ${name}: querying ${new URL(url).host}`);
+        const buf = await download(url, null, {
+          retries: 2, method: 'POST',
+          headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(query),
+        });
+        const json = JSON.parse(buf); // (an overloaded server answers with an HTML page: try the next one)
+        if (json.remark && /error|timed out/i.test(json.remark)) throw new Error(json.remark);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, buf);
+        return log(`osm ${name}: ${json.elements.length} elements, ${(buf.length / 1e6).toFixed(1)} MB`);
+      } catch (e) {
+        log(`osm ${name}: ${e.message.slice(0, 160)}`);
+        await sleep(8000);
+      }
     }
-  }
   throw new Error(`osm ${name}: every Overpass endpoint failed`);
 }
 
+// FEMA USA Structures in the bounding box, as one GeoJSON FeatureCollection (the service pages by 2000).
+async function fetchStructures() {
+  const file = path.join(area.rawDir, 'fema_structures.json');
+  if (exists(file)) return log('fema structures: cached');
+  const { south, west, north, east } = area.bbox;
+  const features = [];
+  for (let offset = 0; ; offset += 2000) {
+    const q = new URLSearchParams({
+      where: '1=1', geometry: `${west},${south},${east},${north}`, geometryType: 'esriGeometryEnvelope', inSR: '4326',
+      spatialRel: 'esriSpatialRelIntersects', outFields: 'BUILD_ID,OCC_CLS,PRIM_OCC,HEIGHT,SQMETERS,PROP_ADDR', outSR: '4326',
+      orderByFields: 'OBJECTID', resultOffset: String(offset), resultRecordCount: '2000', f: 'geojson',
+    });
+    const page = JSON.parse(await download(`${FEMA}?${q}`, null, { retries: 4 }));
+    if (page.error) throw new Error(`fema: ${JSON.stringify(page.error)}`);
+    features.push(...(page.features ?? []));
+    log(`fema structures: ${features.length}`);
+    if (!page.features?.length || !(page.exceededTransferLimit || page.properties?.exceededTransferLimit) && page.features.length < 2000) break;
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ type: 'FeatureCollection', features }));
+  log(`fema structures: ${features.length} buildings`);
+}
+
+// the bounding box with a margin: the edge tiles reach out to the 256 m tile grid (tools/pipeline/compile.mjs)
+const margin = (b, m = 0.004) => ({ west: b.west - m, south: b.south - m, east: b.east + m, north: b.north + m });
+
 async function fetchDem() {
   for (const src of DEM_SOURCES) {
-    const { z, x0, x1, y0, y1 } = demTileRange(area.bbox, src.zoom);
+    const { z, x0, x1, y0, y1 } = demTileRange(margin(area.bbox), src.zoom);
     const jobs = [];
     for (let x = x0; x <= x1; x++)
       for (let y = y0; y <= y1; y++)
@@ -191,23 +204,39 @@ async function fetchDem() {
   }
 }
 
-// Aerial photo: zoom 17 is about 1 m per pixel here, 170 tiles for the area.
+// Aerial photo: zoom 16 (about 2.3 m per pixel here) is the finest The National Map serves over Puerto Rico.
 async function fetchOrtho() {
-  const z = 17, dir = path.join(ROOT, 'public/ortho', area.id), { x0, x1, y0, y1 } = demTileRange(area.bbox, z);
+  const z = 16, dir = path.join(ROOT, 'public/ortho', area.id), { x0, x1, y0, y1 } = demTileRange(margin(area.bbox), z);
   const jobs = [];
   for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++)
-    jobs.push({ url: `https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/${z}/${x}/${y}.jpg`, file: path.join(dir, `${z}_${x}_${y}.jpg`) });
+    jobs.push({ url: ORTHO(z, x, y), file: path.join(dir, `${z}_${x}_${y}.jpg`) });
   const todo = jobs.filter((j) => !exists(j.file));
   log(`aerial photo: ${jobs.length} tiles, ${todo.length} to download`);
   await pool(todo, 4, async (j) => { try { await download(j.url, j.file); } catch (e) { log(`  ${e.message} (left as a gap)`); } });
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify({ z, x0, x1, y0, y1, attribution: 'Aerial photo: Geospatial Information Authority of Japan (GSI) seamlessphoto' }));
+  fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify({ z, x0, x1, y0, y1, attribution: 'Aerial photo: USGS The National Map orthoimagery' }));
 }
 
-log(`area ${area.id}: meshes ${area.meshes.join(' ')}`);
-log(`bbox lat ${area.bbox.south.toFixed(5)}..${area.bbox.north.toFixed(5)} lon ${area.bbox.west.toFixed(5)}..${area.bbox.east.toFixed(5)}`);
-await fetchOsm();
+// The surroundings, out to the horizon: coarse terrain (zoom 12, about 37 m) and aerial photo (zoom 13, about
+// 19 m per pixel) for FAR degrees around the area, for the landscape the client draws beyond it.
+const FAR = 0.12;
+async function fetchSurroundings() {
+  const around = margin(area.bbox, FAR), jobs = [];
+  { const { z, x0, x1, y0, y1 } = demTileRange(around, FAR_DEM.zoom);
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) jobs.push({ url: FAR_DEM.url(z, x, y), file: path.join(area.rawDir, 'dem', FAR_DEM.id, `${z}_${x}_${y}.png`) }); }
+  const z = 13, dir = path.join(ROOT, 'public/ortho', area.id, 'far'), { x0, x1, y0, y1 } = demTileRange(around, z);
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) jobs.push({ url: ORTHO(z, x, y), file: path.join(dir, `${z}_${x}_${y}.jpg`) });
+  const todo = jobs.filter((j) => !exists(j.file));
+  log(`surroundings: ${jobs.length} tiles, ${todo.length} to download`);
+  await pool(todo, 4, async (j) => { try { await download(j.url, j.file); } catch (e) { log(`  ${e.message} (left as a gap)`); } });
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify({ z, x0, x1, y0, y1, attribution: 'Aerial photo: USGS The National Map orthoimagery' }));
+}
+
+log(`area ${area.id}: bbox lat ${area.bbox.south.toFixed(5)}..${area.bbox.north.toFixed(5)} lon ${area.bbox.west.toFixed(5)}..${area.bbox.east.toFixed(5)}`);
 await fetchDem();
 await fetchOrtho();
-await fetchPlateau();
+await fetchSurroundings();
+await fetchStructures();
+await fetchOsm();
 log('done');

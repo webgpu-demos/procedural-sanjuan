@@ -12,7 +12,7 @@ const COLORS = [
   ['#0f6fc6', '#ffffff'], ['#5a5d61', '#ffffff'],
 ];
 const STYLE = { FASCIA: 0, BLADE: 1, TITLE: 2 };
-const FONT = '"Yu Gothic", "Meiryo", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
+const FONT = '"Avenir Next Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif';
 const PX = 48;              // texture pixels across a sign's short side
 const ATLAS_W = 2048, ATLAS_MAX_H = 4096;
 export const SIGN_LOD_DISTANCE = 230;
@@ -25,9 +25,9 @@ function drawSign(g, s, x, y, w, h) {
   g.beginPath(); g.rect(x, y, w, h); g.clip();
   g.fillStyle = bg; g.fillRect(x, y, w, h);
   g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 3; g.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
-  // convenience-store stripes for the three big chains
-  if (s.color === 10) { g.fillStyle = '#e8650a'; g.fillRect(x, y, w, 7); g.fillStyle = '#0a8f4f'; g.fillRect(x, y + h - 14, w, 7); g.fillStyle = '#c8102e'; g.fillRect(x, y + h - 7, w, 7); }
-  if (s.color === 11) { g.fillStyle = '#0a8f4f'; g.fillRect(x, y + h - 14, w, 8); g.fillStyle = '#1757a6'; g.fillRect(x, y + h - 6, w, 6); }
+  // trim stripes on the two white schemes
+  if (s.color === 10) { g.fillStyle = '#e8650a'; g.fillRect(x, y + h - 10, w, 10); }
+  if (s.color === 11) { g.fillStyle = '#0a8f4f'; g.fillRect(x, y + h - 10, w, 10); }
   g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle';
   const chars = [...s.text];
   if (s.style === STYLE.BLADE && chars.some(isWide)) {

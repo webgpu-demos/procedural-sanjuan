@@ -5,16 +5,11 @@ import * as THREE from 'three';
 import { beamTexture } from './traffic.js';
 import { LAMP_LAYER, lampMaterial } from './lamplight.js';
 
-// Line name (substring) -> rolling stock. Colours follow the real line colours.
+// Line name (substring) -> rolling stock. Tren Urbano runs two- and four-car sets of stainless cars.
 const STOCK = [
-  { match: '山手貨物線', stripe: '#00a08e', body: '#c9ccce', cars: 10, length: 20 },  // Saikyo / Shonan-Shinjuku trains use the freight tracks
-  { match: '山手線', stripe: '#8fc31f', body: '#c9ccce', cars: 11, length: 20 },
-  { match: '埼京', stripe: '#00a08e', body: '#c9ccce', cars: 10, length: 20 },
-  { match: '小田急', stripe: '#2a6fc9', body: '#d2d4d6', cars: 10, length: 20 },
-  { match: '井の頭', stripe: '#e8709f', body: '#d2d4d6', cars: 5, length: 20 },
-  { match: '銀座', stripe: '#8a4a1c', body: '#f2b62a', cars: 6, length: 16 },
+  { match: 'Tren Urbano', stripe: '#1f8a4c', body: '#c9ccce', cars: 4, length: 23 },
 ];
-const DEFAULT_STOCK = { stripe: '#7b8794', body: '#c9ccce', cars: 8, length: 20 };
+const DEFAULT_STOCK = { stripe: '#1f8a4c', body: '#c9ccce', cars: 4, length: 23 };
 const SPEED = 15;        // m/s
 const GAP = 350;         // metres of pause before a train re-enters
 const MIN_PATH = 260;

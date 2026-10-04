@@ -1,11 +1,11 @@
-// Street furniture mapped in OpenStreetMap as points: bus stops, subway entrances, benches, bollards,
+// Street furniture mapped in OpenStreetMap as points: bus stops (paradas), subway entrances, benches, bollards,
 // post boxes, phone booths, bicycle parking, statues and wayside shrines.
 import fs from 'node:fs';
 import { PROP } from '../../src/shared/tileformat.js';
 import { SIGN } from './signs.mjs';
 
 // Statues with a model of their own (PROP.STATUE variants); everything else is a figure on a plinth.
-const STATUES = [[/ハチ公/, 1], [/モヤイ/, 2]];
+const STATUES = [[/Col[oó]n|Columbus/i, 1], [/busto|bust/i, 2]];
 
 function kindOf(t) {
   if (t.highway === 'bus_stop') return PROP.BUS_STOP;

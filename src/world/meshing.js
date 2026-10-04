@@ -79,6 +79,7 @@ export function terrainMesh(grid, tx, tz, tileSize) {
 // islands stand a kerb's height above the carriageway. Colours tint the ground textures.
 const ROAD_STYLE = {
   [AREA.ROAD]: { lift: 0.04, color: lin([0.4, 0.4, 0.41]), layer: GROUND.ASPHALT },
+  [AREA.BEACH]: { lift: 0.03, color: lin([0.93, 0.85, 0.68]), layer: GROUND.SAND },
   [AREA.CARRIAGEWAY]: { lift: 0.06, color: lin([0.36, 0.36, 0.38]), layer: GROUND.ASPHALT },
   [AREA.SIDEWALK]: { lift: 0.2, color: lin([0.63, 0.61, 0.58]), layer: GROUND.PAVERS, kerb: true },
   [AREA.ISLAND]: { lift: 0.22, color: lin([0.36, 0.47, 0.27]), layer: GROUND.GRASS, kerb: true },
@@ -86,7 +87,7 @@ const ROAD_STYLE = {
   [AREA.PARK]: { lift: 0.02, color: lin([0.4, 0.5, 0.28]), layer: GROUND.GRASS },
   [AREA.WOOD]: { lift: 0.02, color: lin([0.3, 0.4, 0.23]), layer: GROUND.GRASS },
   [AREA.PITCH]: { lift: 0.025, color: lin([0.63, 0.56, 0.43]), layer: GROUND.CONCRETE },
-  [AREA.WATER]: { lift: 0.08, color: lin([0.16, 0.25, 0.26]), layer: GROUND.WATER },
+  [AREA.WATER]: { lift: 0.08, color: lin([0.12, 0.3, 0.32]), layer: GROUND.WATER },
   [AREA.MARK_WHITE]: { lift: 0.15, color: lin([0.9, 0.9, 0.87]), layer: GROUND.CONCRETE },
   [AREA.MARK_YELLOW]: { lift: 0.15, color: lin([0.88, 0.66, 0.12]), layer: GROUND.CONCRETE },
   [AREA.PATH]: { lift: 0.035, color: lin([0.7, 0.68, 0.63]), layer: GROUND.CONCRETE },
@@ -98,12 +99,15 @@ const ROAD_STYLE = {
 };
 // variants selected by the area's code
 const UNPAVED_PATH = { lift: 0.035, color: lin([0.62, 0.55, 0.42]), layer: GROUND.CONCRETE };
+const SEA = { lift: 0.08, color: lin([0.07, 0.33, 0.44]), layer: GROUND.WATER };                 // the Atlantic and the bay
+const ADOQUINES = { lift: 0.06, color: lin([0.42, 0.5, 0.58]), layer: GROUND.COBBLE };           // Old San Juan's blue cobbles
 const COURTS = {
   [SPORT.TENNIS]: { lift: 0.03, color: lin([0.22, 0.42, 0.36]), layer: GROUND.CONCRETE },
   [SPORT.TURF]: { lift: 0.03, color: lin([0.3, 0.5, 0.25]), layer: GROUND.GRASS },
   [SPORT.DIRT]: { lift: 0.03, color: lin([0.6, 0.48, 0.34]), layer: GROUND.CONCRETE },
 };
-const styleOf = (a) => (a.kind === AREA.PITCH && COURTS[a.code]) || (a.kind === AREA.PATH && a.code === 1 && UNPAVED_PATH) || ROAD_STYLE[a.kind] || ROAD_STYLE[AREA.OTHER];
+const styleOf = (a) => (a.kind === AREA.PITCH && COURTS[a.code]) || (a.kind === AREA.PATH && a.code === 1 && UNPAVED_PATH)
+  || (a.kind === AREA.WATER && a.code === 1 && SEA) || (a.kind === AREA.CARRIAGEWAY && a.code === 1 && ADOQUINES) || ROAD_STYLE[a.kind] || ROAD_STYLE[AREA.OTHER];
 // barriers: [height, width (0 = a thin panel), colour, layer]
 const BARRIERS = {
   [BARRIER.FENCE]: [1.3, 0, lin([0.5, 0.52, 0.53]), GROUND.CONCRETE],
@@ -111,6 +115,7 @@ const BARRIERS = {
   [BARRIER.RETAINING]: [2.2, 0.3, lin([0.6, 0.6, 0.58]), GROUND.CONCRETE],
   [BARRIER.HEDGE]: [1.3, 0.8, lin([0.22, 0.36, 0.17]), GROUND.GRASS],
   [BARRIER.GUARD_RAIL]: [0.8, 0, lin([0.86, 0.86, 0.84]), GROUND.CONCRETE],
+  [BARRIER.CITY_WALL]: [4.5, 2.2, lin([0.74, 0.66, 0.5]), GROUND.CONCRETE],   // La Muralla: sandstone, ochre-washed
 };
 const isPaint = (a) => a.kind === AREA.MARK_WHITE || a.kind === AREA.MARK_YELLOW;
 const KERB = { color: lin([0.68, 0.68, 0.66]), layer: GROUND.CONCRETE, foot: 0.03 };
@@ -184,7 +189,7 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
 }
 
 // ---------------------------------------------------------------- buildings
-// PLATEAU usage code -> facade category.
+// Usage code (PLATEAU's codes, see tools/pipeline/buildings.mjs) -> facade category.
 function category(usage, height, seed) {
   if (usage === 411 || usage === 415) return CAT.HOUSE;
   if (usage === 412) return CAT.APARTMENT;
@@ -195,26 +200,32 @@ function category(usage, height, seed) {
   return height < 9 ? CAT.HOUSE : seed < 0.5 ? CAT.APARTMENT : CAT.COMMERCIAL;
 }
 
-// Tokyo wall finishes per category: [r, g, b, texture layer].
+// San Juan wall finishes per category: [r, g, b, texture layer]. Concrete everywhere, plastered and painted:
+// pastel houses, white and cream condominium towers, the stronger colours of mixed streets.
+// (WALL.TILE holds smooth stucco, see tools/assets/fetch_textures.mjs.)
 const PALETTE = {
   [CAT.HOUSE]: [
-    [0.86, 0.83, 0.75, WALL.PLASTER], [0.9, 0.9, 0.87, WALL.PLASTER], [0.5, 0.4, 0.33, WALL.BRICK], [0.66, 0.66, 0.65, WALL.SIDING],
-    [0.3, 0.33, 0.37, WALL.SIDING], [0.78, 0.72, 0.62, WALL.PLASTER], [0.82, 0.8, 0.74, WALL.SIDING], [0.42, 0.36, 0.32, WALL.SIDING],
+    [0.93, 0.9, 0.8, WALL.PLASTER], [0.96, 0.86, 0.6, WALL.PLASTER], [0.78, 0.9, 0.8, WALL.PLASTER], [0.76, 0.86, 0.94, WALL.PLASTER],
+    [0.96, 0.8, 0.7, WALL.PLASTER], [0.94, 0.78, 0.82, WALL.PLASTER], [0.96, 0.95, 0.92, WALL.TILE], [0.86, 0.84, 0.8, WALL.TILE],
+    [0.98, 0.9, 0.5, WALL.TILE], [0.68, 0.86, 0.74, WALL.TILE], [0.86, 0.74, 0.9, WALL.PLASTER], [0.98, 0.72, 0.52, WALL.PLASTER],
   ],
   [CAT.APARTMENT]: [
-    [0.9, 0.89, 0.85, WALL.TILE], [0.82, 0.77, 0.68, WALL.TILE], [0.55, 0.4, 0.31, WALL.BRICK], [0.72, 0.72, 0.7, WALL.PLASTER],
-    [0.76, 0.66, 0.55, WALL.TILE], [0.62, 0.48, 0.38, WALL.BRICK],
+    [0.95, 0.94, 0.9, WALL.TILE], [0.93, 0.89, 0.8, WALL.TILE], [0.88, 0.86, 0.82, WALL.CONCRETE], [0.96, 0.9, 0.78, WALL.TILE],
+    [0.86, 0.9, 0.94, WALL.TILE], [0.95, 0.85, 0.76, WALL.PLASTER], [0.8, 0.88, 0.84, WALL.PLASTER],
   ],
-  [CAT.MIXED]: [[0.84, 0.82, 0.78, WALL.TILE], [0.6, 0.45, 0.36, WALL.BRICK], [0.72, 0.72, 0.71, WALL.CONCRETE], [0.88, 0.84, 0.74, WALL.TILE]],
+  [CAT.MIXED]: [
+    [0.95, 0.79, 0.3, WALL.PLASTER], [0.91, 0.66, 0.43, WALL.PLASTER], [0.47, 0.76, 0.8, WALL.PLASTER], [0.6, 0.77, 0.61, WALL.PLASTER],
+    [0.88, 0.48, 0.37, WALL.PLASTER], [0.77, 0.56, 0.64, WALL.PLASTER], [0.31, 0.56, 0.75, WALL.PLASTER], [0.95, 0.88, 0.69, WALL.PLASTER],
+  ],
   [CAT.COMMERCIAL]: [
-    [0.68, 0.69, 0.7, WALL.CONCRETE], [0.86, 0.86, 0.84, WALL.TILE], [0.76, 0.71, 0.63, WALL.TILE], [0.34, 0.35, 0.37, WALL.CONCRETE],
-    [0.56, 0.57, 0.59, WALL.CONCRETE], [0.8, 0.8, 0.79, WALL.PLASTER],
+    [0.9, 0.89, 0.86, WALL.TILE], [0.74, 0.74, 0.73, WALL.CONCRETE], [0.94, 0.9, 0.8, WALL.TILE], [0.56, 0.58, 0.6, WALL.CONCRETE],
+    [0.84, 0.78, 0.68, WALL.PLASTER], [0.92, 0.92, 0.91, WALL.CONCRETE], [0.82, 0.88, 0.9, WALL.TILE],
   ],
-  [CAT.PUBLIC]: [[0.78, 0.76, 0.72, WALL.TILE], [0.64, 0.64, 0.62, WALL.CONCRETE], [0.7, 0.62, 0.54, WALL.BRICK]],
+  [CAT.PUBLIC]: [[0.95, 0.93, 0.87, WALL.PLASTER], [0.93, 0.85, 0.66, WALL.PLASTER], [0.86, 0.86, 0.84, WALL.CONCRETE], [0.85, 0.74, 0.6, WALL.PLASTER]],
   [CAT.GLASS]: [[0.5, 0.53, 0.56, WALL.CONCRETE], [0.62, 0.63, 0.64, WALL.CONCRETE], [0.32, 0.35, 0.38, WALL.CONCRETE]],
 };
-// Metal and tile roofs on houses.
-const PITCHED_ROOFS = [[0.2, 0.21, 0.23], [0.22, 0.28, 0.36], [0.3, 0.22, 0.18], [0.42, 0.25, 0.2], [0.2, 0.28, 0.25], [0.34, 0.34, 0.35]];
+// Zinc and painted metal roofs, on the few houses that have a pitched roof at all (most are flat concrete).
+const PITCHED_ROOFS = [[0.55, 0.56, 0.57], [0.42, 0.44, 0.46], [0.62, 0.24, 0.2], [0.24, 0.42, 0.32], [0.66, 0.64, 0.6], [0.3, 0.36, 0.5]];
 // Window bay width (m) per category; a whole number of bays is fitted to each wall.
 const BAY = { [CAT.HOUSE]: 3.4, [CAT.APARTMENT]: 3.3, [CAT.MIXED]: 3.2, [CAT.COMMERCIAL]: 3.0, [CAT.PUBLIC]: 3.4, [CAT.GLASS]: 1.5 };
 const HINT_LAYER = { [MATERIAL.TILE]: WALL.TILE, [MATERIAL.CONCRETE]: WALL.CONCRETE, [MATERIAL.PLASTER]: WALL.PLASTER, [MATERIAL.BRICK]: WALL.BRICK, [MATERIAL.METAL]: WALL.SIDING };
@@ -285,9 +296,11 @@ export function buildingMesh(buildings, tx, tz) {
     const outer = b.polygons[0][0];
     const area = b.polygons.reduce((s, rings) => s + rings.reduce((t, r) => t + ringArea(r), 0), 0);
 
-    // Houses with a simple footprint get a pitched roof; everything else a flat roof with a parapet.
+    // A few houses with a simple footprint get a pitched metal roof; everything else (most houses in Puerto
+    // Rico, built for hurricanes) a flat concrete roof with a parapet.
     let roof = null, rise = 0;
-    if (cat === CAT.HOUSE && b.height < 13 && b.polygons.length === 1 && b.polygons[0].length === 1) {
+    const masonry = (b.flags & BFLAG.MASONRY) !== 0;
+    if (cat === CAT.HOUSE && b.height < 13 && b.polygons.length === 1 && b.polygons[0].length === 1 && seed < 0.14) {
       const rect = minAreaRect(outer);
       if (rect && area / rect.area > 0.78 && rect.b > 1.8) {
         rise = Math.min(2.6, rect.b * 0.5, b.height - 2.4);
@@ -296,7 +309,7 @@ export function buildingMesh(buildings, tx, tz) {
     }
     const wallTop = roof ? top - rise : top;
     let wallH = wallTop - b.base; // (per wall for LOD2 shells)
-    const parapet = roof ? 0 : cat === CAT.HOUSE ? 0.3 : b.height > 30 ? 1.2 : 0.75;
+    const parapet = roof ? 0 : masonry ? 1.4 : cat === CAT.HOUSE ? 0.45 : b.height > 30 ? 1.2 : 0.75;
     const floors = b.storeys > 0 ? b.storeys : Math.max(1, Math.round(wallH / 3.2));
     const floorH = Math.min(6, Math.max(2.5, wallH / floors));
 
@@ -325,7 +338,7 @@ export function buildingMesh(buildings, tx, tz) {
       quad(P(-1, -1, y0), P(-1, 1, y0), P(-1, 1, y1), P(-1, -1, y1), [-dx, 0, -dz], c, KIND.SOLID, layer);
     };
 
-    // ---- LOD2: PLATEAU's own walls and roof planes replace everything generated below
+    // ---- LOD2: a surveyed shell's own walls and roof planes replace everything generated below
     if (b.surfaces?.length) {
       const roofCol = lin(cat === CAT.HOUSE ? PITCHED_ROOFS[Math.floor(rnd() * PITCHED_ROOFS.length)] : [0.5, 0.5, 0.49]);
       const flatCol = lin((() => { const g = 0.5 + 0.2 * rnd(); return [g, g, g * 0.97]; })());
@@ -395,7 +408,8 @@ export function buildingMesh(buildings, tx, tz) {
 
     // ---- walls, parapet, flat roof
     const inner = wallCol.map((c) => c * 0.8);
-    const flatRoof = lin(rnd() < 0.1 ? [0.4, 0.47, 0.42] : (() => { const g = 0.5 + 0.2 * rnd(); return [g, g, g * 0.97]; })());
+    // (a fortress's top is its own stonework, a little darker than the walls)
+    const flatRoof = masonry ? wallCol.map((c) => c * 0.82) : lin(rnd() < 0.1 ? [0.4, 0.47, 0.42] : (() => { const g = 0.5 + 0.2 * rnd(); return [g, g, g * 0.97]; })());
     let longest = { len: 0, dx: 1, dz: 0 };
     const fronts = []; // candidate balcony edges
     for (const rings of b.polygons) {
@@ -407,7 +421,7 @@ export function buildingMesh(buildings, tx, tz) {
           if (len < 0.05) continue;
           const dx = (x1 - x0) / len, dz = (z1 - z0) / len;
           const nrm = [-dz, 0, dx]; // outward for CCW outlines and CW holes (see tileformat.js)
-          const bays = len < 1.8 ? 0 : Math.max(1, Math.round(len / BAY[cat])), bay = bays ? len / bays : 0;
+          const bays = len < 1.8 || masonry ? 0 : Math.max(1, Math.round(len / BAY[cat])), bay = bays ? len / bays : 0;
           const yT = wallTop + parapet, vT = yT - b.base;
           vtx(x0, bottom, z0, nrm, wallCol, 0, -SINK, KIND.WALL, bay, wallLayer);
           vtx(x1, bottom, z1, nrm, wallCol, bays, -SINK, KIND.WALL, bay, wallLayer);
@@ -450,7 +464,7 @@ export function buildingMesh(buildings, tx, tz) {
     }
 
     // ---- rooftop equipment on flat roofs: stair/lift housing, air conditioners, tanks, ducts
-    if (!roof && area > 70 && b.height > 7) {
+    if (!roof && !masonry && area > 70 && b.height > 7) {
       const rings = b.polygons[0];
       let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
       for (let e = 0; e < outer.length; e += 2) { x0 = Math.min(x0, outer[e]); x1 = Math.max(x1, outer[e]); z0 = Math.min(z0, outer[e + 1]); z1 = Math.max(z1, outer[e + 1]); }

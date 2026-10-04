@@ -1,7 +1,7 @@
 // Signboards from OpenStreetMap's named places: every shop, restaurant, office and named building becomes
 // a sign on the facade nearest to it.
 //   fascia   a horizontal board over the shopfront, or at the tenant's floor when OSM gives a level
-//   blade    a vertical board projecting from the wall (袖看板) — what a facade overflows into
+//   blade    a vertical board projecting from the wall — what a facade overflows into
 //   title    the building's own name, large, under the roofline
 import fs from 'node:fs';
 
@@ -15,21 +15,23 @@ export const SIGN_COLORS = [
   ['#3a2414', '#e9c46a'], ['#14213d', '#ffffff'], ['#ffffff', '#e8650a'], ['#ffffff', '#0a8f4f'],
   ['#0f6fc6', '#ffffff'], ['#5a5d61', '#ffffff'],
 ];
+// Chains seen in San Juan, by their colours (the names stay as OSM has them; no logos are drawn)
 const BRAND = [
-  [/セブン|7-?eleven/i, 10], [/ファミリーマート|familymart/i, 11], [/ローソン|lawson/i, 12],
-  [/スターバックス|starbucks/i, 5], [/マクドナルド|mcdonald/i, 0], [/ドトール|doutor/i, 1], [/eneos/i, 6], [/三菱ufj/i, 0], [/みずほ/i, 4],
-  [/吉野家/i, 6], [/松屋/i, 1], [/すき家/i, 0], [/タリーズ|tully/i, 8], [/三井住友/i, 5],
+  [/walgreens/i, 0], [/cvs/i, 0], [/farmacia el amal|amal/i, 4], [/puma/i, 0], [/shell/i, 1], [/total/i, 0],
+  [/starbucks/i, 5], [/mcdonald/i, 0], [/burger king/i, 6], [/wendy/i, 0], [/kfc|kentucky/i, 0], [/church'?s/i, 1], [/subway/i, 5], [/taco bell/i, 7],
+  [/pizza hut/i, 0], [/domino/i, 12], [/dunkin/i, 7], [/popular/i, 12], [/firstbank/i, 6], [/oriental/i, 6], [/walmart/i, 12],
+  [/econo/i, 0], [/pueblo/i, 0], [/selectos/i, 5], [/me salv[eé]/i, 0], [/el meson|mes[oó]n/i, 1],
 ];
 // Restaurants by cuisine (OSM's cuisine tag); anything else falls back to the palette of its kind.
 const CUISINE = [
-  [/ramen|chinese|noodle|gyoza/, [0, 1, 6]], [/sushi|japanese|soba|udon|tempura|kaiseki|unagi/, [9, 3, 8]], [/coffee|cafe|tea|cake|dessert/, [8, 5, 2]],
-  [/italian|pizza|pasta|french|spanish/, [5, 2, 0]], [/burger|chicken|american|sandwich/, [0, 1]], [/indian|curry|thai|vietnamese|asian|korean/, [6, 1, 0]],
-  [/barbecue|yakiniku|steak|beef|yakitori/, [3, 0, 8]],
+  [/puerto_rican|latin|caribbean|cuban|mexican|criolla/, [6, 1, 5, 0]], [/coffee|cafe|tea|cake|dessert|ice_cream|bakery|panader/, [8, 5, 2]],
+  [/italian|pizza|pasta|french|spanish|tapas/, [5, 2, 0]], [/burger|chicken|american|sandwich/, [0, 1]], [/chinese|japanese|sushi|asian|thai|indian/, [9, 3, 0]],
+  [/seafood|fish|mariscos/, [12, 4, 2]], [/barbecue|steak|grill|lech[oó]n/, [3, 0, 8]],
 ];
 const PALETTE = {
   restaurant: [0, 1, 6, 8, 3], fast_food: [0, 1, 6], cafe: [8, 5, 2, 3], bar: [3, 9, 7], pub: [3, 0, 8],
-  nightclub: [3, 7], karaoke_box: [7, 1, 0], pharmacy: [5, 4, 2], doctors: [2, 5, 4], dentist: [2, 4], clinic: [2, 5],
-  bank: [4, 5, 9], love_hotel: [7, 9], hotel: [9, 8], office: [13, 9, 2], shop: [2, 3, 4, 9, 5, 7, 1],
+  nightclub: [3, 7], pharmacy: [5, 4, 2], doctors: [2, 5, 4], dentist: [2, 4], clinic: [2, 5],
+  bank: [4, 5, 9], hotel: [9, 8], office: [13, 9, 2], shop: [2, 3, 4, 9, 5, 7, 1],
 };
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0) / 4294967296; };
 
@@ -41,7 +43,7 @@ export function readPlaces(file, project) {
     const t = e.tags ?? {}, lon = e.lon ?? e.center?.lon, lat = e.lat ?? e.center?.lat;
     if (!t.name || lon == null) continue;
     const kind = t.shop ? 'shop' : t.amenity && PALETTE[t.amenity] ? t.amenity : t.tourism === 'hotel' ? 'hotel' : t.office ? 'office'
-      : t.amenity && /restaurant|food|cafe|bar|pub|izakaya|cinema|theatre|clinic|hospital|school|library|post_office|studio/.test(t.amenity) ? 'shop' : null;
+      : t.amenity && /restaurant|food|cafe|bar|pub|ice_cream|cinema|theatre|clinic|hospital|school|library|post_office|studio/.test(t.amenity) ? 'shop' : null;
     const [x, z] = project(lon, lat);
     const level = Number.parseInt(t.level, 10);
     if (kind) out.push({ name: t.name, x, z, kind, level: Number.isFinite(level) ? level : null, building: false, brand: t.brand ?? '', cuisine: t.cuisine ?? '' });
@@ -50,10 +52,10 @@ export function readPlaces(file, project) {
   return out;
 }
 
-// Billboards and LED screens on commercial buildings that face a street — thick around `centre` (the
-// Scramble Crossing), thinning out with distance. Call after placeSigns (it prepares the walls).
-// buildings: as for placeSigns, plus usage.
-export function placeAds(buildings, centre = [0, 0]) {
+// Billboards and LED screens on commercial buildings that face a street — thickest around `centre` (the
+// area's origin), thinning out with distance; `density` scales the whole (1: a Tokyo shopping street).
+// Call after placeSigns (it prepares the walls). buildings: as for placeSigns, plus usage.
+export function placeAds(buildings, centre = [0, 0], density = 1) {
   const ads = [];
   buildings.forEach((b, bi) => {
     if (!(b.usage >= 401 && b.usage <= 404) && b.usage !== 413 && b.usage !== 414) return;
@@ -63,26 +65,26 @@ export function placeAds(buildings, centre = [0, 0]) {
       const mx = w.ax + w.dx * w.len / 2, mz = w.az + w.dz * w.len / 2;
       const d = Math.hypot(mx - centre[0], mz - centre[1]);
       const h1 = hash('ad' + bi + ':' + wi), h2 = hash('kind' + bi + ':' + wi), h3 = hash('roof' + bi + ':' + wi);
-      const chance = d < 220 ? 0.9 : d < 500 ? 0.5 : d < 900 ? 0.2 : 0.07;
+      const chance = density * (d < 220 ? 0.9 : d < 500 ? 0.5 : d < 900 ? 0.2 : 0.07);
       if (h1 < chance) {
         // on the wall: wide on a long wall, tall on a narrow one
         const tall = w.len < 8, width = tall ? w.len * 0.8 : Math.min(w.len * 0.72, 15);
         const h = tall ? Math.min(b.height * 0.5, width * 2.2, 14) : Math.min(b.height * 0.34, width * 0.62, 9);
         const y = b.base + Math.max(6.5 + h / 2, b.height * 0.62);
         if (h > 2.5 && y + h / 2 < b.base + b.height - 0.8) {
-          const screen = h2 < (d < 260 ? 0.45 : d < 600 ? 0.12 : 0.03);
+          const screen = h2 < density * (d < 260 ? 0.45 : d < 600 ? 0.12 : 0.03);
           ads.push({ style: screen ? SIGN.SCREEN : SIGN.BILLBOARD, color: Math.floor(h2 * 997) % POSTERS, x: mx, z: mz, y, nx: w.nx, nz: w.nz, w: width, h, text: '' });
         }
       }
       // down the side of the building: a vertical banner near one end of the wall
       const h4 = hash('banner' + bi + ':' + wi);
-      if (w.len >= 6 && b.height >= 15 && h4 < (d < 260 ? 0.7 : d < 600 ? 0.4 : d < 1100 ? 0.2 : 0.08)) {
+      if (w.len >= 6 && b.height >= 15 && h4 < density * (d < 260 ? 0.7 : d < 600 ? 0.4 : d < 1100 ? 0.2 : 0.08)) {
         const width = 1.6 + 1.2 * hash('bw' + bi + ':' + wi), h = Math.min(b.height * 0.55, width * 6.5, 18), end = h4 * 1000 % 1 < 0.5 ? 0.9 + width / 2 : w.len - 0.9 - width / 2;
         ads.push({ style: SIGN.BANNER, color: POSTERS + (Math.floor(h4 * 9973) % BANNERS), x: w.ax + w.dx * end, z: w.az + w.dz * end,
           y: b.base + Math.max(4.5 + h / 2, b.height * 0.5), nx: w.nx, nz: w.nz, w: width, h, text: '' });
       }
       // on the roof, on a frame
-      if (wi === 0 && b.height < 60 && h3 < (d < 450 ? 0.38 : d < 900 ? 0.12 : 0.03)) {
+      if (wi === 0 && b.height < 60 && h3 < density * (d < 450 ? 0.38 : d < 900 ? 0.12 : 0.03)) {
         const width = Math.min(w.len * 0.8, 12), h = Math.min(width * 0.45, 5);
         if (width > 4) ads.push({ style: SIGN.ROOFTOP, color: Math.floor(h3 * 991) % POSTERS, x: mx - w.nx * 0.6, z: mz - w.nz * 0.6, y: b.base + b.height + 1.6 + h / 2, nx: w.nx, nz: w.nz, w: width, h, text: '' });
       }

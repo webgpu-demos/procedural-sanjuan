@@ -6,10 +6,11 @@ import path from 'node:path';
 import { ROOT } from '../pipeline/config.mjs';
 
 // key -> Poly Haven asset. Facade textures are used as detail (the building colour tints them).
+// (wall_tile holds smooth stucco here: San Juan's concrete is plastered and painted, not tiled)
 export const TEXTURES = {
-  wall_tile: 'long_white_tiles',
-  wall_concrete: 'concrete_tile_facade',
-  wall_plaster: 'grey_plaster',
+  wall_tile: 'white_stucco',
+  wall_concrete: 'concrete_wall_008',
+  wall_plaster: 'painted_plaster_wall',
   wall_brick: 'brown_brick_02',
   wall_siding: 'box_profile_metal_sheet',
   asphalt: 'asphalt_02',
@@ -17,6 +18,8 @@ export const TEXTURES = {
   grass: 'leafy_grass',
   roof: 'concrete_floor_worn_001',
   ground: 'concrete_pavement',
+  sand: 'coast_sand_01',
+  cobble: 'cobblestone_pavement', // Old San Juan's adoquines (tinted blue-grey by the road colour)
 };
 const MAPS = { diff: ['Diffuse'], nor: ['nor_gl'] };
 

@@ -7,7 +7,7 @@
 //   building u16 usage | u8 storeys | u8 flags | f32 base | f32 height | f32 measuredHeight | u32 hint | polygons
 //            (hint, from OSM tags: bits 0-23 wall colour 0xRRGGBB if bit 31 is set; bits 24-27 material, see MATERIAL)
 //            | u16 nSurfaces | per surface: u8 roof (1) or wall (0) | u8 nRings | per ring: u16 nPts | nPts * (f32 x, y, z)
-//            (the LOD2 shell where PLATEAU has one: real walls and roof planes; empty otherwise)
+//            (an LOD2 shell where the source has one: real walls and roof planes; empty for extruded outlines)
 //   area     u8 kind | u8 reserved | u16 code | polygons
 //   prop     u8 kind | u8 variant | u16 rotation (0..65535 = 0..2 pi, about +y) | f32 x | f32 z | f32 scale
 //   wire     f32 x1 | f32 z1 | f32 x2 | f32 z2        (a span between two utility poles)
@@ -26,17 +26,20 @@ export const VERSION = 7;
 // Wall material from OSM's building:material, in a building's hint (0 = not mapped).
 export const MATERIAL = { NONE: 0, TILE: 1, CONCRETE: 2, PLASTER: 3, BRICK: 4, METAL: 5, GLASS: 6 };
 
-export const BFLAG = { LOD2: 1, NO_SOLID: 2, LATTICE: 4 }; // LATTICE: a steel lattice tower (OSM tower:construction)
+// LATTICE: a steel lattice tower (OSM tower:construction); MASONRY: fortress stonework, without windows
+export const BFLAG = { LOD2: 1, NO_SOLID: 2, LATTICE: 4, MASONRY: 8 };
 
-// Ground surface kinds. For roads, `code` keeps the PLATEAU function code for finer styling later.
+// Ground surface kinds. WATER code 1 is the sea (the rest are lakes, lagoons and rivers).
 export const AREA = { ROAD: 0, CARRIAGEWAY: 1, SIDEWALK: 2, ISLAND: 3, OTHER: 4, PARK: 5, WOOD: 6, WATER: 7, PITCH: 8, MARK_WHITE: 9, MARK_YELLOW: 10,
   // footpaths (code 1: unpaved), outdoor stairs, car parks, tactile paving, swimming pools, pedestrian plazas
   PATH: 11, STEPS: 12, PARKING: 13, TACTILE: 14, POOL: 15, PLAZA: 16,
+  // sand: beaches
+  BEACH: 17,
 };
 // PITCH areas carry the sport in `code`.
 export const SPORT = { OTHER: 0, TENNIS: 1, TURF: 2, DIRT: 3 };
 // Barriers travel in the wall list with a negative type instead of a deck index.
-export const BARRIER = { FENCE: 2, WALL: 3, RETAINING: 4, HEDGE: 5, GUARD_RAIL: 6 };
+export const BARRIER = { FENCE: 2, WALL: 3, RETAINING: 4, HEDGE: 5, GUARD_RAIL: 6, CITY_WALL: 7 };
 
 // Point objects placed by the compiler; the client instances a model per kind.
 export const PROP = {
@@ -50,7 +53,7 @@ export const PROP = {
 // Painted symbols on the road (PROP.DECAL variants). `rot` is the direction of travel that reads them.
 export const DECAL = {
   THROUGH: 0, LEFT: 1, RIGHT: 2, THROUGH_LEFT: 3, THROUGH_RIGHT: 4,
-  STOP: 5,                                              // 止まれ
+  STOP: 5,                                              // PARE
   SPEED_20: 6, SPEED_30: 7, SPEED_40: 8, SPEED_50: 9, SPEED_60: 10,
 };
 

@@ -2,11 +2,11 @@
 // put back on a road near the focus.
 //
 // Rules of the road, as far as this goes:
-//   - keep left; one-way streets one way only; speed from the limit of the road
+//   - keep right; one-way streets one way only; speed from the limit of the road
 //   - follow the vehicle ahead with a time gap, including the one just past the next junction
 //   - stop at red and yellow lights (the same cycle as the signal heads in props.js)
 //   - a junction is crossed by one approach at a time (opposing traffic going straight on may cross
-//     together); without lights, a side street gives way to the bigger road and slows right down first (止まれ)
+//     together); without lights, a side street gives way to the bigger road and slows right down first (PARE)
 //   - where lanes merge, vehicles queue instead of entering side by side
 //   - never enter a junction without room on the far side
 import * as THREE from 'three';
@@ -104,20 +104,23 @@ function beamGeometry(L) {
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   return g;
 }
+// What drives in San Juan: compact cars and sedans, a great many SUVs and pickups, delivery trucks, and the
+// AMA's city buses.
 const TYPES = [
-  { name: 'kei', share: 0.3, L: 3.4, spec: { L: 3.4, W: 1.48, belt: 1.0, roof: 1.72, z0: 0.12, z1: 0.86, rake: 0.42, tyre: 0.28 } },
-  { name: 'sedan', share: 0.3, L: 4.6, spec: { L: 4.6, W: 1.76, belt: 0.92, roof: 1.44, z0: 0.2, z1: 0.72, rake: 0.75 } },
-  { name: 'van', share: 0.2, L: 4.8, spec: { L: 4.8, W: 1.82, belt: 1.05, roof: 1.9, z0: 0.06, z1: 0.86, rake: 0.5 } },
-  { name: 'truck', share: 0.12, L: 6.2, spec: { L: 6.2, W: 2.1, belt: 1.0, roof: 2.2, z0: 0.74, z1: 0.97, rake: 0.18, tyre: 0.4, box: { h: 2.0, len: 0.68, z: 0.36 } } },
-  { name: 'bus', share: 0.08, L: 10.4, spec: { L: 10.4, W: 2.5, belt: 1.25, roof: 3.0, z0: 0.02, z1: 0.98, rake: 0.14, tyre: 0.46 } },
+  { name: 'compact', share: 0.26, L: 4.2, spec: { L: 4.2, W: 1.74, belt: 0.92, roof: 1.46, z0: 0.18, z1: 0.8, rake: 0.7 } },
+  { name: 'sedan', share: 0.22, L: 4.8, spec: { L: 4.8, W: 1.82, belt: 0.92, roof: 1.44, z0: 0.2, z1: 0.72, rake: 0.75 } },
+  { name: 'suv', share: 0.26, L: 4.7, spec: { L: 4.7, W: 1.9, belt: 1.08, roof: 1.76, z0: 0.12, z1: 0.86, rake: 0.55, tyre: 0.36 } },
+  { name: 'pickup', share: 0.12, L: 5.6, spec: { L: 5.6, W: 1.95, belt: 1.12, roof: 1.84, z0: 0.3, z1: 0.62, rake: 0.5, tyre: 0.38 } },
+  { name: 'truck', share: 0.08, L: 7.0, spec: { L: 7.0, W: 2.3, belt: 1.05, roof: 2.4, z0: 0.76, z1: 0.97, rake: 0.18, tyre: 0.45, box: { h: 2.3, len: 0.7, z: 0.36 } } },
+  { name: 'bus', share: 0.06, L: 12.0, spec: { L: 12.0, W: 2.55, belt: 1.25, roof: 3.1, z0: 0.02, z1: 0.98, rake: 0.14, tyre: 0.48 } },
 ];
-const CAR_COLORS = [0xd4d4d0, 0xd4d4d0, 0x111214, 0x111214, 0xa4a7ab, 0xa4a7ab, 0x6d7278, 0x1f3a6e, 0x8c1c1c, 0xc4b68f]; // (white kept off full brightness: it blooms)
-const BUS_COLORS = [0x2e8b57, 0xe8e4d8, 0xc0392b];
+const CAR_COLORS = [0xd4d4d0, 0xd4d4d0, 0xd4d4d0, 0x111214, 0x111214, 0xa4a7ab, 0xa4a7ab, 0x6d7278, 0x1f3a6e, 0x8c1c1c, 0x2f6fb0, 0xc4b68f]; // (white kept off full brightness: it blooms)
+const BUS_COLORS = [0xe8e4d8, 0xe8e4d8, 0x1d5fa8];
 
 // Vehicle models for cars parked in car parks (props.js): geometries by type, the paint material, colours.
 let parkedKit = null;
 export function parkedVehicles() {
-  parkedKit ??= { models: TYPES.slice(0, 3).map((t) => vehicle(t.spec)), material: carMaterial(false), colors: [0xd4d4d0, 0x111214, 0xa4a7ab, 0x1f3a6e] };
+  parkedKit ??= { models: TYPES.slice(0, 4).map((t) => vehicle(t.spec)), material: carMaterial(false), colors: [0xd4d4d0, 0x111214, 0xa4a7ab, 0x1f3a6e] };
   return parkedKit;
 }
 
@@ -164,8 +167,8 @@ function buildGraph({ nodes, edges, signals }, surface) {
       if (cum.at(-1) < 1) continue;
       const n = e.oneway ? Math.max(1, e.lanes) : Math.max(1, Math.floor(e.lanes / 2));
       // lateral offset of lane k, to the right of travel: one-way roads centred on the line; two-way ones
-      // on its left half (left-hand traffic). A two-way single-lane street is shared down the middle.
-      const offset = (k) => (e.oneway ? (k - (n - 1) / 2) * LANE : e.lanes >= 2 ? -(k + 0.5) * LANE : -1.15);
+      // on its right half (right-hand traffic). A two-way single-lane street is shared down the middle.
+      const offset = (k) => (e.oneway ? (k - (n - 1) / 2) * LANE : e.lanes >= 2 ? (k + 0.5) * LANE : 1.15);
       // An expressway ramp climbing to its flyover is a structure of its own (flyovers.js builds it where the
       // road's level stands 1.5 m above the ground somewhere): cars follow the road's level there too.
       let ramp = false;
