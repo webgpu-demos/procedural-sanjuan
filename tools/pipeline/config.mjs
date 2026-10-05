@@ -3,7 +3,17 @@
 //   view      default camera for the client: [x, z, distance, azimuth°, elevation°] around the origin
 //   heritage  [[lon, lat], ...] outline of a historic district: its buildings get the colonial palette
 //   ads       how many invented billboards and screens (1 = as dense as a Tokyo shopping street, where this code began)
+// For a large area:
+//   source    'overpass': query the live data instead of reading Geofabrik's extract (tools/pipeline/extract.mjs)
+//   chunk     with Overpass, queries are split into cells of this many degrees (one for the whole would time out)
+//   terrain   terrain grid spacing in metres (default 5; the elevation data under San Juan is 10 m anyway)
+//   orthoZoom zoom of the aerial photo tiles (default 16)
+//   stream    the client streams full detail within this radius (m) instead of loading the whole area
 import path from 'node:path';
+
+// Old San Juan's walled city, from El Morro to the Plaza Colón / San Cristóbal gate, La Perla included
+const OLD_CITY = [[-66.1262, 18.4716], [-66.1180, 18.4718], [-66.1095, 18.4690], [-66.1080, 18.4660], [-66.1090, 18.4635],
+  [-66.1135, 18.4610], [-66.1190, 18.4600], [-66.1225, 18.4625], [-66.1262, 18.4680]];
 
 export const AREAS = {
   viejosanjuan: {
@@ -11,9 +21,7 @@ export const AREAS = {
     origin: [-66.11656, 18.46530], // Plaza de Armas [lon, lat]
     bbox: { west: -66.1290, south: 18.4560, east: -66.0930, north: 18.4750 },
     view: [-180, 40, 900, 200, 30],
-    // the walled city, from El Morro to the Plaza Colón / San Cristóbal gate, La Perla included
-    heritage: [[-66.1262, 18.4716], [-66.1180, 18.4718], [-66.1095, 18.4690], [-66.1080, 18.4660], [-66.1090, 18.4635],
-      [-66.1135, 18.4610], [-66.1190, 18.4600], [-66.1225, 18.4625], [-66.1262, 18.4680]],
+    heritage: OLD_CITY,
     ads: 0.06,
   },
   condado: {
@@ -30,6 +38,16 @@ export const AREAS = {
     view: [430, -200, 950, 345, 24], // the towers of the Milla de Oro, looking north to the Condado and the sea
     ads: 0.35,
   },
+};
+// The whole municipality: El Morro to Caimito, the bay to Carolina (about 14 x 20 km, 100 000 buildings)
+AREAS.sanjuan = {
+  name: 'San Juan (whole municipality)',
+  origin: [-66.11656, 18.46530], // Plaza de Armas
+  bbox: { west: -66.1290, south: 18.2960, east: -65.9910, north: 18.4760 },
+  view: [3000, 1600, 5200, 38, 22], // from over Hato Rey, north-west across Santurce to the Condado and Old San Juan
+  heritage: OLD_CITY,
+  ads: 0.2,
+  chunk: 0.04, terrain: 10, orthoZoom: 15, stream: 1300,
 };
 export const DEFAULT_AREA = 'viejosanjuan';
 

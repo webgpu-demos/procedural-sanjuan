@@ -409,6 +409,34 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
   return m;
 }
 
+// Distant buildings (meshing.js blockMesh): their flat wall colour, darkened in a grid of windows by storey
+// and bay worked out from the world position, a scatter of them lit at night. Far away the grid blurs into
+// its average instead of shimmering.
+function blocksMaterial() {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; // (no lamp light up here; the sampler still needs its texture)
+    shader.uniforms.uNight = shared.uNight;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${WORLD_VARYINGS_VERT}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WORLD_VARYINGS_SET}`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uNight;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\n${NOISE}`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        if (abs(vWNrm.y) < 0.5) {
+          vec2 t = normalize(vec2(-vWNrm.z, vWNrm.x));
+          vec2 g = vec2(dot(vWPos.xz, t) / 3.2, vWPos.y / 3.3), cell = floor(g), f = fract(g);
+          float blur = smoothstep(0.25, 0.7, max(fwidth(g.x), fwidth(g.y)));
+          float win = mix(step(0.25, f.x) * step(f.x, 0.75) * step(0.3, f.y) * step(f.y, 0.8), 0.25, blur);
+          float lit = mix(step(0.74, hash12(cell + floor(vWPos.xz / 97.0) * 7.0)), 0.26, blur);
+          diffuseColor.rgb *= 0.9 - 0.5 * win; // (as dark as a detailed facade is with its glass, from afar)
+          totalEmissiveRadiance += win * lit * uNight * vec3(1.0, 0.78, 0.5) * 1.1;
+        }`);
+  };
+  m.customProgramCacheKey = () => 'blocks-v2';
+  return m;
+}
+
 export function createMaterials(tex) {
   return {
     facade: facadeMaterial(tex),
@@ -420,6 +448,7 @@ export function createMaterials(tex) {
     paint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -8 }),
     // static models of a tile (bridges, street furniture, trees): plain painted surfaces, seen from both sides
     models: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide }),
+    blocks: blocksMaterial(),
     // the open sea beyond the area: the water of the tiles' sea polygons (meshing.js SEA), as one plane
     sea: groundMaterial(tex, { fixedLayer: 6, color: new THREE.Color().setRGB(0.07, 0.33, 0.44, THREE.SRGBColorSpace) }),
   };

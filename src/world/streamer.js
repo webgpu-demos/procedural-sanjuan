@@ -1,5 +1,7 @@
 // Keeps the tiles within `radius` of a focus point loaded, nearest first, and drops the ones
 // that fall beyond radius + hysteresis. Meshing happens in a small pool of workers.
+// With `blockRadius` beyond `radius` (a large area), the tiles out to there show their buildings as plain
+// blocks (meshing.js blockMesh) until they come near enough for the full tile.
 import * as THREE from 'three';
 import { tileKey } from '../shared/geo.js';
 import { sampleGrid } from '../shared/terrain.js';
@@ -22,7 +24,7 @@ function geometry(arrays, attrs) {
 }
 
 export class Streamer {
-  constructor(scene, materials, props, signs, { base, radius = 1100, hysteresis = 250 } = {}) {
+  constructor(scene, materials, props, signs, { base, radius = 1100, hysteresis = 250, blockRadius = 0 } = {}) {
     this.scene = scene;
     this.materials = materials;
     this.props = props;
@@ -31,6 +33,9 @@ export class Streamer {
     this.radius = radius;
     this.hysteresis = hysteresis;
     this.tiles = new Map(); // key -> { state, group, info, ends, tris }
+    this.blocks = new Map(); // key -> { state, mesh }: the distant versions
+    this.blockRadius = blockRadius;
+    this.onChange = null;   // (tx, tz, ready): a full tile has come in or gone
     this.inFlight = 0;
     this.stats = { loaded: 0, buildings: 0, triangles: 0 };
   }
@@ -98,27 +103,59 @@ export class Streamer {
     for (const [key, t] of this.tiles) {
       if (t.state === 'ready' && dist(this.available.get(key)) > this.radius + this.hysteresis) this.unload(key);
     }
-    // load, nearest first
+    const blocks = this.blockRadius > this.radius;
+    for (const [key, b] of this.blocks) {
+      if (b.state === 'ready' && (!blocks || dist(this.available.get(key)) > this.blockRadius + this.hysteresis * 2)) this.unloadBlocks(key);
+      else if (b.mesh) b.mesh.visible = this.tiles.get(key)?.state !== 'ready'; // the full tile, once in, stands in for its blocks
+    }
+    // load, nearest first: full tiles, then (with what is left of the workers) the distant blocks
     if (this.inFlight >= MAX_IN_FLIGHT) return;
-    const wanted = [];
+    const wanted = [], far = [];
     for (const [key, tl] of this.available) {
-      if (this.tiles.has(key)) continue;
+      if (this.tiles.has(key)) continue; // (loading or in: its blocks are not needed)
       const d = dist(tl);
       if (d <= this.radius) wanted.push([d, key, tl]);
+      else if (blocks && !this.blocks.has(key) && d <= this.blockRadius) far.push([d, key, tl]);
     }
     wanted.sort((a, b) => a[0] - b[0]);
+    far.sort((a, b) => a[0] - b[0]);
+    const url = (file) => new URL(`${this.base}/${file}`, location.href).href;
     for (const [, key, tl] of wanted) {
       if (this.inFlight >= MAX_IN_FLIGHT) break;
       this.tiles.set(key, { state: 'loading' });
       this.inFlight++;
       const w = this.workers[this.nextWorker++ % this.workers.length];
-      const url = (file) => new URL(`${this.base}/${file}`, location.href).href;
       w.postMessage({ type: 'tile', key, url: url(tl.file), meshUrl: tl.mesh && url(tl.mesh), tileSize: size });
     }
+    for (const [, key, tl] of far) {
+      if (this.inFlight >= MAX_IN_FLIGHT) break;
+      this.blocks.set(key, { state: 'loading', mesh: null });
+      this.inFlight++;
+      this.workers[this.nextWorker++ % this.workers.length].postMessage({ type: 'blocks', key, url: url(tl.file) });
+    }
+  }
+
+  onBlocks(msg) {
+    const b = this.blocks.get(msg.key);
+    if (msg.type === 'blocks-error') { if (b) b.state = 'failed'; return; }
+    if (!b) return; // dropped while in flight
+    b.state = 'ready';
+    if (!msg.mesh.position.length) return;
+    b.mesh = new THREE.Mesh(geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3]]), this.materials.blocks);
+    b.mesh.name = `blocks ${msg.key}`;
+    b.mesh.visible = this.tiles.get(msg.key)?.state !== 'ready';
+    this.scene.add(b.mesh);
+  }
+
+  unloadBlocks(key) {
+    const b = this.blocks.get(key);
+    if (b.mesh) { this.scene.remove(b.mesh); b.mesh.geometry.dispose(); }
+    this.blocks.delete(key);
   }
 
   onResult(msg) {
     this.inFlight--;
+    if (msg.type === 'blocks' || msg.type === 'blocks-error') { this.onBlocks(msg); return; }
     const t = this.tiles.get(msg.key);
     // a tile that cannot be read stays marked as failed: asking for it again every frame would only repeat the error
     if (msg.type === 'error') { console.warn(`tile ${msg.key}: ${msg.message}`); if (t) t.state = 'failed'; return; }
@@ -195,6 +232,10 @@ export class Streamer {
     const tris = terrain.index.length / 3 + roads.position.length / 9 + buildings.triangles;
     Object.assign(t, { state: 'ready', group, trees, signs, atlases, signNear: false, buildings: info.length, tris });
     this.scene.add(group);
+    const b = this.blocks.get(msg.key);
+    if (b?.mesh) b.mesh.visible = false;
+    const tl = this.available.get(msg.key);
+    this.onChange?.(tl.x, tl.z, true);
     this.stats.loaded++; this.stats.buildings += info.length; this.stats.triangles += tris;
   }
 
@@ -227,6 +268,10 @@ export class Streamer {
     t.group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); else if (!o.isGroup) o.geometry?.dispose(); o.userData.own?.forEach((r) => r.dispose()); });
     this.tiles.delete(key);
     this.stats.loaded--; this.stats.buildings -= t.buildings; this.stats.triangles -= t.tris;
+    const b = this.blocks.get(key);
+    if (b?.mesh) b.mesh.visible = true;
+    const tl = this.available.get(key);
+    this.onChange?.(tl.x, tl.z, false);
   }
 
   // Building under a raycast hit on a facade mesh: { usage, storeys, height, base }.

@@ -40,10 +40,19 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
     for (const id of [e.ids[0], e.ids.at(-1)]) degree.set(id, (degree.get(id) ?? 0) + 1);
     e.ids.forEach((id, i) => { if (!at.has(id)) at.set(id, []); at.get(id).push({ e, i }); });
   }
-  const junctions = [...degree].filter(([, n]) => n >= 3).map(([id]) => pos(id));
+  // (bucketed in 64 m cells: a large area has tens of thousands)
+  const junctions = new Map(), JCELL = 64;
+  for (const [id, n] of degree) {
+    if (n < 3) continue;
+    const p = pos(id), k = Math.floor(p[0] / JCELL) + ',' + Math.floor(p[1] / JCELL);
+    if (!junctions.has(k)) junctions.set(k, []);
+    junctions.get(k).push(p);
+  }
   const nearestJunction = (x, z, max) => {
     let best = null, bd = max;
-    for (const j of junctions) { const d = Math.hypot(j[0] - x, j[1] - z); if (d < bd) { bd = d; best = j; } }
+    for (let i = Math.floor((x - max) / JCELL); i <= Math.floor((x + max) / JCELL); i++)
+      for (let k = Math.floor((z - max) / JCELL); k <= Math.floor((z + max) / JCELL); k++)
+        for (const j of junctions.get(i + ',' + k) ?? []) { const d = Math.hypot(j[0] - x, j[1] - z); if (d < bd) { bd = d; best = j; } }
     return best;
   };
 

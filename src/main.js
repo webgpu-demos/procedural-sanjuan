@@ -86,6 +86,14 @@ const signs = new Signs();
 const streamer = new Streamer(scene, materials, props, signs, { base: `tiles/${AREA}`, radius: Number(params.get('radius')) || 1e5 });
 loader.set(0.08, 'terrain');
 const manifest = await streamer.init();
+// A large area (the whole municipality) streams: full detail around the view, plain blocks out to a few
+// kilometres, the photo-draped ground beyond (far.js). It is never loaded whole.
+const LARGE = manifest.stream != null || manifest.tiles.length > 600;
+if (LARGE) {
+  streamer.radius = Number(params.get('radius')) || manifest.stream || 1300;
+  streamer.blockRadius = manifest.blockRadius ?? 4500;
+  controls.maxDistance = 9000;
+}
 loader.set(0.14, 'railways and roads');
 const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
 // Beyond the area: the rest of the island (far.js) over the sea, out to the haze of the horizon; without the
@@ -99,7 +107,13 @@ const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
   plain.name = 'plain';
   scene.add(plain);
 }
-buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj, (x, z) => streamer.ground(x, z)).then((m) => m && scene.add(m));
+// the ground of the tiles not loaded, and of the island around the area (far.js)
+buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj, (x, z) => streamer.ground(x, z)).then((far) => {
+  if (!far) return;
+  scene.add(far.mesh);
+  streamer.onChange = (tx, tz, on) => far.setLoaded(tx, tz, on);
+  for (const [key, t] of streamer.tiles) if (t.state === 'ready') { const tl = streamer.available.get(key); far.setLoaded(tl.x, tl.z, true); }
+});
 const birds = createBirds(manifest.bounds, streamer.ground(0, 0));
 if (params.get('birds') != null) birds.geometry.instanceCount = Math.min(MAX_BIRDS, Number(params.get('birds')) || 0);
 scene.add(birds);
@@ -145,8 +159,8 @@ let guiState, clockText;
     get occlusion() { return ao.configuration.intensity > 0; }, set occlusion(v) { ao.configuration.intensity = v ? AO : 0; },
     bloom: true,
     // the whole city at once, or only what lies within the view radius of the point looked at (fewer tiles: more frames)
-    wholeCity: !params.get('radius'), near: Number(params.get('radius')) || 900,
-    get whole() { return this.wholeCity; }, set whole(v) { this.wholeCity = v; streamer.radius = v ? 1e5 : this.near; },
+    wholeCity: !params.get('radius') && !LARGE, near: Number(params.get('radius')) || (LARGE ? streamer.radius : 900),
+    get whole() { return this.wholeCity; }, set whole(v) { this.wholeCity = v && !LARGE; streamer.radius = this.wholeCity ? 1e5 : this.near; },
     get radius() { return this.near; }, set radius(v) { this.near = v; if (!this.wholeCity) streamer.radius = v; },
   };
   guiState = state;
@@ -189,7 +203,7 @@ let guiState, clockText;
   rooms.add(shared.uCityGlass, 'value', 0, 3, 0.05).name('city in tower glass');
   rooms.add(shared.uNightBlue, 'value', 0, 1, 0.05).name('blue lights');
   const quality = gui.addFolder('Rendering');
-  quality.add(state, 'whole').name('whole city');
+  if (!LARGE) quality.add(state, 'whole').name('whole city');
   quality.add(state, 'radius', 300, 3000, 50).name('view radius (m), if not');
   quality.add(atmosphere, 'reflect').name('window reflections');
   quality.add(shared.uGlintOn, 'value', 0, 1, 1).name('sun in the windows');

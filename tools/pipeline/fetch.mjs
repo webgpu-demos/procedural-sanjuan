@@ -1,15 +1,16 @@
 // Downloads the raw data for an area into data/raw/<area>/. Cached files are skipped.
 //   OpenStreetMap    buildings, drivable road network, railways, coastline, land cover, paths and named
-//                    places (Overpass API)
+//                    places, from Geofabrik's Puerto Rico extract (or the Overpass API with --overpass)
 //   FEMA / ORNL      USA Structures: building outlines with a LiDAR height and an occupancy class
 //                    (ArcGIS feature service), used for the heights and uses OSM does not record
 //   AWS Terrain      terrarium elevation tiles (USGS 3DEP on land)
 //   USGS imagery     The National Map orthoimagery tiles, into public/ortho/<area>/ (the client drapes them on the ground)
-// Usage: node tools/pipeline/fetch.mjs [--area=viejosanjuan] [--force]
+// Usage: node tools/pipeline/fetch.mjs [--area=viejosanjuan] [--force] [--overpass]
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveArea, ROOT } from './config.mjs';
+import { resolveArea, ROOT, RAW } from './config.mjs';
 import { demTileRange, DEM_SOURCES, FAR_DEM } from './terrain.mjs';
+import { EXTRACT_URL, extractArea } from './extract.mjs';
 
 const area = resolveArea();
 const FORCE = process.argv.includes('--force');
@@ -27,10 +28,11 @@ const log = (...a) => console.log(((Date.now() - t0) / 1000).toFixed(1).padStart
 const exists = (f) => !FORCE && fs.existsSync(f) && fs.statSync(f).size > 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function download(url, file, { retries = 3, ...init } = {}) {
+async function download(url, file, { retries = 3, timeout = 300000, ...init } = {}) {
   for (let attempt = 1; ; attempt++) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': UA }, ...init });
+      // (a server that stops answering must not hang the run: give up on it after `timeout` ms)
+      const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(timeout), ...init });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buf = Buffer.from(await res.arrayBuffer());
       if (file) {
@@ -126,27 +128,77 @@ out center tags;`,
 };
 
 async function fetchOsm() {
+  if (area.source !== 'overpass' && !process.argv.includes('--overpass')) return osmFromExtract();
   let first = true;
   for (const [name, body] of Object.entries(OSM_QUERIES)) {
     if (exists(path.join(area.rawDir, name))) { log(`osm ${name}: cached`); continue; }
+    // A large area is queried cell by cell (cached one by one, so a failed run resumes), then merged.
+    // The coastline is wanted past the edges anyway: one query.
+    if (area.chunk && !body.includes('{bbw}')) { await fetchChunked(name, body); first = false; continue; }
     if (!first) await sleep(6000); // (the public Overpass servers rate-limit back-to-back queries)
     first = false;
     await fetchOverpass(name, body);
   }
 }
 
-async function fetchOverpass(name, body) {
+// OpenStreetMap from Geofabrik's Puerto Rico extract (one download, shared by the areas, kept for a day):
+// tools/pipeline/extract.mjs. --overpass (or source: 'overpass' in config.mjs) queries the live data instead,
+// cell by cell for a large area.
+async function osmFromExtract() {
+  const names = Object.keys(OSM_QUERIES);
+  if (names.every((n) => exists(path.join(area.rawDir, n)))) return log('osm: cached');
+  const pbf = path.join(RAW, '_extract', 'puerto-rico-latest.osm.pbf');
+  const stale = !fs.existsSync(pbf) || Date.now() - fs.statSync(pbf).mtimeMs > 864e5;
+  if (stale || FORCE) {
+    log(`osm extract: downloading ${EXTRACT_URL}`);
+    const buf = await download(EXTRACT_URL, pbf, { timeout: 1800000 });
+    log(`osm extract: ${(buf.length / 1e6).toFixed(0)} MB`);
+  } else log('osm extract: cached');
+  const files = await extractArea(pbf, area.bbox, 0.012, log);
+  for (const n of names) {
+    fs.writeFileSync(path.join(area.rawDir, n), JSON.stringify(files[n]));
+    log(`osm ${n}: ${files[n].elements.length} elements (from the extract)`);
+  }
+}
+
+// (two cells at a time, on the main server, which gives each client two slots; the others are the fallback)
+async function fetchChunked(name, body) {
+  const { south, west, north, east } = area.bbox, c = area.chunk;
+  const nx = Math.ceil((east - west) / c - 1e-9), ny = Math.ceil((north - south) / c - 1e-9), base = name.replace('.json', '');
+  const cells = [];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++)
+    cells.push({ part: path.join('osm_parts', `${base}_${i}_${j}.json`), box: { west: west + i * c, east: Math.min(east, west + (i + 1) * c), south: south + j * c, north: Math.min(north, south + (j + 1) * c) } });
+  const readable = (part) => { try { return JSON.parse(fs.readFileSync(path.join(area.rawDir, part), 'utf8')); } catch { return null; } };
+  const todo = cells.filter((cl) => !exists(path.join(area.rawDir, cl.part)) || !readable(cl.part));
+  log(`osm ${name}: ${cells.length} cells, ${todo.length} to fetch`);
+  await Promise.all([0, 1].map(async () => {
+    for (let cl; (cl = todo.shift());) { await fetchOverpass(cl.part, body, cl.box); await sleep(3000); }
+  }));
+  const seen = new Set(), elements = [];
+  for (const cl of cells) {
+    for (const e of readable(cl.part).elements) {
+      const k = e.type[0] + e.id;
+      if (!seen.has(k)) { seen.add(k); elements.push(e); }
+    }
+  }
+  fs.writeFileSync(path.join(area.rawDir, name), JSON.stringify({ elements }));
+  log(`osm ${name}: ${nx * ny} cells merged, ${elements.length} elements`);
+}
+
+async function fetchOverpass(name, body, box = area.bbox, server = 0) {
   const file = path.join(area.rawDir, name);
-  const { south, west, north, east } = area.bbox, m = 0.012;
+  const { south, west, north, east } = box, m = 0.012;
   // queries end with their own "out" statement, or get the default: the elements with all their nodes
   const filled = body.replaceAll('{bbw}', `${south - m},${west - m},${north + m},${east + m}`).replaceAll('{bb}', `${south},${west},${north},${east}`);
-  const query = `[out:json][timeout:240];\n${filled}${/\bout\b/.test(filled) ? '' : '\n(._;>;);\nout body;'}`;
+  const query = `[out:json][timeout:400];\n${filled}${/\bout\b/.test(filled) ? '' : '\n(._;>;);\nout body;'}`;
+  // the preferred server first, then the others
+  const servers = [...OVERPASS.slice(server), ...OVERPASS.slice(0, server)];
   for (let round = 0; round < 2; round++)
-    for (const url of OVERPASS) {
+    for (const url of servers) {
       try {
         log(`osm ${name}: querying ${new URL(url).host}`);
         const buf = await download(url, null, {
-          retries: 2, method: 'POST',
+          retries: 2, method: 'POST', timeout: 420000,
           headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'data=' + encodeURIComponent(query),
         });
@@ -204,9 +256,10 @@ async function fetchDem() {
   }
 }
 
-// Aerial photo: zoom 16 (about 2.3 m per pixel here) is the finest The National Map serves over Puerto Rico.
+// Aerial photo: zoom 16 (about 2.3 m per pixel here) is the finest The National Map serves over Puerto Rico
+// (a large area takes zoom 15: the client stitches the whole photo into one texture).
 async function fetchOrtho() {
-  const z = 16, dir = path.join(ROOT, 'public/ortho', area.id), { x0, x1, y0, y1 } = demTileRange(margin(area.bbox), z);
+  const z = area.orthoZoom ?? 16, dir = path.join(ROOT, 'public/ortho', area.id), { x0, x1, y0, y1 } = demTileRange(margin(area.bbox), z);
   const jobs = [];
   for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++)
     jobs.push({ url: ORTHO(z, x, y), file: path.join(dir, `${z}_${x}_${y}.jpg`) });

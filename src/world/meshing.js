@@ -276,6 +276,54 @@ function minAreaRect(r) {
   return hu >= hv ? { cx, cz, ax: dx, az: dz, a: hu, b: hv, area: best.area } : { cx, cz, ax: -dz, az: dx, a: hv, b: hu, area: best.area };
 }
 
+// The finish of building i of tile (tx, tz): category, wall colour (linear) and texture layer, its seed, and
+// how many of its random numbers that took (the full mesh carries on from there). Shared with blockMesh, so
+// a distant block has the colour its detailed version will have.
+function finishOf(b, i, tx, tz) {
+  let k = 0;
+  const rnd = () => hash3(i * 31 + k++, tx * 13 + 5, tz * 17 + 3);
+  const seed = Math.floor(hash3(tx, tz, i) * 4096) / 4096; // quantised: the shader hashes it per room
+  // OSM's building:material / building:colour, where mapped, replace the generated finish
+  const material = (b.hint >>> 24) & 15, painted = b.hint >>> 31;
+  const cat = material === MATERIAL.GLASS ? CAT.GLASS : category(b.usage, b.height, seed);
+  const pal = PALETTE[cat], pick = pal[Math.floor(rnd() * pal.length)], tone = 0.92 + 0.16 * rnd();
+  const wallCol = painted ? lin([((b.hint >> 16) & 255) / 255, ((b.hint >> 8) & 255) / 255, (b.hint & 255) / 255]) : lin(pick.slice(0, 3).map((c) => Math.min(1, c * tone)));
+  return { material, cat, seed, wallCol, wallLayer: HINT_LAYER[material] ?? pick[3], k };
+}
+
+// Distant buildings: plain prisms in their wall colour under a flat roof, and nothing else — no windows,
+// parapets or rooftop equipment (the material draws a few lit windows at night). Indexed, positions /
+// normals / colours only.
+export function blockMesh(buildings, tx, tz) {
+  const pos = new Buf(1 << 14), nor = new Buf(1 << 14), col = new Buf(1 << 14), idx = [];
+  let v = 0;
+  buildings.forEach((b, i) => {
+    const { wallCol } = finishOf(b, i, tx, tz), roofCol = wallCol.map((c) => c * 0.62 + 0.12);
+    const top = b.base + b.height, bottom = b.base - SINK;
+    for (const rings of b.polygons) {
+      for (const r of rings) {
+        const n = r.length / 2;
+        for (let e = 0; e < n; e++) {
+          const x0 = r[e * 2], z0 = r[e * 2 + 1], x1 = r[((e + 1) % n) * 2], z1 = r[((e + 1) % n) * 2 + 1];
+          const len = Math.hypot(x1 - x0, z1 - z0);
+          if (len < 0.05) continue;
+          const nx = -(z1 - z0) / len, nz = (x1 - x0) / len; // outward for CCW outlines and CW holes
+          pos.push(x0, bottom, z0, x1, bottom, z1, x1, top, z1, x0, top, z0);
+          for (let q = 0; q < 4; q++) { nor.push(nx, 0, nz); col.push(...wallCol); }
+          idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+          v += 4;
+        }
+      }
+      for (const [p, q, t] of triangulate(rings)) {
+        for (const [x, z] of [p, q, t]) { pos.push(x, top, z); nor.push(0, 1, 0); col.push(...roofCol); }
+        idx.push(v, v + 1, v + 2);
+        v += 3;
+      }
+    }
+  });
+  return { position: pos.done(), normal: nor.done(), color: col.done(), index: v > 65535 ? Uint32Array.from(idx) : Uint16Array.from(idx) };
+}
+
 export function buildingMesh(buildings, tx, tz) {
   const pos = new Buf(1 << 16), nor = new Buf(1 << 16), col = new Buf(1 << 16), fac = new Buf(1 << 16), bld = new Buf(1 << 16), pho = new Buf(1 << 15);
   let pu = -1, pv = -1; // photo coordinates of the vertices being added (-1: none)
@@ -283,15 +331,9 @@ export function buildingMesh(buildings, tx, tz) {
   const photo = { pos: new Buf(1 << 12), nor: new Buf(1 << 12), uv: new Buf(1 << 12) }; // roofs with an aerial photo
 
   buildings.forEach((b, i) => {
-    let k = 0;
+    const { material, cat, seed, wallCol, wallLayer, k: used } = finishOf(b, i, tx, tz);
+    let k = used;
     const rnd = () => hash3(i * 31 + k++, tx * 13 + 5, tz * 17 + 3);
-    const seed = Math.floor(hash3(tx, tz, i) * 4096) / 4096; // quantised: the shader hashes it per room
-    // OSM's building:material / building:colour, where mapped, replace the generated finish
-    const material = (b.hint >>> 24) & 15, painted = b.hint >>> 31;
-    const cat = material === MATERIAL.GLASS ? CAT.GLASS : category(b.usage, b.height, seed);
-    const pal = PALETTE[cat], pick = pal[Math.floor(rnd() * pal.length)], tone = 0.92 + 0.16 * rnd();
-    const wallCol = painted ? lin([((b.hint >> 16) & 255) / 255, ((b.hint >> 8) & 255) / 255, (b.hint & 255) / 255]) : lin(pick.slice(0, 3).map((c) => Math.min(1, c * tone)));
-    const wallLayer = HINT_LAYER[material] ?? pick[3];
     const top = b.base + b.height, bottom = b.base - SINK;
     const outer = b.polygons[0][0];
     const area = b.polygons.reduce((s, rings) => s + rings.reduce((t, r) => t + ringArea(r), 0), 0);

@@ -55,7 +55,7 @@ for (const id of Object.keys(AREAS)) {
       for (const p of t.props) assert.ok(Number.isFinite(p.x) && Number.isFinite(p.z) && p.scale > 0);
       for (const b of t.buildings) {
         nB++;
-        assert.ok(b.height > 0.5 && b.height < 400 && b.base > -10 && b.base < 100, `building height/base ${b.height}/${b.base}`);
+        assert.ok(b.height > 0.5 && b.height < 400 && b.base > m.terrain.min - 10 && b.base < m.terrain.max + 10, `building height/base ${b.height}/${b.base}`);
         for (const rings of b.polygons) {
           rings.forEach((r, i) => {
             assert.ok(r.length >= 6 && r.every(Number.isFinite));

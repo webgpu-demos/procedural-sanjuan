@@ -42,7 +42,7 @@
       (function () {
         var id = new URLSearchParams(location.search).get('area') || 'viejosanjuan', name = null;
         try { name = localStorage.getItem('procedural-sanjuan:name:' + id); } catch (e) {}
-        var known = { viejosanjuan: 'Old San Juan', condado: 'Condado', hatorey: 'Hato Rey (Milla de Oro)' };
+        var known = { viejosanjuan: 'Old San Juan', condado: 'Condado', hatorey: 'Hato Rey (Milla de Oro)', sanjuan: 'San Juan' };
         document.querySelector('#loader .city').textContent = name || known[id] || id.charAt(0).toUpperCase() + id.slice(1);
       })();
     </script>

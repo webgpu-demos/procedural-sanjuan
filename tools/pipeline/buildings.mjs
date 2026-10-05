@@ -205,10 +205,24 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     if (masonry) hint = (0x80000000 | STONE[Math.floor(seed * STONE.length)] | (3 << 24)) >>> 0;
     out.push({ id: b.id, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured, hint, heritage: inHeritage, masonry });
   };
+  // parts by the cell of their middle, to find the ones inside an outline without trying them all
+  const PCELL = 50, partCells = new Map();
+  for (const p of parts) {
+    const [x, z] = proj.project(...centroidLL(p.polygons[0][0]));
+    p.at = [x, z];
+    const k = Math.floor(x / PCELL) + ',' + Math.floor(z / PCELL);
+    if (!partCells.has(k)) partCells.set(k, []);
+    partCells.get(k).push(p);
+  }
   for (const b of whole) {
     const ring = b.polygons[0][0].map(([lon, lat]) => proj.project(lon, lat));
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
     // parts whose middle lies inside this outline stand for it
-    const mine = parts.filter((p) => { if (p.used) return false; const [x, z] = proj.project(...centroidLL(p.polygons[0][0])); return inRings(x, z, [ring]); });
+    const mine = [];
+    for (let i = Math.floor(x0 / PCELL); i <= Math.floor(x1 / PCELL) && partCells.size; i++)
+      for (let k = Math.floor(z0 / PCELL); k <= Math.floor(z1 / PCELL); k++)
+        for (const p of partCells.get(i + ',' + k) ?? []) if (!p.used && inRings(p.at[0], p.at[1], [ring])) mine.push(p);
     if (mine.length) { stats.outlinesWithParts++; for (const p of mine) { p.used = true; add(p, true); stats.parts++; } continue; }
     add(b, false);
   }

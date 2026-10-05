@@ -18,6 +18,7 @@ const LANE = 3.0;
 const CAR_RADIUS = 330, CARS = 260; // the default number of cars, and the distance from the focus they keep within
 export const MAX_CARS = 1500;
 const CYCLE = 64, GREEN = 27; // seconds: must match the lens shader in props.js
+const LANE_CELL = 256;         // metres: the cells lanes are bucketed in, to pick one near the focus
 
 // ---------------------------------------------------------------- models
 // Parts carry a colour and a code per vertex (aGlow): 0 paint, 1 headlamp, 2 tail lamp, 3 glass, 4 rubber and
@@ -230,6 +231,13 @@ export class Traffic {
   constructor(roads, surface) {
     this.surface = surface;
     this.graph = buildGraph(roads, surface);
+    // lanes by the 256 m cell of their middle point: a large area has tens of thousands
+    this.cells = new Map();
+    for (const l of this.graph.lanes) {
+      const m = l.pts[l.pts.length >> 1], k = Math.floor(m.x / LANE_CELL) + ',' + Math.floor(m.z / LANE_CELL);
+      if (!this.cells.has(k)) this.cells.set(k, []);
+      this.cells.get(k).push(l);
+    }
     // which approach holds each junction: { lane, until, straight (everyone crossing is going straight on) }
     this.crossing = roads.nodes.map(() => ({ lane: null, until: 0, straight: false }));
     this.group = new THREE.Group();
@@ -264,14 +272,16 @@ export class Traffic {
   // A lane with some part within `radius` of the focus, picked by weight; null if the area has none.
   pick(focus, radius, filter) {
     let best = null, bestKey = -1;
-    for (const l of this.graph.lanes) {
-      if (!filter(l)) continue;
-      const m = l.pts[l.pts.length >> 1];
-      if (Math.hypot(m.x - focus.x, m.z - focus.z) > radius) continue;
-      // weighted reservoir sampling: by the importance of the road, its length and its lanes; the expressway busier still
-      const key = Math.pow(this.rnd(), 1 / (l.weight * Math.min(l.length, 120) * l.n * (l.motorway ? this.highway : 1)));
-      if (key > bestKey) { bestKey = key; best = l; }
-    }
+    for (let i = Math.floor((focus.x - radius) / LANE_CELL); i <= Math.floor((focus.x + radius) / LANE_CELL); i++)
+      for (let j = Math.floor((focus.z - radius) / LANE_CELL); j <= Math.floor((focus.z + radius) / LANE_CELL); j++)
+        for (const l of this.cells.get(i + ',' + j) ?? []) {
+          if (!filter(l)) continue;
+          const m = l.pts[l.pts.length >> 1];
+          if (Math.hypot(m.x - focus.x, m.z - focus.z) > radius) continue;
+          // weighted reservoir sampling: by the importance of the road, its length and its lanes; the expressway busier still
+          const key = Math.pow(this.rnd(), 1 / (l.weight * Math.min(l.length, 120) * l.n * (l.motorway ? this.highway : 1)));
+          if (key > bestKey) { bestKey = key; best = l; }
+        }
     return best;
   }
 

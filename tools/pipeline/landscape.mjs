@@ -5,12 +5,16 @@ import { AREA, PROP, SPORT } from '../../src/shared/tileformat.js';
 
 // ---------------------------------------------------------------- spatial index
 // Point-in-polygon queries over many polygons ([outer, ...holes], rings of [x, z]).
+// A big polygon (a tile's whole street network in one piece) keeps, per cell, the edges that cross the cell
+// and whether the cell's centre is inside: a point then only counts the crossings between itself and that
+// centre, against those few edges. (Built lazily, cell by cell, as queries arrive.)
+const BIG = 48; // vertices
 export class PolyIndex {
   constructor(cell = 24) { this.cell = cell; this.grid = new Map(); }
   add(rings) {
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const [x, z] of rings[0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-    const item = { rings, x0, x1, z0, z1 }, c = this.cell;
+    const item = { rings, x0, x1, z0, z1, cells: rings.reduce((n, r) => n + r.length, 0) > BIG ? new Map() : null }, c = this.cell;
     for (let i = Math.floor(x0 / c); i <= Math.floor(x1 / c); i++)
       for (let j = Math.floor(z0 / c); j <= Math.floor(z1 / c); j++) {
         const k = i + ',' + j;
@@ -19,10 +23,38 @@ export class PolyIndex {
       }
   }
   has(x, z) {
-    const items = this.grid.get(Math.floor(x / this.cell) + ',' + Math.floor(z / this.cell));
+    const i = Math.floor(x / this.cell), j = Math.floor(z / this.cell), k = i + ',' + j;
+    const items = this.grid.get(k);
     if (!items) return false;
-    for (const it of items) if (x >= it.x0 && x <= it.x1 && z >= it.z0 && z <= it.z1 && inRings(x, z, it.rings)) return true;
+    for (const it of items) {
+      if (x < it.x0 || x > it.x1 || z < it.z0 || z > it.z1) continue;
+      if (it.cells ? this.cellTest(it, i, j, k, x, z) : inRings(x, z, it.rings)) return true;
+    }
     return false;
+  }
+  cellTest(it, i, j, k, x, z) {
+    let cell = it.cells.get(k);
+    if (!cell) {
+      const c = this.cell, ax = i * c, az = j * c, bx = ax + c, bz = az + c, edges = [];
+      for (const r of it.rings) for (let n = 0; n < r.length; n++) {
+        const [px, pz] = r[n], [qx, qz] = r[(n + 1) % r.length];
+        if (Math.max(px, qx) >= ax && Math.min(px, qx) <= bx && Math.max(pz, qz) >= az && Math.min(pz, qz) <= bz) edges.push(px, pz, qx, qz);
+      }
+      // (the reference point is nudged off the exact centre, away from grid-aligned edges)
+      const cx = ax + c * 0.5013, cz = az + c * 0.4987;
+      cell = { cx, cz, inside: inRings(cx, cz, it.rings), edges };
+      it.cells.set(k, cell);
+    }
+    let inside = cell.inside;
+    const e = cell.edges, dx = cell.cx - x, dz = cell.cz - z;
+    for (let n = 0; n < e.length; n += 4) {
+      // does the edge cross the segment from the point to the reference point?
+      const ex = e[n + 2] - e[n], ez = e[n + 3] - e[n + 1], den = dx * ez - dz * ex;
+      if (den === 0) continue;
+      const ox = e[n] - x, oz = e[n + 1] - z, t = (ox * ez - oz * ex) / den, u = (ox * dz - oz * dx) / den;
+      if (t >= 0 && t < 1 && u >= 0 && u < 1) inside = !inside;
+    }
+    return inside;
   }
 }
 export function inRings(x, z, rings) {

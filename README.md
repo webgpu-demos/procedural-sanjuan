@@ -43,8 +43,8 @@ URL parameters: `?area=condado`, `?night=1`, `?time=18.5`, `?cam=x,z,distance,az
 ## Pipeline
 
 ```
-npm run fetch      # raw data -> data/raw/<area>/          (~5 MB per area, about two minutes)
-npm run compile    # data/raw -> public/tiles/<area>/      (a few seconds)
+npm run fetch      # raw data -> data/raw/<area>/          (a minute or two; ~300 MB for the whole municipality)
+npm run compile    # data/raw -> public/tiles/<area>/      (seconds; 80 s and 2 GB of memory for the whole municipality)
 npm run preview    # top-down render -> data/preview/<area>.png
 npm test           # tile format round trip + checks over the compiled areas
 ```
@@ -57,13 +57,23 @@ origin, a bounding box and a default view:
 | `viejosanjuan` | Old San Juan, from El Morro to Puerta de Tierra | Plaza de Armas |
 | `condado` | Condado, the lagoon and Miramar | Ashford Avenue |
 | `hatorey` | Hato Rey, the Milla de Oro and Tren Urbano | Avenida Ponce de León |
+| `sanjuan` | The whole municipality, El Morro to Caimito (about 14 x 20 km, 100 000 buildings) | Plaza de Armas |
+
+The small areas load whole. `sanjuan` streams instead: full detail within 1.3 km of the point looked at
+(`?radius=` changes it), the buildings as plain blocks out to 4.5 km, and beyond them the photo-draped
+ground (`far.js`), which also stands in for every tile that is not loaded.
 
 | Source | What we take |
 |---|---|
-| [OpenStreetMap](https://www.openstreetmap.org/) (Overpass) | Building outlines, `height`, `building:levels`, building parts; drivable road graph (class, lanes, one-way, speed, layer, bridge/tunnel, names); railways; coastline; parks, woods, beaches, water, trees, crossings, signals; paths, car parks, walls; named places for signs |
+| [OpenStreetMap](https://www.openstreetmap.org/) ([Geofabrik](https://download.geofabrik.de/north-america/us/puerto-rico.html) Puerto Rico extract) | Building outlines, `height`, `building:levels`, building parts; drivable road graph (class, lanes, one-way, speed, layer, bridge/tunnel, names); railways; coastline; parks, woods, beaches, water, trees, crossings, signals; paths, car parks, walls; named places for signs |
 | [FEMA / ORNL USA Structures](https://gis-fema.hub.arcgis.com/pages/usa-structures) | Building heights (from LiDAR) and occupancy classes, for the buildings OSM gives no height or use; buildings OSM does not have |
 | [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Terrain (terrarium encoding, zoom 15; USGS 3DEP elevations on land); zoom 12 for the surroundings |
 | [USGS The National Map](https://www.usgs.gov/programs/national-geospatial-program/national-map) | Orthoimagery draped over the open ground (zoom 16) and over the surroundings (zoom 13) |
+
+OpenStreetMap comes from Geofabrik's daily Puerto Rico extract (74 MB, downloaded once a day and shared by the
+areas), cut to the area and filtered in one pass by `tools/pipeline/extract.mjs` into the same files the
+Overpass queries in `fetch.mjs` would give; `--overpass` queries the live data instead (split into cells for a
+large area, and slow when the public servers are busy).
 
 Puerto Rico has nothing like Japan's PLATEAU survey of road surfaces, so the compiler builds them: see
 `tools/pipeline/roadsurface.mjs` (right-of-way per road class) and `roadsplit.mjs` (carriageway and sidewalk).

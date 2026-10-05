@@ -1,6 +1,6 @@
 // Fetches, decodes and meshes tiles off the main thread.
 import { decodeTile } from '../shared/tileformat.js';
-import { buildTile } from './meshing.js';
+import { buildTile, blockMesh } from './meshing.js';
 import { makeSurface } from '../shared/decks.js';
 
 let grid = null, surface = null;
@@ -40,16 +40,18 @@ self.onmessage = async ({ data: m }) => {
     surface = makeSurface(grid, m.decks);
     return;
   }
-  if (m.type === 'tile') {
+  if (m.type === 'tile' || m.type === 'blocks') {
     try {
       const res = await fetch(m.url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const tile = decodeTile(await res.arrayBuffer());
+      // a distant tile: its buildings as plain blocks, nothing else
+      if (m.type === 'blocks') { const mesh = blockMesh(tile.buildings, tile.tx, tile.tz); self.postMessage({ type: 'blocks', key: m.key, mesh }, buffers(mesh)); return; }
       const mesh = buildTile(tile, grid, m.tileSize, surface);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
       self.postMessage({ type: 'tile', key: m.key, mesh }, buffers(mesh));
     } catch (e) {
-      self.postMessage({ type: 'error', key: m.key, message: e.message });
+      self.postMessage({ type: m.type === 'blocks' ? 'blocks-error' : 'error', key: m.key, message: e.message });
     }
   }
 };

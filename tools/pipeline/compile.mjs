@@ -29,7 +29,7 @@ import { readBuildingSources } from './buildings.mjs';
 import { buildSea } from './coast.mjs';
 import { buildRoadSurfaces } from './roadsurface.mjs';
 
-const TERRAIN_STEP = 5;   // metres
+const TERRAIN_STEP_DEFAULT = 5; // metres (an area may set its own: config.mjs)
 const SEA = 0;            // the sea surface (m)
 const LAND_MIN = 0.3;     // dry land is kept at least this far above it
 
@@ -38,6 +38,7 @@ const COLONIAL = [0xf2c94c, 0xe9a86e, 0x79c2cd, 0x98c49b, 0xe07a5f, 0xc58fa3, 0x
   0xf2a65a, 0xb7a3d6, 0x5fb0b0, 0xe8d6a0, 0xec7b5c, 0xa6c6ee, 0xf6d36b, 0xd4876e, 0x8fb8de, 0xe2b04a];
 
 const area = resolveArea();
+const TERRAIN_STEP = area.terrain ?? TERRAIN_STEP_DEFAULT;
 const proj = makeProjection(...area.origin);
 const t0 = Date.now();
 const log = (...a) => console.log(((Date.now() - t0) / 1000).toFixed(1).padStart(6) + 's', ...a);
@@ -340,13 +341,19 @@ for (const rings of seaPolys) {
   idx.water.add(rings);
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const [x, z] of rings[0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-  for (let tx = Math.floor(Math.max(x0, extent.minX) / TILE); tx <= Math.floor(Math.min(x1, extent.maxX - 0.01) / TILE); tx++)
-    for (let tz = Math.floor(Math.max(z0, extent.minZ) / TILE); tz <= Math.floor(Math.min(z1, extent.maxZ - 0.01) / TILE); tz++) {
-      const bx0 = tx * TILE, bx1 = (tx + 1) * TILE, bz0 = tz * TILE, bz1 = (tz + 1) * TILE;
+  const box = (bx0, bz0, bx1, bz1) => [[[bx0, bz0], [bx1, bz0], [bx1, bz1], [bx0, bz1], [bx0, bz0]]];
+  const tz0 = Math.floor(Math.max(z0, extent.minZ) / TILE), tz1 = Math.floor(Math.min(z1, extent.maxZ - 0.01) / TILE);
+  // a column of tiles at a time first (the whole coastline is clipped once per column, not once per tile)
+  for (let tx = Math.floor(Math.max(x0, extent.minX) / TILE); tx <= Math.floor(Math.min(x1, extent.maxX - 0.01) / TILE); tx++) {
+    let column;
+    try { column = polygonClipping.intersection([rings.map(close)], box(tx * TILE, tz0 * TILE, (tx + 1) * TILE, (tz1 + 1) * TILE)); } catch { continue; }
+    if (!column.length) continue;
+    for (let tz = tz0; tz <= tz1; tz++) {
       let pieces;
-      try { pieces = fromClip(polygonClipping.intersection([rings.map(close)], [[[bx0, bz0], [bx1, bz0], [bx1, bz1], [bx0, bz1], [bx0, bz0]]])); } catch { continue; }
+      try { pieces = fromClip(polygonClipping.intersection(column, box(tx * TILE, tz * TILE, (tx + 1) * TILE, (tz + 1) * TILE))); } catch { continue; }
       for (const p of pieces) { tileFor((tx + 0.5) * TILE, (tz + 0.5) * TILE).areas.push({ kind: AREA.WATER, code: 1, polygons: [p.map((r) => r.map(([x, z]) => [r2(x), r2(z)]))] }); seaPieces++; }
     }
+  }
 }
 log(`sea: ${seaPieces} pieces`);
 for (const a of land) if (a.kind === AREA.WATER) idx.water.add([a.ring]);
@@ -404,10 +411,20 @@ for (const m of paint.marks) {
 // dip get a parapet.
 const GROUND_KINDS = new Set([AREA.PARK, AREA.WOOD, AREA.WATER, AREA.PITCH, AREA.BEACH]);
 let deckAreas = 0, deckWalls = 0;
+// each deck's reach as a box, so the polygons far from every bridge are passed over at once
+const deckBox = decks.map((d) => {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < d.pts.length; i += 3) { x0 = Math.min(x0, d.pts[i]); x1 = Math.max(x1, d.pts[i]); z0 = Math.min(z0, d.pts[i + 2]); z1 = Math.max(z1, d.pts[i + 2]); }
+  return [x0 - d.half, x1 + d.half, z0 - d.half, z1 + d.half];
+});
 for (const t of tiles.values()) {
+  if (!decks.length) break;
   for (const a of t.areas) {
     if (GROUND_KINDS.has(a.kind)) continue;
-    const deck = decks.findIndex((d) => a.polygons.some((rings) => rings[0].some(([x, z]) => { const p = projectOnDeck(d, x, z); return p.inside && p.dist <= d.half; })));
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const [x, z] of a.polygons[0][0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    const deck = decks.findIndex((d, k) => { const b = deckBox[k]; return x1 >= b[0] && x0 <= b[1] && z1 >= b[2] && z0 <= b[3]
+      && a.polygons.some((rings) => rings[0].some(([x, z]) => { const p = projectOnDeck(d, x, z); return p.inside && p.dist <= d.half; })); });
     if (deck < 0) continue;
     a.code = DECK_FLAG | deck; deckAreas++;
     if (a.kind !== AREA.ROAD) continue;
@@ -536,6 +553,8 @@ const manifest = {
   // the sea surface, where the area has a coast (the client fills the world beyond the area with sea)
   sea: seaPolys.length ? SEA : null,
   view: area.view ?? null,
+  // a large area: the radius (m) the client streams full tiles within, instead of loading them all
+  stream: area.stream ?? null,
   // the surroundings, coarse, beyond the extent (the photo for them is in ortho/<area>/far)
   far: far && { file: far.file, x0: far.x0, z0: far.z0, step: far.step, w: far.w, h: far.h },
   roads: 'roads.json', rails: 'rails.json', structures: 'structures.json',
