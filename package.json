@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy": "sh tools/deploy.sh",
     "fetch": "node --max-old-space-size=4096 tools/pipeline/fetch.mjs",
     "compile": "node --max-old-space-size=6144 tools/pipeline/compile.mjs",
     "preview": "node tools/pipeline/preview.mjs",

@@ -80,6 +80,16 @@ Puerto Rico has nothing like Japan's PLATEAU survey of road surfaces, so the com
 The terrain tiles carry bathymetry offshore; the compiler flattens the sea to 0 m inside the coastline,
 levels lagoons and ponds at their lowest shore, and keeps dry land above the sea.
 
+## Publishing
+
+```
+npm run deploy     # vite build (with the compiled areas in public/) -> force-push dist/ to the gh-pages branch
+```
+
+GitHub Pages serves that branch (Settings → Pages → Deploy from a branch → `gh-pages`, `/`). The build uses
+relative URLs (`base: './'` in `vite.config.js`), so it works under `https://<owner>.github.io/<repo>/`.
+The branch holds only the latest build (about 210 MB with all four areas); compile the areas before deploying.
+
 ## Compiled output (`public/tiles/<area>/`)
 
 World frame: metres, x east, y up (above mean sea level), z south; the origin is the area's origin.
