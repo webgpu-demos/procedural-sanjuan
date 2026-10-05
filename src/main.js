@@ -167,6 +167,7 @@ let guiState, clockText;
   // the names of the cities, for the loading screen of the next visit (index.html reads them)
   try { for (const a of areas) localStorage.setItem(`procedural-sanjuan:name:${a.id}`, a.name); } catch { /* storage unavailable */ }
   const gui = new GUI({ title: 'Scene' });
+  if (innerWidth < 700) gui.close(); // (on a phone the open panel would cover the city: one tap on its title opens it)
   gui.add(state, 'city', Object.fromEntries(areas.map((a) => [a.name, a.id]))).onChange((id) => {
     const url = new URL(location.href);
     url.search = '';

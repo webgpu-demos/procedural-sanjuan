@@ -8,10 +8,11 @@
       html, body { margin: 0; height: 100%; overflow: hidden; background: #0c1220; }
       canvas { display: block; }
       #hud {
-        position: fixed; top: 12px; left: 12px; padding: 10px 12px; max-width: 340px;
+        position: fixed; top: 12px; left: 12px; padding: 10px 12px; max-width: calc(100vw - 48px);
         font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: #e8ecf2;
-        background: rgba(10, 14, 22, 0.66); border-radius: 6px; pointer-events: none; white-space: pre;
+        background: rgba(10, 14, 22, 0.66); border-radius: 6px; pointer-events: none; white-space: pre-wrap;
       }
+      @media (max-width: 700px) { #hud { top: 46px; } } /* (below the settings panel's bar on a phone) */
       #credits {
         position: fixed; right: 8px; bottom: 6px; font: 11px system-ui, sans-serif; color: rgba(255, 255, 255, 0.75);
         text-shadow: 0 1px 2px #000;
