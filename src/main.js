@@ -16,6 +16,7 @@ import { Traffic, MAX_CARS } from './world/traffic.js';
 import { buildStructures } from './world/structures.js';
 import { loadOrtho } from './world/ortho.js';
 import { buildSurroundings } from './world/far.js';
+import { renderSources } from './sources.js';
 import { Environment } from './world/environment.js';
 import { Atmosphere } from './world/atmosphere.js';
 import { createBirds, MAX_BIRDS } from './world/birds.js';
@@ -133,7 +134,14 @@ if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manife
 const traffic = new Traffic(await (await fetch(`tiles/${AREA}/${manifest.roads}`)).json(), streamer.surface);
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
-document.getElementById('credits').textContent = manifest.attribution.map((a) => a.split(' (')[0]).join(' · ');
+// the data sources: the button at the bottom opens the list of everything the city is made from (sources.js)
+{
+  const list = document.getElementById('sources-list'), toggle = document.getElementById('sources-toggle');
+  const show = (open) => { list.hidden = !open; toggle.setAttribute('aria-expanded', String(open)); };
+  renderSources(list, manifest.compiled);
+  toggle.addEventListener('click', () => show(list.hidden));
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !list.hidden) show(false); });
+}
 
 // initial view: the area's own (manifest.view), or over the origin
 const [cx, cz, dist, az, el] = (params.get('cam') || (manifest.view ?? [0, 0, 600, 200, 32]).join(',')).split(',').map(Number);
