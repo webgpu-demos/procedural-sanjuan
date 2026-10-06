@@ -10,7 +10,7 @@
 //   k_<x>_<z>.bin   the buildings alone, 4 x 4 tiles to a file, for the distant blocks of a streamed area
 //   x_<x>_<z>.bin   a tile's landmark models (landmarks.mjs), where it has any
 //   far.bin         the coarse terrain of the area and the island around it, for the distant ground
-// Usage: node tools/pipeline/compile.mjs [--area=viejosanjuan] [--no-ads]   (--no-ads: leave out the invented billboards, screens and banners)
+// Usage: node tools/pipeline/compile.mjs [--area=sanjuan] [--no-ads]   (--no-ads: leave out the invented billboards, screens and banners)
 import fs from 'node:fs';
 import path from 'node:path';
 import polygonClipping from 'polygon-clipping';

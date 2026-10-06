@@ -44,24 +44,24 @@ URL parameters: `?area=condado`, `?night=1`, `?time=18.5`, `?cam=x,z,distance,az
 
 ```
 npm run fetch      # raw data -> data/raw/<area>/          (a minute or two; ~300 MB for the whole municipality)
-npm run compile    # data/raw -> public/tiles/<area>/      (seconds; 80 s and 2 GB of memory for the whole municipality)
+npm run compile    # data/raw -> public/tiles/<area>/      (seconds; several minutes and 2 GB of memory for the whole municipality)
 npm run preview    # top-down render -> data/preview/<area>.png
 npm test           # tile format round trip + checks over the compiled areas
 ```
 
-All scripts take `--area=<id>` (default `viejosanjuan`). Areas are defined in `tools/pipeline/config.mjs` as an
+All scripts take `--area=<id>` (default `sanjuan`). Areas are defined in `tools/pipeline/config.mjs` as an
 origin, a bounding box and a default view:
 
 | id | Area | Origin |
 |---|---|---|
-| `viejosanjuan` | Old San Juan, from El Morro to Puerta de Tierra | Plaza de Armas |
+| `sanjuan` | The whole municipality, El Morro to Caimito (about 14 x 20 km, 160 000 buildings) | Plaza de Armas |
 | `condado` | Condado, the lagoon and Miramar | Ashford Avenue |
 | `hatorey` | Hato Rey, the Milla de Oro and Tren Urbano | Avenida Ponce de León |
-| `sanjuan` | The whole municipality, El Morro to Caimito (about 14 x 20 km, 100 000 buildings) | Plaza de Armas |
 
-The small areas load whole. `sanjuan` streams instead: full detail within 1.3 km of the point looked at
-(`?radius=` changes it), the buildings as plain blocks out to 4.5 km, and beyond them the photo-draped
-ground (`far.js`), which also stands in for every tile that is not loaded.
+`sanjuan` streams: full detail within 1 km of the point looked at (`?radius=` changes it), the buildings as
+plain blocks out to 7 km, and beyond them the photo-draped ground (`far.js`), which also stands in for every
+tile that is not loaded. The small areas load whole. (Old San Juan on its own, `viejosanjuan`, was an area
+until the municipality took it in; its links open there.)
 
 | Source | What we take |
 |---|---|

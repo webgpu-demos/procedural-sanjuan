@@ -5,7 +5,7 @@
 //                    (ArcGIS feature service), used for the heights and uses OSM does not record
 //   AWS Terrain      terrarium elevation tiles (USGS 3DEP on land)
 //   USGS imagery     The National Map orthoimagery tiles, into public/ortho/<area>/ (the client drapes them on the ground)
-// Usage: node tools/pipeline/fetch.mjs [--area=viejosanjuan] [--force] [--overpass]
+// Usage: node tools/pipeline/fetch.mjs [--area=sanjuan] [--force] [--overpass]
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveArea, ROOT, RAW } from './config.mjs';

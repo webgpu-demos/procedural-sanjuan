@@ -16,13 +16,16 @@ const OLD_CITY = [[-66.1262, 18.4716], [-66.1180, 18.4718], [-66.1095, 18.4690],
   [-66.1135, 18.4610], [-66.1190, 18.4600], [-66.1225, 18.4625], [-66.1262, 18.4680]];
 
 export const AREAS = {
-  viejosanjuan: {
-    name: 'Old San Juan',
+  // The whole municipality: El Morro to Caimito, the bay to Carolina (about 14 x 20 km, 160 000 buildings). Old San
+  // Juan, once an area of its own, is inside it around the same origin (the client sends ?area=viejosanjuan here).
+  sanjuan: {
+    name: 'San Juan',
     origin: [-66.11656, 18.46530], // Plaza de Armas [lon, lat]
-    bbox: { west: -66.1290, south: 18.4560, east: -66.0930, north: 18.4750 },
-    view: [-180, 40, 900, 200, 30],
+    bbox: { west: -66.1290, south: 18.2960, east: -65.9910, north: 18.4760 },
+    view: [3000, 1600, 5200, 38, 22], // from over Hato Rey, north-west across Santurce to the Condado and Old San Juan
     heritage: OLD_CITY,
-    ads: 0.06,
+    ads: 0.2,
+    chunk: 0.04, terrain: 10, orthoZoom: 15, stream: 1000,
   },
   condado: {
     name: 'Condado',
@@ -39,17 +42,7 @@ export const AREAS = {
     ads: 0.35,
   },
 };
-// The whole municipality: El Morro to Caimito, the bay to Carolina (about 14 x 20 km, 100 000 buildings)
-AREAS.sanjuan = {
-  name: 'San Juan (whole municipality)',
-  origin: [-66.11656, 18.46530], // Plaza de Armas
-  bbox: { west: -66.1290, south: 18.2960, east: -65.9910, north: 18.4760 },
-  view: [3000, 1600, 5200, 38, 22], // from over Hato Rey, north-west across Santurce to the Condado and Old San Juan
-  heritage: OLD_CITY,
-  ads: 0.2,
-  chunk: 0.04, terrain: 10, orthoZoom: 15, stream: 1000,
-};
-export const DEFAULT_AREA = 'viejosanjuan';
+export const DEFAULT_AREA = 'sanjuan';
 
 export const ROOT = path.resolve(import.meta.dirname, '../..');
 export const RAW = path.join(ROOT, 'data/raw');

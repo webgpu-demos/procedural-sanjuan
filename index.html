@@ -72,10 +72,11 @@
     <script>
       // The city's name goes on the loading screen before anything else runs, so it never changes under the eye.
       (function () {
-        var id = new URLSearchParams(location.search).get('area') || 'viejosanjuan', name = null;
+        var id = new URLSearchParams(location.search).get('area') || 'sanjuan', name = null;
+        if (id === 'viejosanjuan') id = 'sanjuan'; // (see src/main.js)
         try { name = localStorage.getItem('procedural-sanjuan:name:' + id); } catch (e) {}
-        var known = { viejosanjuan: 'Old San Juan', condado: 'Condado', hatorey: 'Hato Rey (Milla de Oro)', sanjuan: 'San Juan' };
-        document.querySelector('#loader .city').textContent = name || known[id] || id.charAt(0).toUpperCase() + id.slice(1);
+        var known = { sanjuan: 'San Juan', condado: 'Condado', hatorey: 'Hato Rey (Milla de Oro)' };
+        document.querySelector('#loader .city').textContent = known[id] || name || id.charAt(0).toUpperCase() + id.slice(1);
       })();
     </script>
     <div id="hud">loading…</div>

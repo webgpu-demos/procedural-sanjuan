@@ -1,6 +1,6 @@
 // Procedural San Juan client: streams the compiled city and renders it. Free camera for now; the car comes next.
 //
-// URL parameters: ?area=viejosanjuan  ?time=18.5 (San Juan hour; default: now)  ?night=1  ?cam=x,z,distance,azimuthDeg,elevationDeg  ?radius=3000  ?traffic=0  ?ortho=0  ?clouds=0.25 (on, with that cover)  ?birds=150  ?cars=600
+// URL parameters: ?area=condado (default: sanjuan)  ?time=18.5 (San Juan hour; default: now)  ?night=1  ?cam=x,z,distance,azimuthDeg,elevationDeg  ?radius=3000  ?traffic=0  ?ortho=0  ?clouds=0.25 (on, with that cover)  ?birds=150  ?cars=600
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import GUI from 'lil-gui';
@@ -25,7 +25,9 @@ import { LampLight, installLampLight } from './world/lamplight.js';
 installLampLight(); // (before any material is compiled)
 
 const params = new URLSearchParams(location.search);
-const AREA = params.get('area') || 'viejosanjuan';
+// (Old San Juan was an area of its own, around the same origin: its links, views included, open in the municipality)
+const ALIASES = { viejosanjuan: 'sanjuan' };
+const AREA = ALIASES[params.get('area')] ?? params.get('area') ?? 'sanjuan';
 
 // The loading screen (index.html): the city's name, a bar and what is being done.
 const loader = {

@@ -1,7 +1,7 @@
 // Renders a compiled area top-down to data/preview/<area>.png, reading only the compiled output
 // (so it checks what the client will get). Terrain hillshade, road surfaces, buildings shaded by
 // height, the OSM graph (motorways orange, tunnels dashed-off, bridges red) and railways.
-// Usage: node tools/pipeline/preview.mjs [--area=viejosanjuan] [--scale=2]   (metres per pixel)
+// Usage: node tools/pipeline/preview.mjs [--area=sanjuan] [--scale=2]   (metres per pixel)
 import fs from 'node:fs';
 import path from 'node:path';
 import { PNG } from 'pngjs';
