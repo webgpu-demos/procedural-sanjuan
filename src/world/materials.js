@@ -7,6 +7,7 @@
 //            z: floor height (m), w: building seed in [0, 1)
 //   aBldg    x: building height (m), y: category + 8 * texture layer, z: kind (KIND), w: bay width (m, 0 = no windows)
 import * as THREE from 'three';
+import { TILE as TILE_SIZE } from '../shared/geo.js';
 
 export const shared = {
   uNight: { value: 0 }, // 0 day .. 1 night
@@ -25,6 +26,10 @@ export const shared = {
   uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunGlint: { value: new THREE.Color(0, 0, 0) }, uGlintOn: { value: 1 },
   // wall photos: the distances (m) between which a facade goes from generated to photo, and how much photo at most
   uPhotoRange: { value: new THREE.Vector2(140, 420) }, uPhotoMix: { value: 1 },
+  // the tiles whose full version is loaded, one texel each (Streamer keeps it): what stands in for a tile from
+  // afar (far.js ground, distant blocks) is not drawn over it. uLoadedRect: the area's extent (minX, minZ, sizeX, sizeZ).
+  uLoaded: { value: (() => { const t = new THREE.DataTexture(new Uint8Array(1), 1, 1, THREE.RedFormat); t.needsUpdate = true; return t; })() },
+  uLoadedRect: { value: new THREE.Vector4(0, 0, 1, 1) },
 };
 
 
@@ -417,11 +422,15 @@ function blocksMaterial() {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; // (no lamp light up here; the sampler still needs its texture)
     shader.uniforms.uNight = shared.uNight;
+    shader.uniforms.uLoaded = shared.uLoaded; shader.uniforms.uLoadedRect = shared.uLoadedRect;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${WORLD_VARYINGS_VERT}`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WORLD_VARYINGS_SET}`);
+      .replace('#include <common>', `#include <common>\n${WORLD_VARYINGS_VERT}\nattribute vec2 aTile;\nvarying vec2 vTile;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WORLD_VARYINGS_SET}\nvTile = aTile;`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uNight;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\n${NOISE}`)
+      .replace('#include <common>', `#include <common>\nuniform float uNight;\nuniform sampler2D uLoaded;\nuniform vec4 uLoadedRect;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying vec2 vTile;\n${NOISE}`)
+      // the building's tile is in in full: its detailed version stands here
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        if (texture2D(uLoaded, ((vTile + 0.5) * ${TILE_SIZE}.0 - uLoadedRect.xy) / uLoadedRect.zw).r > 0.5) discard;`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         if (abs(vWNrm.y) < 0.5) {
           vec2 t = normalize(vec2(-vWNrm.z, vWNrm.x));
@@ -433,7 +442,7 @@ function blocksMaterial() {
           totalEmissiveRadiance += win * lit * uNight * vec3(1.0, 0.78, 0.5) * 1.1;
         }`);
   };
-  m.customProgramCacheKey = () => 'blocks-v2';
+  m.customProgramCacheKey = () => 'blocks-v3';
   return m;
 }
 

@@ -1,7 +1,8 @@
 // Keeps the tiles within `radius` of a focus point loaded, nearest first, and drops the ones
 // that fall beyond radius + hysteresis. Meshing happens in a small pool of workers.
-// With `blockRadius` beyond `radius` (a large area), the tiles out to there show their buildings as plain
-// blocks (meshing.js blockMesh) until they come near enough for the full tile.
+// With `blockRadius` beyond `radius` (a large area), the buildings out to there are drawn as plain blocks
+// (meshing.js blockMesh), a chunk of tiles at a time (k_<x>_<z>.bin); shared.uLoaded, a map of the tiles that
+// are in in full, hides the blocks (and the distant ground, far.js) under them.
 import * as THREE from 'three';
 import { tileKey } from '../shared/geo.js';
 import { sampleGrid } from '../shared/terrain.js';
@@ -33,9 +34,8 @@ export class Streamer {
     this.radius = radius;
     this.hysteresis = hysteresis;
     this.tiles = new Map(); // key -> { state, group, info, ends, tris }
-    this.blocks = new Map(); // key -> { state, mesh }: the distant versions
+    this.blocks = new Map(); // chunk key -> { state, mesh }: the distant buildings, BLOCK x BLOCK tiles a mesh
     this.blockRadius = blockRadius;
-    this.onChange = null;   // (tx, tz, ready): a full tile has come in or gone
     this.inFlight = 0;
     this.stats = { loaded: 0, buildings: 0, triangles: 0 };
   }
@@ -49,6 +49,14 @@ export class Streamer {
     this.surface = makeSurface(this.grid, decks);
     this.cover = makeCover(this.grid, decks);
     this.available = new Map(this.manifest.tiles.map((tl) => [tileKey(tl.x, tl.z), tl]));
+    // the loaded-tiles map (shared.uLoaded): one texel per tile of the area's extent
+    const ext = this.manifest.extent ?? this.manifest.bounds, size = this.manifest.tileSize;
+    this.mask = { x0: Math.floor(ext.minX / size), z0: Math.floor(ext.minZ / size), w: Math.ceil(ext.maxX / size) - Math.floor(ext.minX / size), h: Math.ceil(ext.maxZ / size) - Math.floor(ext.minZ / size) };
+    const loaded = new THREE.DataTexture(new Uint8Array(this.mask.w * this.mask.h), this.mask.w, this.mask.h, THREE.RedFormat);
+    loaded.magFilter = loaded.minFilter = THREE.NearestFilter;
+    loaded.needsUpdate = true;
+    shared.uLoaded.value = loaded;
+    shared.uLoadedRect.value.set(this.mask.x0 * size, this.mask.z0 * size, this.mask.w * size, this.mask.h * size);
     this.workers = Array.from({ length: WORKERS }, () => {
       const w = new Worker(new URL('./tileWorker.js', import.meta.url), { type: 'module' });
       w.postMessage({ type: 'init', decks, grid: { ...this.grid, data: data.slice().buffer } });
@@ -103,22 +111,20 @@ export class Streamer {
     for (const [key, t] of this.tiles) {
       if (t.state === 'ready' && dist(this.available.get(key)) > this.radius + this.hysteresis) this.unload(key);
     }
-    const blocks = this.blockRadius > this.radius;
-    for (const [key, b] of this.blocks) {
-      if (b.state === 'ready' && (!blocks || dist(this.available.get(key)) > this.blockRadius + this.hysteresis * 2)) this.unloadBlocks(key);
-      else if (b.mesh) b.mesh.visible = this.tiles.get(key)?.state !== 'ready'; // the full tile, once in, stands in for its blocks
-    }
+    // distant blocks: whole chunks of BLOCK x BLOCK tiles within the block radius (the loaded-tiles map hides
+    // the buildings of the tiles that are in in full)
+    const chunks = this.blockRadius > this.radius ? this.manifest.blocks?.chunks ?? [] : [], span = (this.manifest.blocks?.size ?? 4) * size;
+    const chunkDist = ([cx, cz]) => Math.max(0, Math.hypot((cx + 0.5) * span - focus.x, (cz + 0.5) * span - focus.z) - span * 0.71);
+    for (const [key, b] of this.blocks) if (b.state === 'ready' && (!chunks.length || chunkDist(b.chunk) > this.blockRadius + this.hysteresis * 2)) this.unloadBlocks(key);
     // load, nearest first: full tiles, then (with what is left of the workers) the distant blocks
     if (this.inFlight >= MAX_IN_FLIGHT) return;
-    const wanted = [], far = [];
+    const wanted = [];
     for (const [key, tl] of this.available) {
-      if (this.tiles.has(key)) continue; // (loading or in: its blocks are not needed)
+      if (this.tiles.has(key)) continue;
       const d = dist(tl);
       if (d <= this.radius) wanted.push([d, key, tl]);
-      else if (blocks && !this.blocks.has(key) && d <= this.blockRadius) far.push([d, key, tl]);
     }
     wanted.sort((a, b) => a[0] - b[0]);
-    far.sort((a, b) => a[0] - b[0]);
     const url = (file) => new URL(`${this.base}/${file}`, location.href).href;
     for (const [, key, tl] of wanted) {
       if (this.inFlight >= MAX_IN_FLIGHT) break;
@@ -127,11 +133,13 @@ export class Streamer {
       const w = this.workers[this.nextWorker++ % this.workers.length];
       w.postMessage({ type: 'tile', key, url: url(tl.file), meshUrl: tl.mesh && url(tl.mesh), tileSize: size });
     }
-    for (const [, key, tl] of far) {
+    if (!chunks.length || this.inFlight >= MAX_IN_FLIGHT) return;
+    const far = chunks.filter((c) => !this.blocks.has(c[2]) && chunkDist(c) <= this.blockRadius).map((c) => [chunkDist(c), c]).sort((a, b) => a[0] - b[0]);
+    for (const [, c] of far) {
       if (this.inFlight >= MAX_IN_FLIGHT) break;
-      this.blocks.set(key, { state: 'loading', mesh: null });
+      this.blocks.set(c[2], { state: 'loading', mesh: null, chunk: c });
       this.inFlight++;
-      this.workers[this.nextWorker++ % this.workers.length].postMessage({ type: 'blocks', key, url: url(tl.file) });
+      this.workers[this.nextWorker++ % this.workers.length].postMessage({ type: 'blocks', key: c[2], url: url(c[2]) });
     }
   }
 
@@ -141,9 +149,8 @@ export class Streamer {
     if (!b) return; // dropped while in flight
     b.state = 'ready';
     if (!msg.mesh.position.length) return;
-    b.mesh = new THREE.Mesh(geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3]]), this.materials.blocks);
+    b.mesh = new THREE.Mesh(geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3], ['aTile', 2]]), this.materials.blocks);
     b.mesh.name = `blocks ${msg.key}`;
-    b.mesh.visible = this.tiles.get(msg.key)?.state !== 'ready';
     this.scene.add(b.mesh);
   }
 
@@ -232,10 +239,8 @@ export class Streamer {
     const tris = terrain.index.length / 3 + roads.position.length / 9 + buildings.triangles;
     Object.assign(t, { state: 'ready', group, trees, signs, atlases, signNear: false, buildings: info.length, tris });
     this.scene.add(group);
-    const b = this.blocks.get(msg.key);
-    if (b?.mesh) b.mesh.visible = false;
     const tl = this.available.get(msg.key);
-    this.onChange?.(tl.x, tl.z, true);
+    this.setLoaded(tl.x, tl.z, true);
     this.stats.loaded++; this.stats.buildings += info.length; this.stats.triangles += tris;
   }
 
@@ -268,10 +273,15 @@ export class Streamer {
     t.group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); else if (!o.isGroup) o.geometry?.dispose(); o.userData.own?.forEach((r) => r.dispose()); });
     this.tiles.delete(key);
     this.stats.loaded--; this.stats.buildings -= t.buildings; this.stats.triangles -= t.tris;
-    const b = this.blocks.get(key);
-    if (b?.mesh) b.mesh.visible = true;
     const tl = this.available.get(key);
-    this.onChange?.(tl.x, tl.z, false);
+    this.setLoaded(tl.x, tl.z, false);
+  }
+
+  setLoaded(tx, tz, on) {
+    const i = tx - this.mask.x0, j = tz - this.mask.z0, tex = shared.uLoaded.value;
+    if (i < 0 || j < 0 || i >= this.mask.w || j >= this.mask.h) return;
+    tex.image.data[j * this.mask.w + i] = on ? 255 : 0;
+    tex.needsUpdate = true;
   }
 
   // Building under a raycast hit on a facade mesh: { usage, storeys, height, base }.

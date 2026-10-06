@@ -34,6 +34,31 @@ async function models(url) {
   return { position, normal, color };
 }
 
+// A chunk of distant buildings (k_<x>_<z>.bin, see tools/pipeline/compile.mjs) -> one mesh of plain blocks;
+// aTile holds each vertex's tile, so a tile's buildings can be hidden once the tile is in in full.
+function blockChunk(buf) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0, true) !== 0x314b4c42) throw new Error('not a block chunk');
+  const parts = [];
+  for (let n = dv.getUint32(4, true), o = 8; n > 0; n--) {
+    const tx = dv.getInt32(o, true), tz = dv.getInt32(o + 4, true), len = dv.getUint32(o + 8, true);
+    parts.push({ tx, tz, mesh: blockMesh(decodeTile(buf.slice(o + 12, o + 12 + len)).buildings, tx, tz) });
+    o += 12 + len;
+  }
+  const verts = parts.reduce((s, p) => s + p.mesh.position.length / 3, 0), idx = parts.reduce((s, p) => s + p.mesh.index.length, 0);
+  const position = new Float32Array(verts * 3), normal = new Float32Array(verts * 3), color = new Float32Array(verts * 3), aTile = new Float32Array(verts * 2);
+  const index = verts > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
+  let v = 0, k = 0;
+  for (const { tx, tz, mesh } of parts) {
+    const n = mesh.position.length / 3;
+    position.set(mesh.position, v * 3); normal.set(mesh.normal, v * 3); color.set(mesh.color, v * 3);
+    for (let i = 0; i < n; i++) { aTile[(v + i) * 2] = tx; aTile[(v + i) * 2 + 1] = tz; }
+    for (let i = 0; i < mesh.index.length; i++) index[k + i] = mesh.index[i] + v;
+    v += n; k += mesh.index.length;
+  }
+  return { position, normal, color, aTile, index };
+}
+
 self.onmessage = async ({ data: m }) => {
   if (m.type === 'init') {
     grid = { ...m.grid, data: new Float32Array(m.grid.data) };
@@ -44,9 +69,8 @@ self.onmessage = async ({ data: m }) => {
     try {
       const res = await fetch(m.url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (m.type === 'blocks') { const mesh = blockChunk(await res.arrayBuffer()); self.postMessage({ type: 'blocks', key: m.key, mesh }, buffers(mesh)); return; }
       const tile = decodeTile(await res.arrayBuffer());
-      // a distant tile: its buildings as plain blocks, nothing else
-      if (m.type === 'blocks') { const mesh = blockMesh(tile.buildings, tile.tx, tile.tz); self.postMessage({ type: 'blocks', key: m.key, mesh }, buffers(mesh)); return; }
       const mesh = buildTile(tile, grid, m.tileSize, surface);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
       self.postMessage({ type: 'tile', key: m.key, mesh }, buffers(mesh));

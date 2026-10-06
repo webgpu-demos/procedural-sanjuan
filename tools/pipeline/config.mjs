@@ -47,7 +47,7 @@ AREAS.sanjuan = {
   view: [3000, 1600, 5200, 38, 22], // from over Hato Rey, north-west across Santurce to the Condado and Old San Juan
   heritage: OLD_CITY,
   ads: 0.2,
-  chunk: 0.04, terrain: 10, orthoZoom: 15, stream: 1300,
+  chunk: 0.04, terrain: 10, orthoZoom: 15, stream: 1000,
 };
 export const DEFAULT_AREA = 'viejosanjuan';
 

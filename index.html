@@ -13,6 +13,12 @@
         background: rgba(10, 14, 22, 0.66); border-radius: 6px; pointer-events: none; white-space: pre-wrap;
       }
       @media (max-width: 700px) { #hud { top: 46px; } } /* (below the settings panel's bar on a phone) */
+      #toast {
+        position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 8px); z-index: 1020; max-width: calc(100vw - 32px);
+        padding: 8px 14px; border-radius: 6px; background: rgba(10, 14, 22, 0.88); color: #e8ecf2; font: 13px system-ui, sans-serif;
+        opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; overflow-wrap: anywhere;
+      }
+      #toast.on { opacity: 1; transform: translate(-50%, 0); }
       /* data sources: a button at the bottom left (it carries the OpenStreetMap attribution) that opens the list above it */
       #sources {
         position: fixed; left: 8px; bottom: 8px; z-index: 1010; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
@@ -73,6 +79,7 @@
       })();
     </script>
     <div id="hud">loading…</div>
+    <div id="toast" role="status" aria-live="polite"></div>
     <div id="sources">
       <div id="sources-list" role="region" aria-label="Data sources" hidden></div>
       <button id="sources-toggle" type="button" aria-expanded="false" aria-controls="sources-list"><span class="chev" aria-hidden="true">▴</span> Data sources <span class="osm">· © OpenStreetMap contributors</span></button>

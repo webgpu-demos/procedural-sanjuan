@@ -85,14 +85,15 @@ const materials = createMaterials(await loadTextures(renderer));
 const props = new Props();
 const signs = new Signs();
 const streamer = new Streamer(scene, materials, props, signs, { base: `tiles/${AREA}`, radius: Number(params.get('radius')) || 1e5 });
+const VIEW_RADIUS = 1000; // metres: full tiles around the focus, when the whole city is not loaded at once
 loader.set(0.08, 'terrain');
 const manifest = await streamer.init();
-// A large area (the whole municipality) streams: full detail around the view, plain blocks out to a few
-// kilometres, the photo-draped ground beyond (far.js). It is never loaded whole.
+// A large area (the whole municipality) streams: full detail around the view, plain blocks out to 7 km, the
+// photo-draped ground beyond (far.js). It is never loaded whole.
 const LARGE = manifest.stream != null || manifest.tiles.length > 600;
 if (LARGE) {
-  streamer.radius = Number(params.get('radius')) || manifest.stream || 1300;
-  streamer.blockRadius = manifest.blockRadius ?? 4500;
+  streamer.radius = Number(params.get('radius')) || manifest.stream || VIEW_RADIUS;
+  streamer.blockRadius = manifest.blockRadius ?? 7000;
   controls.maxDistance = 9000;
 }
 loader.set(0.14, 'railways and roads');
@@ -109,12 +110,7 @@ const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
   scene.add(plain);
 }
 // the ground of the tiles not loaded, and of the island around the area (far.js)
-buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj, (x, z) => streamer.ground(x, z)).then((far) => {
-  if (!far) return;
-  scene.add(far.mesh);
-  streamer.onChange = (tx, tz, on) => far.setLoaded(tx, tz, on);
-  for (const [key, t] of streamer.tiles) if (t.state === 'ready') { const tl = streamer.available.get(key); far.setLoaded(tl.x, tl.z, true); }
-});
+buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj).then((far) => far && scene.add(far));
 const birds = createBirds(manifest.bounds, streamer.ground(0, 0));
 if (params.get('birds') != null) birds.geometry.instanceCount = Math.min(MAX_BIRDS, Number(params.get('birds')) || 0);
 scene.add(birds);
@@ -167,7 +163,7 @@ let guiState, clockText;
     get occlusion() { return ao.configuration.intensity > 0; }, set occlusion(v) { ao.configuration.intensity = v ? AO : 0; },
     bloom: true,
     // the whole city at once, or only what lies within the view radius of the point looked at (fewer tiles: more frames)
-    wholeCity: !params.get('radius') && !LARGE, near: Number(params.get('radius')) || (LARGE ? streamer.radius : 900),
+    wholeCity: !params.get('radius') && !LARGE, near: Number(params.get('radius')) || (LARGE ? streamer.radius : VIEW_RADIUS),
     get whole() { return this.wholeCity; }, set whole(v) { this.wholeCity = v && !LARGE; streamer.radius = this.wholeCity ? 1e5 : this.near; },
     get radius() { return this.near; }, set radius(v) { this.near = v; if (!this.wholeCity) streamer.radius = v; },
   };
@@ -175,6 +171,7 @@ let guiState, clockText;
   // the names of the cities, for the loading screen of the next visit (index.html reads them)
   try { for (const a of areas) localStorage.setItem(`procedural-sanjuan:name:${a.id}`, a.name); } catch { /* storage unavailable */ }
   const gui = new GUI({ title: 'Scene' });
+  gui.add({ share: () => shareView() }, 'share').name('copy link to this view');
   if (innerWidth < 700) gui.close(); // (on a phone the open panel would cover the city: one tap on its title opens it)
   gui.add(state, 'city', Object.fromEntries(areas.map((a) => [a.name, a.id]))).onChange((id) => {
     const url = new URL(location.href);
@@ -223,7 +220,8 @@ let guiState, clockText;
   // The panel's settings are kept (in this browser) and are the same for every city: what is switched off in
   // one is off in the next. A URL that sets something itself (?time=, ?cars=, ...) is taken as it stands.
   const KEY = 'procedural-sanjuan:settings';
-  const explicit = [...params.keys()].some((k) => k !== 'area');
+  // (a shared view link carries the camera and perhaps the hour: those do not count as settings)
+  const explicit = [...params.keys()].some((k) => !['area', 'cam', 'time'].includes(k));
   const strip = (saved) => { delete saved.controllers?.city; return saved; }; // (the city is the page's, not a setting)
   if (!explicit) {
     try {
@@ -233,12 +231,41 @@ let guiState, clockText;
         // (loading the time moved the slider, which stops the live clock: put the saved choice back)
         const live = saved.folders?.['Time (San Juan)']?.controllers?.['live clock'];
         if (live != null) clockTime.live = live;
+        if (params.get('time') != null) { clockTime.live = false; clockTime.hour = Number(params.get('time')); } // (the link's hour wins)
       }
     } catch (e) { console.warn('settings not restored:', e.message); }
   }
   const keep = () => { try { localStorage.setItem(KEY, JSON.stringify(strip(gui.save()))); } catch { /* storage unavailable: nothing is kept */ } };
   gui.onFinishChange(keep);
   addEventListener('pagehide', keep);
+}
+
+// ---------------------------------------------------------------- view links
+// The address follows the camera (?area=&cam=x,z,distance,azimuth,elevation, and the hour when it is set by
+// hand), so the address bar always holds a link to what is on the screen.
+const viewSpherical = new THREE.Spherical();
+function viewLink() {
+  viewSpherical.setFromVector3(new THREE.Vector3().subVectors(camera.position, controls.target));
+  const az = ((THREE.MathUtils.radToDeg(viewSpherical.theta) % 360) + 360) % 360, el = 90 - THREE.MathUtils.radToDeg(viewSpherical.phi);
+  const url = new URL(location.href);
+  url.searchParams.set('area', AREA);
+  url.searchParams.set('cam', [controls.target.x, controls.target.z, viewSpherical.radius, az, el].map((v) => Math.round(v)).join(','));
+  if (clockTime.live) url.searchParams.delete('time'); else url.searchParams.set('time', clockTime.hour.toFixed(2));
+  url.searchParams.delete('night'); // (the hour says it)
+  return url.href.replace(/%2C/g, ','); // (commas are fine in a query: keep the link readable)
+}
+let linkWritten = 0, lastLink = '';
+function updateViewLink(now) {
+  if (now - linkWritten < 600) return;
+  linkWritten = now;
+  const link = viewLink();
+  if (link !== lastLink) { lastLink = link; history.replaceState(null, '', link); }
+}
+const toast = document.getElementById('toast');
+function shareView() {
+  const link = viewLink();
+  const done = (text) => { toast.textContent = text; toast.classList.add('on'); clearTimeout(toast.timer); toast.timer = setTimeout(() => toast.classList.remove('on'), 1800); };
+  navigator.clipboard?.writeText(link).then(() => done('Link to this view copied'), () => done(link)) ?? done(link);
 }
 
 // ---------------------------------------------------------------- input
@@ -347,6 +374,7 @@ function frame() {
   lampLight.update(scene, controls.target, camera.position, env.night);
   atmosphere.bloom.intensity = guiState.bloom ? env.bloom * 3 : 0;
   atmosphere.render(dt);
+  if (!loading) updateViewLink(performance.now());
 
   frames++; fpsTime += dt;
   if (fpsTime >= 0.5) { fps = frames / fpsTime; frames = 0; fpsTime = 0; }
@@ -364,4 +392,4 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared };
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink };

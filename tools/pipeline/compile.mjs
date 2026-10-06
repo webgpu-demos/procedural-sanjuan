@@ -7,6 +7,8 @@
 //                   ground on bridges and elevated expressways)
 //   structures.json footbridges, station platforms and canopies (tools/pipeline/extras.mjs)
 //   rails.json      surface and elevated railway lines from OSM, with their height profile (y = track bed)
+//   k_<x>_<z>.bin   the buildings alone, 4 x 4 tiles to a file, for the distant blocks of a streamed area
+//   far.bin         the coarse terrain of the area and the island around it, for the distant ground
 // Usage: node tools/pipeline/compile.mjs [--area=viejosanjuan] [--no-ads]   (--no-ads: leave out the invented billboards, screens and banners)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -180,7 +182,14 @@ if (fs.existsSync(path.join(area.rawDir, 'dem', FAR_DEM.id))) {
   const w = (extent.maxX - extent.minX + 2 * FAR) / FAR_STEP + 1, h = (extent.maxZ - extent.minZ + 2 * FAR) / FAR_STEP + 1;
   const data = new Float32Array(w * h), x0 = extent.minX - FAR, z0 = extent.minZ - FAR;
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
-    const v = sample(...proj.unproject(x0 + i * FAR_STEP, z0 + j * FAR_STEP));
+    const x = x0 + i * FAR_STEP, z = z0 + j * FAR_STEP;
+    if (x >= extent.minX && x <= extent.maxX && z >= extent.minZ && z <= extent.maxZ) {
+      // inside the area: its own terrain; the sea sinks below the sea plane, lagoons and rivers keep their level
+      const gi = Math.min(grid.w - 1, Math.round((x - grid.x0) / grid.step)), gj = Math.min(grid.h - 1, Math.round((z - grid.z0) / grid.step));
+      data[j * w + i] = wetCell[gj * grid.w + gi] === 1 ? SEA - 3 : sampleGrid(grid, x, z);
+      continue;
+    }
+    const v = sample(...proj.unproject(x, z));
     data[j * w + i] = !(v > 0.1) ? SEA - 3 : v;
   }
   far = { file: 'far.bin', x0, z0, step: FAR_STEP, w, h, data };
@@ -535,6 +544,30 @@ for (const t of [...tiles.values()].sort((a, b) => a.tz - b.tz || a.tx - b.tx)) 
   bytes += buf.length;
   tileList.push({ x: t.tx, z: t.tz, file, buildings: t.buildings.length, areas: t.areas.length, props: t.props.length, signs: t.signs.length, bytes: buf.length });
 }
+// Distant buildings, for a client that streams: the buildings alone (no ground, paint or props), BLOCK x BLOCK
+// tiles to a file, in each tile's own order (meshing.js picks a building's colour by its index in the tile).
+//   k_<cx>_<cz>.bin   u32 'BLK1' | u32 nTiles | per tile: i32 tx | i32 tz | u32 byteLength | a tile (tileformat.js) of buildings only
+const BLOCK = 4, blockFiles = [];
+{
+  const chunks = new Map();
+  for (const t of tiles.values()) {
+    if (!t.buildings.length) continue;
+    const k = Math.floor(t.tx / BLOCK) + '_' + Math.floor(t.tz / BLOCK);
+    if (!chunks.has(k)) chunks.set(k, []);
+    chunks.get(k).push(t);
+  }
+  for (const [k, list] of chunks) {
+    const parts = list.map((t) => ({ t, buf: encodeTile({ tx: t.tx, tz: t.tz, buildings: t.buildings.map((b) => ({ ...b, surfaces: [] })), areas: [] }) }));
+    const out = Buffer.alloc(8 + parts.reduce((n, p) => n + 12 + p.buf.length, 0));
+    out.writeUInt32LE(0x314b4c42, 0); out.writeUInt32LE(parts.length, 4);
+    let o = 8;
+    for (const { t, buf } of parts) { out.writeInt32LE(t.tx, o); out.writeInt32LE(t.tz, o + 4); out.writeUInt32LE(buf.length, o + 8); Buffer.from(buf).copy(out, o + 12); o += 12 + buf.length; }
+    const file = `k_${k}.bin`, [cx, cz] = k.split('_').map(Number);
+    fs.writeFileSync(path.join(area.outDir, file), out);
+    blockFiles.push([cx, cz, file, list.reduce((n, t) => n + t.buildings.length, 0)]);
+    bytes += out.length;
+  }
+}
 fs.writeFileSync(path.join(area.outDir, 'terrain.bin'), Buffer.from(grid.data.buffer));
 if (far) fs.writeFileSync(path.join(area.outDir, far.file), Buffer.from(far.data.buffer));
 // junction nodes with traffic signals (indices into roads.json nodes), for the traffic simulation
@@ -557,6 +590,8 @@ const manifest = {
   stream: area.stream ?? null,
   // the surroundings, coarse, beyond the extent (the photo for them is in ortho/<area>/far)
   far: far && { file: far.file, x0: far.x0, z0: far.z0, step: far.step, w: far.w, h: far.h },
+  // distant buildings, BLOCK x BLOCK tiles to a file: [cx, cz, file, buildings]
+  blocks: { size: BLOCK, chunks: blockFiles },
   roads: 'roads.json', rails: 'rails.json', structures: 'structures.json',
   // street-level bridge decks: road polygons marked with a deck, and street objects, follow these instead of the terrain (src/shared/decks.js)
   decks,

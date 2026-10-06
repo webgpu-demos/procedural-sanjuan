@@ -154,7 +154,7 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
     const at = (u, v) => [cx + ax * u + sx * v, cz + az * u + sz * v];
     const inside = (p) => inRings(p[0], p[1], [ring]) && !idx.building.has(p[0], p[1]);
     // rows of bays across the short axis: a row against each side, then pairs of rows between aisles
-    const rows = [];
+    const rows = [], full = 0.15 + 0.35 * hash(w.id, 7, 1); // how full this lot is
     for (let v = -b + 0.3, k = 0; v + 5 <= b - 0.2; k++) { rows.push(v); v += k % 2 === 0 ? 5 + 6 : 5; }
     for (const v of rows) for (let u = -a + 0.4; u + 2.5 <= a - 0.3; u += 2.5) {
       const corners = [at(u, v), at(u + 2.5, v), at(u + 2.5, v + 5), at(u, v + 5)];
@@ -162,7 +162,7 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
       // the two long sides of the bay, as paint
       for (const du of [0, 2.5]) out.marks.push({ kind: AREA.MARK_WHITE, ring: [at(u + du - 0.05, v), at(u + du + 0.05, v), at(u + du + 0.05, v + 5), at(u + du - 0.05, v + 5)] });
       const h = hash(Math.round(u * 7 + w.id), Math.round(v * 13), 3);
-      if (h < 0.55) {
+      if (h < full) {
         const [x, z] = at(u + 1.25, v + 2.5), type = Math.floor(hash(w.id, Math.round(u * 3), Math.round(v)) * 4), color = Math.floor(h * 100) % 4;
         out.props.push({ kind: PROP.PARKED, variant: type + 4 * color, rot: Math.atan2(sx, sz) + (hash(Math.round(u), Math.round(v), w.id) < 0.5 ? 0 : Math.PI), x, z, scale: 1 });
         tally('parked car');

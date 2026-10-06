@@ -34,29 +34,28 @@ async function photo(base, proj, rect) {
   return t;
 }
 
-// manifest: the area's; ground(x, z): the area's terrain height. Resolves to { mesh, setLoaded(tx, tz, on) },
-// or null. Inside the area the mesh follows the area's own terrain, coarsely, under the area's aerial photo:
-// it is the ground of every tile that is not loaded, and setLoaded hides it under each tile that is.
-export async function buildSurroundings(base, orthoBase, manifest, proj, ground) {
+// manifest: the area's. Resolves to the mesh, or null. Inside the area the mesh follows the area's own terrain,
+// coarsely, under the area's aerial photo: it is the ground of every tile that is not loaded (shared.uLoaded,
+// kept by the Streamer, hides it under each tile that is).
+export async function buildSurroundings(base, orthoBase, manifest, proj) {
   const f = manifest.far;
   if (!f) return null;
   const res = await fetch(`${base}/${f.file}`);
   if (!res.ok) return null;
-  const h = new Float32Array(await res.arrayBuffer()), sea = manifest.sea ?? 0, ext = manifest.extent ?? manifest.bounds;
+  const h = new Float32Array(await res.arrayBuffer()), sea = manifest.sea ?? 0;
   const rect = { minX: f.x0, minZ: f.z0, sizeX: (f.w - 1) * f.step, sizeZ: (f.h - 1) * f.step };
   const pos = new Float32Array(f.w * f.h * 3), uv = new Float32Array(f.w * f.h * 2);
-  const within = (x, z) => x >= ext.minX - 1 && x <= ext.maxX + 1 && z >= ext.minZ - 1 && z <= ext.maxZ + 1;
+  // (inside the area the compiler wrote the area's own terrain, the sea sunk below the sea plane)
   for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) {
     const k = j * f.w + i, x = f.x0 + i * f.step, z = f.z0 + j * f.step;
-    // (inside the area, the sea cells of its terrain sink below the sea plane, as the surroundings' do)
-    const y = within(x, z) ? ground(x, z) : h[k];
-    pos.set([x, y < sea + 0.02 ? Math.min(y, sea - 3) : y, z], k * 3);
+    pos.set([x, h[k], z], k * 3);
     uv.set([(x - rect.minX) / rect.sizeX, 1 - (z - rect.minZ) / rect.sizeZ], k * 2);
   }
   const index = [];
   for (let j = 0; j + 1 < f.h; j++) for (let i = 0; i + 1 < f.w; i++) {
     const a = j * f.w + i, b = a + 1, c = a + f.w, d = c + 1;
-    if (Math.max(pos[a * 3 + 1], pos[b * 3 + 1], pos[c * 3 + 1], pos[d * 3 + 1]) < sea) continue; // open sea
+    // open sea, sunk below the sea plane (lagoons and rivers lie at about sea level and stay)
+    if (Math.max(pos[a * 3 + 1], pos[b * 3 + 1], pos[c * 3 + 1], pos[d * 3 + 1]) < sea - 1) continue;
     index.push(a, c, b, b, c, d);
   }
   const g = new THREE.BufferGeometry();
@@ -65,17 +64,12 @@ export async function buildSurroundings(base, orthoBase, manifest, proj, ground)
   g.setIndex(index);
   g.computeVertexNormals();
   g.computeBoundingSphere();
-  // one texel per tile of the area: 255 where the full tile is loaded (its own ground is drawn there)
-  const tw = Math.round((ext.maxX - ext.minX) / manifest.tileSize), th = Math.round((ext.maxZ - ext.minZ) / manifest.tileSize);
-  const loaded = new THREE.DataTexture(new Uint8Array(tw * th), tw, th, THREE.RedFormat);
-  loaded.magFilter = loaded.minFilter = THREE.NearestFilter;
-  loaded.needsUpdate = true;
   const map = await photo(orthoBase, proj, rect);
   const material = new THREE.MeshStandardMaterial({ map, color: map ? 0xffffff : 0x6b7a58, roughness: 1, metalness: 0 });
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, {
       uNight: shared.uNight, uOrtho: shared.uOrtho, uOrthoRect: shared.uOrthoRect, uOrthoOn: shared.uOrthoOn,
-      uLoaded: { value: loaded }, uExtent: { value: new THREE.Vector4(ext.minX, ext.minZ, ext.maxX - ext.minX, ext.maxZ - ext.minZ) },
+      uLoaded: shared.uLoaded, uExtent: shared.uLoadedRect,
       uLampOn: { value: 0 }, uLampMap: shared.uLampMap, // (no lamp light here; the sampler still needs its texture)
     });
     shader.vertexShader = shader.vertexShader
@@ -100,14 +94,5 @@ export async function buildSurroundings(base, orthoBase, manifest, proj, ground)
   const mesh = new THREE.Mesh(g, material);
   mesh.name = 'surroundings';
   mesh.receiveShadow = false;
-  const x0 = Math.round(ext.minX / manifest.tileSize), z0 = Math.round(ext.minZ / manifest.tileSize);
-  return {
-    mesh,
-    setLoaded(tx, tz, on) {
-      const i = tx - x0, j = tz - z0;
-      if (i < 0 || j < 0 || i >= tw || j >= th) return;
-      loaded.image.data[j * tw + i] = on ? 255 : 0;
-      loaded.needsUpdate = true;
-    },
-  };
+  return mesh;
 }
