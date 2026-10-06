@@ -8,6 +8,7 @@
 //   structures.json footbridges, station platforms and canopies (tools/pipeline/extras.mjs)
 //   rails.json      surface and elevated railway lines from OSM, with their height profile (y = track bed)
 //   k_<x>_<z>.bin   the buildings alone, 4 x 4 tiles to a file, for the distant blocks of a streamed area
+//   x_<x>_<z>.bin   a tile's landmark models (landmarks.mjs), where it has any
 //   far.bin         the coarse terrain of the area and the island around it, for the distant ground
 // Usage: node tools/pipeline/compile.mjs [--area=viejosanjuan] [--no-ads]   (--no-ads: leave out the invented billboards, screens and banners)
 import fs from 'node:fs';
@@ -30,6 +31,7 @@ import { DECK_FLAG, CORRIDOR_MARGIN, projectOnDeck } from '../../src/shared/deck
 import { readBuildingSources } from './buildings.mjs';
 import { buildSea } from './coast.mjs';
 import { buildRoadSurfaces } from './roadsurface.mjs';
+import { Tris, fort, wallGaritas, domeOn, lighthouse, cathedral, convention, encodeMesh, simplify } from './landmarks.mjs';
 
 const TERRAIN_STEP_DEFAULT = 5; // metres (an area may set its own: config.mjs)
 const SEA = 0;            // the sea surface (m)
@@ -201,7 +203,7 @@ const wet = (x, z) => seaIndex.has(x, z) || wetCell[Math.round((z - grid.z0) / g
 const tiles = new Map();
 const tileFor = (x, z) => {
   const [tx, tz] = tileOf(x, z), k = tileKey(tx, tz);
-  if (!tiles.has(k)) tiles.set(k, { tx, tz, buildings: [], areas: [], props: [], wires: [], walls: [], signs: [] });
+  if (!tiles.has(k)) tiles.set(k, { tx, tz, buildings: [], areas: [], props: [], wires: [], walls: [], signs: [], blockOnly: [] });
   return tiles.get(k);
 };
 // Point-in-polygon indexes used to place paint, trees and street furniture.
@@ -223,7 +225,7 @@ for (const b of src.buildings) {
   bstats.slope.push(gc - lowest);
   bstats.heights.push(b.height);
   bstats.usage[b.usage] = (bstats.usage[b.usage] ?? 0) + 1;
-  const building = { id: b.id, usage: b.usage, storeys: b.storeys, flags: b.masonry ? BFLAG.MASONRY : 0, base: r2(base), height: r2(height), measuredHeight: b.measured ? r2(height) : -1, polygons: polys, surfaces: [], hint: b.hint, cx, cz };
+  const building = { id: b.id, usage: b.usage, storeys: b.storeys, flags: b.masonry ? BFLAG.MASONRY : 0, base: r2(base), height: r2(height), measuredHeight: b.measured ? r2(height) : -1, polygons: polys, surfaces: [], hint: b.hint, cx, cz, roof: b.roof, name: b.name };
   allBuildings.push(building);
 }
 const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0; };
@@ -250,7 +252,8 @@ const surf = buildRoadSurfaces({ edges: graph.edges, pos: graph.pos, bounds, fly
   removable: (b) => b.id.startsWith('f') });
 const keptBuildings = allBuildings.filter((b) => !surf.removed.has(b));
 for (const b of keptBuildings) {
-  const { cx, cz, id, ...rest } = b;
+  const { cx, cz, id, roof, name, ...rest } = b;
+  b.entry = rest; // what the tile holds (landmarks below adjust it)
   tileFor(cx, cz).buildings.push(rest);
   for (const rings of b.polygons) idx.building.add(rings);
 }
@@ -516,6 +519,88 @@ for (const e of JSON.parse(fs.readFileSync(path.join(area.rawDir, 'osm_poi.json'
 }
 if (lattice) log(`lattice towers (OSM): ${lattice}`);
 
+// ---------------------------------------------------------------- landmarks
+// The old city's landmarks as built models (landmarks.mjs), in the static mesh of the tile they stand in: the
+// forts (which take the place of their building there; the distant blocks keep it), the garitas on the city
+// walls, El Morro's lighthouse, the domes OSM maps, the cathedral and the Convention Center.
+const LANDMARKS = {
+  w59744985: { hint: 0xeeebe2 },                                               // the Capitol: white marble
+  w255583481: { hint: 0xf1e6cc, model: 'cathedral', facing: [-1, 0] },         // San Juan Bautista, its facade on Calle del Cristo
+  w196616058: { hint: 0xebeae4, model: 'convention', facing: [1, -1] },        // the Convention Center, its glass front to the boulevard
+};
+const lmTiles = new Map();
+const lmTris = (x, z) => { const t = tileFor(x, z), k = tileKey(t.tx, t.tz); if (!lmTiles.has(k)) lmTiles.set(k, new Tris()); return lmTiles.get(k); };
+const spots = [], fortPieces = [], lmCount = { forts: 0, garitas: 0, domes: 0, lighthouses: 0, models: 0 };
+const tileOfEntry = (b) => tileFor(b.cx, b.cz);
+const removeEntry = (b, keepForBlocks) => {
+  const tile = tileOfEntry(b), i = tile.buildings.indexOf(b.entry);
+  if (i < 0) return;
+  tile.buildings.splice(i, 1);
+  if (keepForBlocks) tile.blockOnly.push(b.entry);
+};
+// the forts first: the garitas on the walls keep clear of theirs
+for (const b of keptBuildings) {
+  if (!(b.entry.flags & BFLAG.MASONRY)) continue;
+  const f = fort(b.polygons[0][0], ground, lmTris(b.cx, b.cz), spots);
+  fortPieces.push(...f.pieces);
+  removeEntry(b, true);
+  lmCount.forts++;
+}
+lmCount.garitas = spots.length;
+{
+  const walls = extraRaw.ways.filter((w) => w.tags.barrier === 'city_wall' || w.tags.historic === 'citywalls').map((w) => w.pts);
+  // outside the walls: the sea, or ground falling away
+  const outsideWalls = (xo, zo, xi, zi) => wet(xo, zo) || ground(xo, zo) < ground(xi, zi) - 1;
+  lmCount.garitas += wallGaritas(walls.filter((pts) => pts.some(([x, z]) => inBounds(x, z))), ground, outsideWalls, lmTris, spots);
+}
+for (const e of JSON.parse(fs.readFileSync(path.join(area.rawDir, 'osm_poi.json'), 'utf8')).elements) {
+  const at = e.center ?? e;
+  if (e.tags?.man_made !== 'lighthouse' || at.lat == null) continue;
+  const [x, z] = proj.project(at.lon, at.lat);
+  if (!inBounds(x, z)) continue;
+  // on the terreplein it stands on, if a fort's
+  const on = fortPieces.filter((p) => inRings(x, z, [p.ring])).reduce((y, p) => Math.max(y, p.y), -Infinity);
+  lighthouse(lmTris(x, z), x, z, on > -Infinity ? on : ground(x, z));
+  lmCount.lighthouses++;
+}
+const enclosing = (b) => { // the buildings round the middle of b
+  const [tx, tz] = tileOf(b.cx, b.cz), out = [];
+  for (let i = tx - 1; i <= tx + 1; i++) for (let j = tz - 1; j <= tz + 1; j++)
+    for (const o of tiles.get(tileKey(i, j))?.buildings ?? []) if (o !== b.entry && o.polygons.some((rings) => inRings(b.cx, b.cz, rings))) out.push(o);
+  return out;
+};
+for (const b of keptBuildings) {
+  const entry = b.entry, ring = b.polygons[0][0], spec = LANDMARKS[b.id];
+  if (spec?.hint) entry.hint = (0x80000000 | spec.hint | (MATERIAL.PLASTER << 24)) >>> 0;
+  if (b.roof === 'dome') {
+    // the walls stop a radius below the dome's top, or at the roof of the building it rises from
+    const r = Math.sqrt(Math.abs(areaEN(ring)) / Math.PI), top = enclosing(b).reduce((y, o) => Math.max(y, o.base + o.height), -Infinity);
+    const y = Math.max(entry.base + entry.height - r, top);
+    if (y - entry.base < 0.5 || top >= y - 0.5) removeEntry(b, false); // hidden inside the building it rises from
+    else entry.height = r2(y - entry.base);
+    domeOn(lmTris(b.cx, b.cz), b.cx, b.cz, y, r);
+    lmCount.domes++;
+  }
+  if (spec?.model === 'cathedral') {
+    // the facade: the longest side facing the street it fronts (length seen from that street)
+    const s = simplify(ring, 1), [fx, fz] = spec.facing;
+    let best = null, score = 0;
+    for (let i = 0; i < s.length; i++) {
+      const [ax, az] = s[i], [bx, bz] = s[(i + 1) % s.length], len = Math.hypot(bx - ax, bz - az);
+      const k = (-(bz - az) * fx + (bx - ax) * fz) / Math.hypot(fx, fz); // facing x length
+      if (len > 6 && k > score) { score = k; best = { ax, az, bx, bz }; }
+    }
+    if (best) { cathedral(lmTris(b.cx, b.cz), ring, best, entry.base + entry.height, ground((best.ax + best.bx) / 2, (best.az + best.bz) / 2)); lmCount.models++; }
+    entry.flags |= BFLAG.MASONRY; // plain walls: not an office block's window grid
+  } else if (spec?.model === 'convention') {
+    convention(lmTris(b.cx, b.cz), ring, entry.base + entry.height, spec.facing, ground(b.cx, b.cz));
+    entry.flags |= BFLAG.MASONRY; // plain panels, the glass is the model's
+    lmCount.models++;
+  }
+}
+log(`landmarks: ${lmCount.forts} forts, ${lmCount.garitas} garitas, ${lmCount.domes} domes, ${lmCount.lighthouses} lighthouses, ${lmCount.models} other models, `
+  + `${[...lmTiles.values()].reduce((n, t) => n + t.count, 0)} triangles in ${lmTiles.size} tiles`);
+
 // ---------------------------------------------------------------- signboards
 const places = readPlaces(path.join(area.rawDir, 'osm_poi.json'), proj.project);
 const signBuildings = [...tiles.values()].flatMap((t) => t.buildings.map((b) => ({ ring: b.polygons[0][0], base: b.base, height: b.height, usage: b.usage, storeys: b.storeys < 255 ? b.storeys : 0 })));
@@ -542,7 +627,15 @@ for (const t of [...tiles.values()].sort((a, b) => a.tz - b.tz || a.tx - b.tx)) 
   const file = `t_${t.tx}_${t.tz}.bin`, buf = encodeTile(t);
   fs.writeFileSync(path.join(area.outDir, file), buf);
   bytes += buf.length;
-  tileList.push({ x: t.tx, z: t.tz, file, buildings: t.buildings.length, areas: t.areas.length, props: t.props.length, signs: t.signs.length, bytes: buf.length });
+  const entry = { x: t.tx, z: t.tz, file, buildings: t.buildings.length, areas: t.areas.length, props: t.props.length, signs: t.signs.length, bytes: buf.length };
+  const models = lmTiles.get(tileKey(t.tx, t.tz));
+  if (models?.count) {
+    const mesh = encodeMesh(models);
+    entry.mesh = `x_${t.tx}_${t.tz}.bin`;
+    fs.writeFileSync(path.join(area.outDir, entry.mesh), mesh);
+    bytes += mesh.length;
+  }
+  tileList.push(entry);
 }
 // Distant buildings, for a client that streams: the buildings alone (no ground, paint or props), BLOCK x BLOCK
 // tiles to a file, in each tile's own order (meshing.js picks a building's colour by its index in the tile).
@@ -551,20 +644,20 @@ const BLOCK = 4, blockFiles = [];
 {
   const chunks = new Map();
   for (const t of tiles.values()) {
-    if (!t.buildings.length) continue;
+    if (!t.buildings.length && !t.blockOnly.length) continue;
     const k = Math.floor(t.tx / BLOCK) + '_' + Math.floor(t.tz / BLOCK);
     if (!chunks.has(k)) chunks.set(k, []);
     chunks.get(k).push(t);
   }
   for (const [k, list] of chunks) {
-    const parts = list.map((t) => ({ t, buf: encodeTile({ tx: t.tx, tz: t.tz, buildings: t.buildings.map((b) => ({ ...b, surfaces: [] })), areas: [] }) }));
+    const parts = list.map((t) => ({ t, buf: encodeTile({ tx: t.tx, tz: t.tz, buildings: t.buildings.concat(t.blockOnly).map((b) => ({ ...b, surfaces: [] })), areas: [] }) }));
     const out = Buffer.alloc(8 + parts.reduce((n, p) => n + 12 + p.buf.length, 0));
     out.writeUInt32LE(0x314b4c42, 0); out.writeUInt32LE(parts.length, 4);
     let o = 8;
     for (const { t, buf } of parts) { out.writeInt32LE(t.tx, o); out.writeInt32LE(t.tz, o + 4); out.writeUInt32LE(buf.length, o + 8); Buffer.from(buf).copy(out, o + 12); o += 12 + buf.length; }
     const file = `k_${k}.bin`, [cx, cz] = k.split('_').map(Number);
     fs.writeFileSync(path.join(area.outDir, file), out);
-    blockFiles.push([cx, cz, file, list.reduce((n, t) => n + t.buildings.length, 0)]);
+    blockFiles.push([cx, cz, file, list.reduce((n, t) => n + t.buildings.length + t.blockOnly.length, 0)]);
     bytes += out.length;
   }
 }

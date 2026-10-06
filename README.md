@@ -98,6 +98,8 @@ World frame: metres, x east, y up (above mean sea level), z south; the origin is
 |---|---|
 | `manifest.json` | origin, bounds, tile list, terrain grid description, sea level, default view, attribution |
 | `t_<x>_<z>.bin` | one 256 m tile: buildings, ground surfaces (roads, paint, parks, beaches, the sea), props and wires; format in `src/shared/tileformat.js` |
+| `x_<x>_<z>.bin` | a tile's landmark models (`tools/pipeline/landmarks.mjs`): the forts with their tiers, parapets and garitas, the garitas of the city walls, El Morro's lighthouse, the Capitol dome, the cathedral front, the Convention Center roof |
+| `k_<x>_<z>.bin` | the buildings alone, 4 x 4 tiles to a file, drawn as plain blocks in the distance when an area streams |
 | `terrain.bin` | Float32 height grid, 5 m spacing, out to the tile grid (`manifest.extent`) |
 | `far.bin` | Float32 height grid of the surroundings, 128 m spacing, 12 km beyond the extent (sea below 0) |
 | `roads.json` | road graph: junction nodes `[x, y, z]`, edges with polylines (road level per point) and OSM attributes |

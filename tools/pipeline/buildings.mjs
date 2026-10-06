@@ -203,7 +203,8 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     // fortifications: the stonework of El Morro, San Cristóbal and their bastions
     const masonry = /^(castle|fort|fortress|bunker)$/.test(t.building) || /^(castle|fort|citywalls|fortress)$/.test(t.historic ?? '') || t.castle_type === 'fortress';
     if (masonry) hint = (0x80000000 | STONE[Math.floor(seed * STONE.length)] | (3 << 24)) >>> 0;
-    out.push({ id: b.id, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured, hint, heritage: inHeritage, masonry });
+    out.push({ id: b.id, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured, hint, heritage: inHeritage, masonry,
+      roof: t['roof:shape'] ?? null, name: t.name ?? null });
   };
   // parts by the cell of their middle, to find the ones inside an outline without trying them all
   const PCELL = 50, partCells = new Map();
@@ -218,12 +219,15 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     const ring = b.polygons[0][0].map(([lon, lat]) => proj.project(lon, lat));
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-    // parts whose middle lies inside this outline stand for it
+    // parts whose middle lies inside this outline stand for it, if they cover most of it; a few parts (a dome
+    // over a rotunda) stand on it instead, and the outline is drawn as well
     const mine = [];
     for (let i = Math.floor(x0 / PCELL); i <= Math.floor(x1 / PCELL) && partCells.size; i++)
       for (let k = Math.floor(z0 / PCELL); k <= Math.floor(z1 / PCELL); k++)
         for (const p of partCells.get(i + ',' + k) ?? []) if (!p.used && inRings(p.at[0], p.at[1], [ring])) mine.push(p);
-    if (mine.length) { stats.outlinesWithParts++; for (const p of mine) { p.used = true; add(p, true); stats.parts++; } continue; }
+    for (const p of mine) { p.used = true; add(p, true); stats.parts++; }
+    if (mine.length) stats.outlinesWithParts++;
+    if (mine.length && mine.reduce((s, p) => s + ringAreaLL(p.polygons[0][0], proj), 0) >= 0.6 * ringAreaLL(b.polygons[0][0], proj)) continue;
     add(b, false);
   }
   for (const p of parts) if (!p.used) add(p, true); // a part without an outline around it
