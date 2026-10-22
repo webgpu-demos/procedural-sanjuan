@@ -29,8 +29,11 @@ WORK = os.path.join(SIM, SCEN); os.makedirs(WORK, exist_ok=True)
 OUT = os.path.join(ROOT, 'public/tiles', AREA, 'sim', SCEN); os.makedirs(OUT, exist_ok=True)
 NET = os.path.join(SIM, f'{AREA}.net.xml.gz')
 BEGIN, END = 4.5 * 3600, float(args.get('end', 10.5)) * 3600
-APAGON_AT = 6.25 * 3600  # (blue hour: the city still lit, the rush building)
-TOL, MAX_GAP = 0.35, 30.0     # metres off the true path at any second; seconds between knots at most
+APAGON_AT = 5.75 * 3600  # (5:45: still dark, the city lit; sunrise in late October is about 6:19 AST; the rush still to come)
+# A track is kept to the knots that hold every second of it within CROSS metres of the true path sideways (out
+# of its lane: that shows) and ALONG metres along it (a little early or late: that does not), and its height
+# within RISE; a knot at least every MAX_GAP seconds.
+CROSS, ALONG, RISE, MAX_GAP = 0.3, 1.5, 0.6, 30.0
 WINDOW = 300                  # seconds of the morning per file
 TYPES = ['compact', 'sedan', 'suv', 'pickup', 'truck', 'bus']  # (src/world/traffic.js TYPES, in order)
 t0 = time.time()
@@ -53,9 +56,10 @@ cmd = ['sumo', '-n', NET, '-r', ROUTES if os.path.exists(ROUTES) else os.path.jo
        # San Juan merging: after a minute and a half at a give-way line a driver takes a smaller gap, and a car
        # stuck across a junction stops blocking it after 15 s (SUMO's defaults lock the grid at the peak)
        '--time-to-impatience', '90', '--ignore-junction-blocker', '15',  # a lane change takes its time (SUMO's default is instant): it reads as one
-       # 40% of drivers re-plan every 10 minutes from the traffic as it is (a navigation app); single-threaded A*
-       # (SUMO's routing threads only fight over locks on this machine: measured 10x slower)
-       '--device.rerouting.probability', '0.4', '--device.rerouting.period', '600', '--routing-algorithm', 'astar',
+       # some drivers re-plan every quarter hour from the traffic as it is (a navigation app; the rest keep the
+       # routes made beforehand from a previous run's travel times: route.py); single-threaded A* (SUMO's routing
+       # threads only fight over locks on this machine: measured 10x slower)
+       '--device.rerouting.probability', args.get('reroute', '0.15'), '--device.rerouting.period', '900', '--routing-algorithm', 'astar',
        '--tripinfo-output', os.path.join(WORK, 'tripinfo.xml'), '--statistic-output', os.path.join(WORK, 'stats.xml'),
        '--no-step-log', '--no-warnings', '--duration-log.statistics']
 if SCEN == 'morning': cmd += ['--save-state.times', str(APAGON_AT), '--save-state.files', STATE, '--save-state.rng']
@@ -69,7 +73,8 @@ starts = {}              # vehicle -> first sampled second
 finished = []            # (vid, type, t0, knots float32 [n, 4]: t, x, y, z)
 
 def simplify(t, P):
-    """Indices to keep: synchronized-distance Douglas-Peucker, a knot at least every MAX_GAP seconds."""
+    """Indices to keep: Douglas-Peucker on the synchronized error (where the car is at the same moment), split
+    into sideways, along-the-way and height parts with their own tolerances; a knot at least every MAX_GAP s."""
     n = len(t); keep = np.zeros(n, bool); keep[0] = keep[-1] = True
     stack = [(0, n - 1)]
     while stack:
@@ -77,10 +82,17 @@ def simplify(t, P):
         if j <= i + 1: continue
         k = np.arange(i + 1, j)
         f = ((t[k] - t[i]) / (t[j] - t[i]))[:, None]
-        d = np.linalg.norm(P[k] - (P[i] + (P[j] - P[i]) * f), axis=1)
-        m = int(d.argmax())
-        if d[m] > TOL or t[j] - t[i] > MAX_GAP:
-            if d[m] <= TOL: m = len(k) // 2  # (only too long: split it in the middle)
+        err = P[k] - (P[i] + (P[j] - P[i]) * f)
+        ux, uy = P[j, 0] - P[i, 0], P[j, 1] - P[i, 1]; ul = math.hypot(ux, uy)
+        if ul > 0.5:
+            ux, uy = ux / ul, uy / ul
+            along = np.abs(err[:, 0] * ux + err[:, 1] * uy); cross = np.abs(err[:, 0] * uy - err[:, 1] * ux)
+        else:  # (standing, or nearly: any movement counts)
+            along = cross = np.hypot(err[:, 0], err[:, 1])
+        e = np.maximum(np.maximum(cross / CROSS, along / ALONG), np.abs(err[:, 2]) / RISE)
+        m = int(e.argmax())
+        if e[m] > 1 or t[j] - t[i] > MAX_GAP:
+            if e[m] <= 1: m = len(k) // 2  # (only too long: split it in the middle)
             keep[k[m]] = True; stack += [(i, int(k[m])), (int(k[m]), j)]
     return keep
 
@@ -176,10 +188,11 @@ for w0 in np.arange(begin, END, WINDOW):
         if not enc: continue
         cnt, data = enc
         body += struct.pack('<IBBH', vid, typ, 0, cnt) + data; n += 1
-    name = f'w_{int(w0)}.bin'
-    with open(os.path.join(OUT, name), 'wb') as f: f.write(struct.pack('<IIff', 0x31544a53, n, w0, w1) + body)
-    windows.append([int(w0), name, n, 12 + len(body)]); total += 16 + len(body)
-log(f'{len(windows)} windows, {total / 1e6:.1f} MB')
+    name = f'w_{int(w0)}.bin.gz'  # (gzipped: the client inflates it with DecompressionStream)
+    with gzip.open(os.path.join(OUT, name), 'wb', compresslevel=6) as f: f.write(struct.pack('<IIff', 0x31544a53, n, w0, w1) + body)
+    size = os.path.getsize(os.path.join(OUT, name))
+    windows.append([int(w0), name, n, size]); total += size
+log(f'{len(windows)} windows, {total / 1e6:.1f} MB (gzipped)')
 
 # ---------------------------------------------------------------- edge speeds every 5 min
 edges = {}  # edge id -> index (the client maps them to roads: "e<i>" / "r<i>")
@@ -202,8 +215,14 @@ grid = np.full((len(intervals), len(ids)), 255, np.uint8)  # 255: no cars in tha
 for r, (_, row) in enumerate(intervals):
     for eid, v in row.items():
         if eid in index: grid[r, index[eid]] = min(254, int(round(254 * min(1, v / max(1, free[eid])))))
+speed_begin = intervals[0][0] if intervals else begin
+if begin != BEGIN:  # (the apagón: the normal morning's speeds until the failure)
+    m = json.load(open(os.path.join(os.path.join(ROOT, 'public/tiles', AREA, 'sim', 'morning'), 'index.json')))
+    rows = int((begin - m['speedBegin']) // 300)
+    before = np.fromfile(os.path.join(os.path.join(ROOT, 'public/tiles', AREA, 'sim', 'morning'), 'speeds.bin'), np.uint8).reshape(-1, len(m['edges']))[:rows]
+    grid = np.concatenate([before, grid]); speed_begin = m['speedBegin']
 with open(os.path.join(OUT, 'speeds.bin'), 'wb') as f: f.write(grid.tobytes())
-log(f'speeds: {len(intervals)} intervals x {len(ids)} edges')
+log(f'speeds: {len(grid)} intervals x {len(ids)} edges')
 
 # ---------------------------------------------------------------- signal plans (static: the heads show them)
 links = collections.defaultdict(list)  # incoming edge -> [(tls, link index, direction)]
@@ -211,6 +230,10 @@ for c in net.iter('connection'):
     if c.get('tl') and not c.get('from').startswith(':'):
         links[c.get('from')].append([c.get('tl'), int(c.get('linkIndex')), c.get('dir')])
 # what each signal showed, as it changed: states numbered per signal ([time, state index] pairs)
+if begin != BEGIN:  # (the apagón: the normal morning's lights until the failure)
+    m = json.load(open(os.path.join(os.path.join(ROOT, 'public/tiles', AREA, 'sim', 'morning'), 'signals.json')))['timeline']
+    for tl in lights:
+        if tl in m: lights[tl] = [(t, m[tl]['states'][i]) for t, i in m[tl]['changes'] if t < begin] + lights[tl]
 timeline = {}
 for tl, ch in lights.items():
     states = sorted({st for _, st in ch}); si = {st: i for i, st in enumerate(states)}
@@ -234,7 +257,7 @@ for ev, el in ET.iterparse('tripinfo.xml', events=('end',)):
 st = ET.parse('stats.xml').getroot()
 stats = {k: dict(st.find(k).attrib) for k in ('vehicles', 'teleports', 'vehicleTripStatistics') if st.find(k) is not None}
 json.dump({'version': 1, 'scenario': SCEN, 'begin': BEGIN, 'end': END, 'window': WINDOW, 'windows': windows,
-           'types': TYPES, 'kinds': KINDS, 'municipios': munis, 'edges': ids, 'speedInterval': 300, 'speedBegin': intervals[0][0] if intervals else BEGIN,
+           'types': TYPES, 'kinds': KINDS, 'municipios': munis, 'edges': ids, 'speedInterval': 300, 'speedBegin': speed_begin,
            'apagon': APAGON_AT if apagon else None, 'stats': stats, 'peak': peak,
            'tripinfo': {'count': len(ti), 'meanDuration': float(np.mean([v[0] for v in ti.values()])) if ti else 0,
                         'meanTimeLoss': float(np.mean([v[1] for v in ti.values()])) if ti else 0}},
@@ -244,6 +267,9 @@ with open(os.path.join(OUT, 'tripinfo.bin'), 'wb') as f:
     cars = [k for k in ti if k < 10_000_000]  # (buses are numbered from ten million: gtfs.py)
     n = max(cars) + 1 if cars else 0
     arr = np.zeros((n, 2), np.uint16)
+    if begin != BEGIN:  # (the apagón: the cars that arrived before the failure keep the morning's figures)
+        before = np.fromfile(os.path.join(os.path.join(ROOT, 'public/tiles', AREA, 'sim', 'morning'), 'tripinfo.bin'), np.uint16).reshape(-1, 2)
+        n = max(n, len(before)); arr = np.zeros((n, 2), np.uint16); arr[:len(before)] = before
     for k in cars: dur, loss, length = ti[k]; arr[k] = (min(65535, int(loss)), min(65535, int(length / 10)))
     f.write(arr.tobytes())
 log(f'done: {json.dumps(stats.get("teleports", {}))}')

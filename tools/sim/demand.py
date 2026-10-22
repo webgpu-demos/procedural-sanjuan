@@ -244,6 +244,22 @@ for m in near:
         t = (7.5 + 2.5 * math.sqrt(rng.random())) * 3600
         add(t, pick_edge(hz), pick_edge(sz), 'errand', [m, m]); stats['errand'] += 1
 
+# the airport (Luis Muñoz Marín, Isla Verde): drop-offs for the morning's flights, from homes and from the
+# hotels, earliest flights first; most of the cars that drop someone off drive back
+AIRPORT = to_sumo(-66.0018, 18.4394)
+air_edges = [(e.getID(), e.getLength()) for e in core if e.getPriority() <= 10 and e.getLength() > 30
+             and math.dist(e.getShape()[len(e.getShape()) // 2][:2], AIRPORT) < 450]
+hotels = [k for k, ms in zones.items() for m, v in ms.items() if v[3] > 0]  # (shops and hotels: tourists' zones)
+if air_edges:
+    for _ in range(poisson(6000 * SCALE)):
+        t = (4.5 + 5 * rng.betavariate(1.6, 2.8)) * 3600
+        m = 'San Juan' if rng.random() < 0.75 else rng.choice([n for n in near if h_in.get(n, 0) > 0])
+        hz = sample_zone(m, 0)
+        if not hz: continue
+        a = pick_edge(hz); b = rng.choice(air_edges)[0]
+        add(t, a, b, 'airport', [m, 'Carolina']); stats['airport'] += 1
+        if rng.random() < 0.7: add(t + rng.uniform(900, 1500), b, a, 'airport-return', ['Carolina', m]); stats['airport'] += 1
+
 # deliveries and freight: trucks from the gates and the industrial zones to the shops, from 5:00
 for _ in range(poisson(len(trips) * 0.045)):
     t = rng.uniform(5.0, 10.0) * 3600
@@ -265,12 +281,14 @@ VTYPES = {  # lengths as the models (src/world/traffic.js TYPES); Puerto Rico dr
     'truck': dict(length=7.0, width=2.3, accel=1.3, decel=4.0, maxSpeed=30, vClass='delivery'),
     'bus': dict(length=12.0, width=2.55, accel=1.2, decel=4.0, maxSpeed=25, vClass='bus'),
 }
+# (San Juan drives close: a 0.9 s headway, 2 m gaps, less dawdling than SUMO's default driver; the capacity
+# that comes of it is what the counts are checked against)
 with open(os.path.join(OUT, 'trips.xml'), 'w') as fx:
     fx.write('<routes>\n')
     for k, v in VTYPES.items():
         cls = v.pop('vClass', 'passenger')
         fx.write(f'  <vType id="{k}" vClass="{cls}" ' + ' '.join(f'{a}="{b}"' for a, b in v.items()) +
-                 ' speedFactor="normc(1.06,0.1,0.75,1.35)" sigma="0.45" tau="1.1" minGap="2.2" lcStrategic="1.2" lcCooperative="0.8" lcAssertive="1.3" impatience="0.5"/>\n')
+                 ' speedFactor="normc(1.06,0.1,0.75,1.35)" sigma="0.3" tau="0.9" minGap="2.0" lcStrategic="1.2" lcCooperative="0.8" lcAssertive="1.3" impatience="0.5"/>\n')
     for i, (t, a, b, typ, kind, story) in enumerate(trips):
         fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" from="{a}" to="{b}" departLane="best" departSpeed="max" departPos="random_free"/>\n')
     fx.write('</routes>\n')

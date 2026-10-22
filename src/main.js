@@ -143,13 +143,13 @@ if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params
 if (params.get('traffic') !== '0') scene.add(traffic.group);
 // The simulated morning (tools/sim): every car a trip SUMO drove. Without a time in the link it opens on it,
 // running in real time from before dawn.
-let sim = params.get('sim') === '0' ? null : await SimTraffic.load(`tiles/${AREA}/sim/${params.get('scenario') || 'morning'}`, streamer.surface);
+let sim = params.get('sim') === '0' ? null : await SimTraffic.load(`tiles/${AREA}/sim/${params.get('scenario') || 'morning'}`, streamer.surface, roads, (x, z) => streamer.ground(x, z));
 // its signals: the heads at the junctions show what the simulation's lights showed (before any tile is built)
 const simSignals = sim && await fetch(`${sim.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).then((j) => j && new SimSignals(j, roads)).catch(() => null);
 if (simSignals) { props.signalSlot = (x, z, rot) => simSignals.slot(x, z, rot); props.mats.lens.uniforms.uSig.value = simSignals.texture; }
 if (sim) {
   scene.add(sim.group);
-  if (params.get('time') == null && params.get('night') !== '1') { clockTime.live = false; clockTime.hour = 5.85; }
+  if (params.get('time') == null && params.get('night') !== '1') { clockTime.live = false; clockTime.hour = 5.45; }
   if (params.get('rate') == null) clockTime.rate = 1;
 }
 const simOn = () => sim && clockTime.hour * 3600 >= sim.begin && clockTime.hour * 3600 < sim.end;
@@ -161,7 +161,7 @@ const ferries = sim && await Ferries.load(`tiles/${AREA}/sim/ferries.json`);
 if (ferries) scene.add(ferries.group);
 // Another run of the morning (the apagón): its cars and its signals in place of the current ones.
 async function setScenario(name) {
-  const next = await SimTraffic.load(`tiles/${AREA}/sim/${name}`, streamer.surface);
+  const next = await SimTraffic.load(`tiles/${AREA}/sim/${name}`, streamer.surface, roads, (x, z) => streamer.ground(x, z));
   if (!next) return false;
   const lights = await fetch(`${next.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   if (sim) { scene.remove(sim.group); next.followed = sim.followed; }
@@ -282,7 +282,7 @@ let guiState, clockText, guiPanel;
         const live = saved.folders?.['Time (San Juan)']?.controllers?.['live clock'];
         if (live != null) clockTime.live = live;
         if (params.get('time') != null) { clockTime.live = false; clockTime.hour = Number(params.get('time')); } // (the link's hour wins)
-        else if (sim) { clockTime.live = false; clockTime.hour = 5.85; } // (the simulated morning opens before dawn)
+        else if (sim) { clockTime.live = false; clockTime.hour = 5.45; } // (the simulated morning opens before dawn)
       }
     } catch (e) { console.warn('settings not restored:', e.message); }
   }
@@ -469,8 +469,8 @@ const clock = new THREE.Clock();
 let frames = 0, fpsTime = 0, fps = 0;
 
 let loading = true;
-function frame() {
-  const dt = Math.min(clock.getDelta(), 0.1);
+function frame(_, manual) {
+  const dt = manual ?? Math.min(clock.getDelta(), 0.1); // (manual: a step driven from outside, for testing with the page hidden)
   renderer.info.reset();
   clockTime.tick(dt);
   const directed = xp?.directing;
@@ -487,7 +487,7 @@ function frame() {
     const size = manifest.tileSize, wanted = manifest.tiles.filter((t) => Math.hypot((t.x + 0.5) * size - controls.target.x, (t.z + 0.5) * size - controls.target.z) <= Math.min(streamer.radius, 900)).length || 1;
     const got = Math.min(1, streamer.stats.loaded / wanted);
     loader.set(0.2 + 0.8 * got, `city tiles ${streamer.stats.loaded} / ${manifest.tiles.length}`);
-    if (got >= 1) { loading = false; loader.hide(); xp?.showTitle(sim?.index.tripinfo?.count ?? sim?.index.stats?.vehicles?.loaded); }
+    if (got >= 1) { loading = false; loader.hide(); xp?.showTitle(Number(sim?.index.stats?.vehicles?.inserted) || sim?.index.tripinfo?.count); }
   }
   props.update(dt);
   signs.update();
@@ -524,8 +524,8 @@ function frame() {
     (picked ? `\n▸ ${USAGE[picked.usage] ?? 'usage ' + picked.usage}, ${picked.height.toFixed(1)} m` +
       `${picked.storeys ? `, ${picked.storeys} floors` : ''}, base ${picked.base.toFixed(1)} m\n` : '') +
     `\ndrag pan · right-drag rotate · wheel zoom\nWASD move (shift fast) · N day/night · click building`;
-  requestAnimationFrame(frame);
+  if (manual == null) requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, sim, clockTime, ride, stopRiding };
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, xp, frame: (dt) => frame(0, dt) };

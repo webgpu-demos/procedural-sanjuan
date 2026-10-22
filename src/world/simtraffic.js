@@ -52,7 +52,7 @@ function lightsMaterial() {
         vColor = color;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = clamp(uScale * 900.0 / -mv.z, 1.6, 9.0);
+        gl_PointSize = clamp(uScale * 2600.0 / -mv.z, 3.0 * uScale, 16.0 * uScale); // (uScale: device pixels per CSS pixel)
       }`,
     fragmentShader: /* glsl */`
       uniform float uNight;
@@ -60,7 +60,7 @@ function lightsMaterial() {
       void main() {
         vec2 d = gl_PointCoord - 0.5;
         float a = exp(-dot(d, d) * 16.0);
-        gl_FragColor = vec4(vColor * a * (0.35 + 3.2 * uNight), 1.0);
+        gl_FragColor = vec4(vColor * a * (0.3 + 5.0 * uNight), 1.0);
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   });
@@ -68,10 +68,11 @@ function lightsMaterial() {
 
 export class SimTraffic {
   // base: the scenario's folder (tiles/<area>/sim/<scenario>); surface(x, z): height of the road surface.
-  static async load(base, surface) {
+  static async load(base, surface, roads = null, ground = surface) {
     const index = await fetch(`${base}/index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     if (!index) return null;
     const sim = new SimTraffic(base, index, surface);
+    if (roads) sim.raise(roads, ground);
     // the AMA's buses (tools/sim/gtfs.py): route, headsign, colour by vehicle id
     sim.buses = await fetch(`${base}/../buses.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
     return sim;
@@ -128,6 +129,39 @@ export class SimTraffic {
     this.view = null;      // the followed car's place this frame: { x, y, z, heading, speed }
   }
 
+  // The raised roads (flyovers, ramps, bridges: road level well above the ground) as segments by 24 m cell. A car
+  // over one, at about its height in the simulation, drives on its deck; any other on the ground.
+  raise(roads, ground) {
+    this.decks = new Map();
+    for (const e of roads.edges) {
+      if (e.tunnel) continue;
+      const p = e.pts;
+      for (let k = 3; k < p.length; k += 3) {
+        const x0 = p[k - 3], y0 = p[k - 2], z0 = p[k - 1], x1 = p[k], y1 = p[k + 1], z1 = p[k + 2];
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+        if ((y0 + y1) / 2 < ground(mx, mz) + 1.2) continue;
+        const len = Math.hypot(x1 - x0, z1 - z0); if (len < 0.1) continue;
+        for (let s = 0; s <= len; s += 12) {
+          const f = s / len, key = Math.floor((x0 + (x1 - x0) * f) / 24) + ',' + Math.floor((z0 + (z1 - z0) * f) / 24);
+          if (!this.decks.has(key)) this.decks.set(key, []);
+          const cell = this.decks.get(key); if (cell.at(-1)?.[6] !== k + e.pts.length) cell.push([x0, y0, z0, x1, y1, z1, k + e.pts.length]);
+        }
+      }
+    }
+  }
+  // the deck under (x, z) near height y, or null
+  deckAt(x, z, y) {
+    const cell = this.decks?.get(Math.floor(x / 24) + ',' + Math.floor(z / 24));
+    if (!cell) return null;
+    let best = null, bd = 7.5;
+    for (const [x0, y0, z0, x1, y1, z1] of cell) {
+      const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
+      const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f;
+      if (d < bd && Math.abs(h - y) < 4.5) { bd = d; best = h; }
+    }
+    return best;
+  }
+
   // ---------------------------------------------------------------- windows
   windowStart(T) { return this.begin + Math.floor((T - this.begin) / this.index.window) * this.index.window; }
   ensure(w0) {
@@ -135,7 +169,9 @@ export class SimTraffic {
     const entry = this.index.windows.find((w) => w[0] === w0);
     if (!entry) return;
     this.windows.set(w0, 'loading');
-    fetch(`${this.base}/${entry[1]}`).then((r) => r.arrayBuffer()).then((buf) => { const W = decode(buf); this.carry(w0, W); this.windows.set(w0, W); })
+    // (a .gz window is inflated here: a static host need not serve it compressed)
+    fetch(`${this.base}/${entry[1]}`).then((r) => (entry[1].endsWith('.gz') ? new Response(r.body.pipeThrough(new DecompressionStream('gzip'))) : r).arrayBuffer())
+      .then((buf) => { const W = decode(buf); this.carry(w0, W); this.windows.set(w0, W); })
       .catch((e) => { console.warn('track window', entry[1], e.message); this.windows.delete(w0); });
   }
 
@@ -204,9 +240,10 @@ export class SimTraffic {
         SimTraffic.at(W, i, T, p);
       }
       const sin = Math.sin(heading), cos = Math.cos(heading);
-      // on the ground unless the road is raised (a flyover, a bridge: the track's own level is well above it)
+      // on the ground, unless on a raised road's deck (a flyover, a ramp, a bridge)
       const ground = this.surface(p[0], p[2]);
-      const y = p[1] > ground + 2.5 ? p[1] : ground;
+      const deck = p[1] > ground + 0.6 ? this.deckAt(p[0], p[2], p[1]) : null;
+      const y = deck ?? ground;
       if (followed) this.view = { x: p[0], y, z: p[2], heading, speed, vid, type: W.type[i], brake };
       const t = W.type[i], spec = TYPES[t];
       if (d2 < 250 * 250) { nearN++; nearSpeed += speed; if (speed < 0.5) nearStopped++; }
@@ -215,7 +252,7 @@ export class SimTraffic {
         if (counts[t] < f.cap) {
           const k = counts[t]++;
           // nose up or down with the road
-          const ahead = y > ground + 0.5 ? 0 : (this.surface(p[0] + sin * 2.5, p[2] + cos * 2.5) - this.surface(p[0] - sin * 2.5, p[2] - cos * 2.5)) / 5;
+          const ahead = deck != null ? 0 : (this.surface(p[0] + sin * 2.5, p[2] + cos * 2.5) - this.surface(p[0] - sin * 2.5, p[2] - cos * 2.5)) / 5;
           const pitch = -Math.atan(ahead), cp = Math.cos(pitch), sp = Math.sin(pitch);
           // rotation Y(heading) * X(pitch), then translation
           m[0] = cos; m[1] = 0; m[2] = -sin; m[3] = 0;
@@ -260,7 +297,7 @@ export class SimTraffic {
     const g = this.lights.geometry;
     g.setDrawRange(0, lights * 2);
     g.attributes.position.needsUpdate = true; g.attributes.color.needsUpdate = true;
-    this.lights.material.uniforms.uScale.value = Math.min(2, innerHeight / 900);
+    this.lights.material.uniforms.uScale.value = Math.min(3, devicePixelRatio || 1);
     this.beam.color.setScalar(0.36 * this.headlights * night);
     this.beam.visible = night > 0.02;
     this.stats = { active, near: counts.reduce((a, b) => a + b, 0), mid, lights, nearSpeed: nearN ? nearSpeed / nearN : null, nearStopped, nearCount: nearN };

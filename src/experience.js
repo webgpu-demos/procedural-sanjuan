@@ -12,10 +12,10 @@ const CSS = `
 #xp-fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 950; transition: opacity 0.7s ease; }
 #xp-fade.on { opacity: 1; }
 .xp { font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif; color: #f6f1e7; }
-#xp-cap { position: fixed; left: 50%; bottom: 15vh; transform: translateX(-50%); z-index: 960; text-align: center; width: min(900px, 90vw);
+#xp-cap { position: fixed; left: 50%; bottom: 13vh; transform: translateX(-50%); z-index: 960; text-align: center; width: min(900px, 90vw);
   opacity: 0; transition: opacity 1.2s ease; pointer-events: none; text-shadow: 0 2px 18px rgba(0,0,0,0.75); }
 #xp-cap.on { opacity: 1; }
-#xp-cap .a { font-size: clamp(22px, 3.2vw, 40px); font-weight: 600; letter-spacing: 0.01em; }
+#xp-cap .a { font-size: clamp(18px, 2.3vw, 30px); font-weight: 600; letter-spacing: 0.01em; }
 #xp-cap .b { margin-top: 8px; font-size: clamp(12px, 1.25vw, 15px); letter-spacing: 0.14em; text-transform: uppercase; color: rgba(246,241,231,0.72); }
 #xp-start { position: fixed; inset: 0; z-index: 980; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   background: radial-gradient(ellipse at 50% 70%, rgba(8,30,46,0.55), rgba(2,6,12,0.88)); transition: opacity 1s ease; }
@@ -30,7 +30,7 @@ const CSS = `
 #xp-start .go { background: linear-gradient(90deg, #ff7a45, #f2c94c); color: #1b1206; box-shadow: 0 6px 30px rgba(255,122,69,0.35); }
 #xp-start .free { background: rgba(255,255,255,0.1); }
 #xp-start button:hover { filter: brightness(1.08); }
-#xp-skip { position: fixed; right: 22px; bottom: calc(10.5vh + 14px); z-index: 970; padding: 7px 14px; border-radius: 999px; background: rgba(0,0,0,0.45); font-size: 12px; letter-spacing: 0.08em; display: none; }
+#xp-skip { position: fixed; right: 22px; top: 3.2vh; z-index: 970; padding: 7px 14px; border-radius: 999px; background: rgba(0,0,0,0.45); font-size: 12px; letter-spacing: 0.08em; display: none; }
 #xp-dock { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 940; display: flex; align-items: center; gap: 10px;
   padding: 8px 10px 8px 16px; border-radius: 16px; background: rgba(8,12,20,0.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 8px 30px rgba(0,0,0,0.35); transition: opacity 0.6s ease, transform 0.6s ease; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); }
@@ -61,8 +61,8 @@ const CSS = `
 #xp-story .st { margin-top: 10px; font-size: 12px; color: rgba(246,241,231,0.7); min-height: 1.3em; }
 #xp-time { flex-basis: 100%; position: relative; height: 22px; margin: 2px 4px 0; }
 #xp-time input { width: 100%; margin: 0; appearance: none; -webkit-appearance: none; height: 22px; background: transparent; cursor: pointer; position: relative; z-index: 2; }
-#xp-time input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0b2a44 0%, #2a5d8a 34%, #f2a65a 46%, #ffe6b0 55%, #9fd4ff 100%); }
-#xp-time input::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0b2a44 0%, #2a5d8a 34%, #f2a65a 46%, #ffe6b0 55%, #9fd4ff 100%); }
+#xp-time input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0b2a44 0%, #2a5d8a 22%, #f2a65a 33%, #ffe6b0 40%, #9fd4ff 100%); }
+#xp-time input::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0b2a44 0%, #2a5d8a 22%, #f2a65a 33%, #ffe6b0 40%, #9fd4ff 100%); }
 #xp-time input::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.7); }
 #xp-time input::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff; }
 #xp-time .mark { position: absolute; top: 15px; transform: translateX(-50%); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(246,241,231,0.55); white-space: nowrap; pointer-events: none; }
@@ -86,6 +86,7 @@ const KIND = {
   work: ['va al trabajo', 'commuting to work'], 'school': ['lleva a los nenes a la escuela', 'the school run'],
   'school-return': ['vuelve de dejar a los nenes', 'back from the school run'], errand: ['hace una diligencia', 'an errand'],
   through: ['pasa por San Juan', 'driving through San Juan'], delivery: ['hace entregas', 'making deliveries'],
+  airport: ['va al aeropuerto', 'to the airport (SJU)'], 'airport-return': ['vuelve del aeropuerto', 'back from the airport'],
 };
 const TYPE_NAME = ['carro compacto', 'sedán', 'SUV', 'pickup', 'camión de entregas', 'guagua'];
 const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -199,14 +200,16 @@ export class Experience {
   }
   hideTitle() { this.start?.classList.add('gone'); setTimeout(() => this.start?.remove(), 1100); }
 
+  // The opening: dark (5:28), blue hour on the expressway (5:58), a ride with the headlights on (6:06), the
+  // sun coming up behind the towers of the Milla de Oro (it rises about 6:19 in late October)
   get shots() {
     return [
-      { hour: 5.82, rate: 24, dur: 13, eye: [[1300, 520, 7700], [1950, 470, 7050]], at: [[5400, 40, 3000], [5600, 40, 3150]],
-        cap: ['San Juan, 5:49 a.m.', 'Un martes, antes del amanecer · a Tuesday, before dawn'] },
-      { hour: 6.3, rate: 16, dur: 13, eye: [[1650, 70, 5490], [2450, 70, 5530]], at: [[2350, 3, 5180], [3150, 3, 5060]],
-        cap: ['138,000 personas entran a San Juan cada mañana', '138,000 commute into San Juan every morning · U.S. Census ACS'] },
-      { hour: 6.52, rate: 1, dur: 18, ride: [2700, 5273, 420] },
-      { hour: 6.885, rate: 18, dur: 16, eye: [[5330, 22, 5400], [5030, 310, 6050]], at: [[5760, 45, 4520], [5820, 70, 4300]],
+      { hour: 5.47, rate: 20, dur: 13, eye: [[1300, 520, 7700], [1950, 470, 7050]], at: [[5400, 40, 3000], [5600, 40, 3150]],
+        cap: ['San Juan, 5:28 a.m.', 'Un martes, antes del amanecer · a Tuesday, before dawn'] },
+      { hour: 5.97, rate: 14, dur: 13, eye: [[1720, 34, 5330], [2330, 34, 5370]], at: [[2700, 6, 5250], [3350, 6, 5020]],
+        cap: ['138,000 personas entran a San Juan cada mañana', 'commuters driving in every weekday · U.S. Census ACS'] },
+      { hour: 6.1, rate: 1, dur: 18, ride: [2700, 5273, 420] },
+      { hour: 6.2, rate: 20, dur: 16, eye: [[5330, 22, 5400], [5030, 310, 6050]], at: [[5760, 45, 4520], [5820, 70, 4300]],
         cap: ['Puerto Rico en movimiento', 'Cada carro es un viaje simulado · every car is a simulated trip'] },
     ];
   }
@@ -286,7 +289,7 @@ export class Experience {
       const m = document.createElement('div'); m.className = 'mark ' + cls; m.textContent = text;
       m.style.left = `${((sec - 16200) / (36000 - 16200)) * 100}%`; box.appendChild(m);
     };
-    at(16200 + 600, '4:30'); at(6.95 * 3600, 'amanece'); at(7.25 * 3600, 'hora pico'); at(36000 - 600, '10:00');
+    at(16200 + 600, '4:30'); at(6.32 * 3600, 'amanece'); at(7.25 * 3600, 'hora pico'); at(36000 - 600, '10:00');
     if (this.app.sim?.index.apagon != null) at(this.app.sim.index.apagon, 'apagón', 'alert');
   }
 
@@ -311,7 +314,7 @@ export class Experience {
       const T = this.app.clockTime.hour * 3600;
       // before the failure: bring the clock to a minute before it, so the moment can be watched
       if (T > at + 600 || T < at - 1800) { this.app.clockTime.hour = (at - 75) / 3600; }
-      this.caption(['Apagón · 6:15 a.m.', 'La red eléctrica falla y todos los semáforos se apagan · the grid fails; every signal goes dark']);
+      this.caption(['Apagón · 5:45 a.m.', 'La red eléctrica falla y todos los semáforos se apagan · the grid fails; every signal goes dark']);
       setTimeout(() => this.caption(null), 6500);
     }
   }

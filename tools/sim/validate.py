@@ -37,34 +37,45 @@ for e in net.getEdges():
             grid[(int(x // 50), int(y // 50))].append(e)
 
 def edges_under(seg):
-    """The SUMO edges along an HPMS segment: near its middle third, the same class, parallel to it."""
+    """The SUMO edges carrying an HPMS segment's traffic: in each direction, the main carriageway along it
+    (the most lanes, then the nearest, within 45 m of the counted line, which runs down the median of a
+    divided road), seen at three points along its middle; a road's two directions are summed (AADT counts both)."""
     p = seg['pts']
     L = [0.0]
     for i in range(1, len(p)): L.append(L[-1] + math.dist(p[i - 1], p[i]))
     if L[-1] < 60: return []
-    found = collections.Counter()
-    probes = 0
+    lo, hi = FSYS.get(seg['fsys'], (4, 13))
+    votes = {1: collections.Counter(), -1: collections.Counter()}
     for f in (0.35, 0.5, 0.65):
         d = L[-1] * f; i = max(1, next(j for j in range(1, len(p)) if L[j] >= d))
         t = (d - L[i - 1]) / max(1e-6, L[i] - L[i - 1])
         x, y = p[i - 1][0] + (p[i][0] - p[i - 1][0]) * t, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * t
         ux, uy = p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]; ul = math.hypot(ux, uy) or 1; ux, uy = ux / ul, uy / ul
-        lo, hi = FSYS.get(seg['fsys'], (4, 13))
-        seen = set(); probes += 1
+        best = {1: None, -1: None}
+        seen = set()
         for cx in range(int(x // 50) - 1, int(x // 50) + 2):
             for cy in range(int(y // 50) - 1, int(y // 50) + 2):
                 for e in grid.get((cx, cy), []):
                     if e in seen or not (lo <= e.getPriority() <= hi): continue
                     seen.add(e)
-                    sh = e.getShape(); best = 1e9; dot = 0
+                    sh = e.getShape(); dist = 1e9; dot = 0
                     for a, b in zip(sh, sh[1:]):
                         vx, vy = b[0] - a[0], b[1] - a[1]; vl = math.hypot(vx, vy) or 1
                         s = max(0, min(1, ((x - a[0]) * vx + (y - a[1]) * vy) / vl ** 2))
                         dd = math.hypot(a[0] + vx * s - x, a[1] + vy * s - y)
-                        if dd < best: best, dot = dd, abs(vx * ux + vy * uy) / vl
-                    if best < 22 and dot > 0.85: found[e.getID()] += 1
-    # an edge under most of the probes (not one crossing at a junction)
-    return [e for e, n in found.items() if n >= 2 or probes == 1]
+                        if dd < dist: dist, dot = dd, (vx * ux + vy * uy) / vl
+                    if dist > 45 or abs(dot) < 0.85: continue
+                    side = 1 if dot > 0 else -1
+                    score = (e.getLaneNumber(), -dist)
+                    if best[side] is None or score > best[side][0]: best[side] = (score, e.getID())
+        for side in (1, -1):
+            if best[side]: votes[side][best[side][1]] += 1
+    out = []
+    for side in (1, -1):
+        if votes[side]:
+            e, n = votes[side].most_common(1)[0]
+            if n >= 2: out.append(e)
+    return out
 
 # simulated vehicles per edge, 7-8 a.m.
 entered = collections.Counter()
