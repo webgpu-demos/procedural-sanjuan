@@ -84,12 +84,15 @@ levels lagoons and ponds at their lowest shore, and keeps dry land above the sea
 
 ## The simulated morning (`tools/sim/`)
 
-A weekday morning in San Juan, 4:30 to 10:00, simulated with [Eclipse SUMO](https://eclipse.dev/sumo/) on the
-city's own road graph and played back in the browser. It opens with a title and four shots (dawn over the bay,
-the jam on PR-22, one commuter's ride, sunrise on the Milla de Oro); then the clock, the speed of time, the
-**apagón** (at 6:15 the grid fails: windows, street lamps and every signal go dark in a wave from the
-Monacillos transmission centre, and the traffic is simulated without them), riding with any car (click it),
-and the jam map. `G` brings back the settings panel; `?xp=0` skips the experience, `?sim=0` the simulation.
+A weekday morning in San Juan, 4:30 to 10:15, simulated with [Eclipse SUMO](https://eclipse.dev/sumo/) on the
+city's own road graph and played back in the browser: some 360,000 car trips and the AMA's 520 bus trips. It
+opens with a title and four shots (the city before dawn, the headlights on PR-22, one commuter's ride, the sun
+coming up behind the Milla de Oro: it rises about 6:19 AST in late October); then the clock and its time line,
+the speed of time, the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
+wave from the Monacillos transmission centre, and the rush is simulated without them), riding with any car
+(click it: where it comes from, why it drives, its delay), the jam map, the lancha crossing to Cataño on its
+timetable, and the sound of the morning (coquíes before dawn, the traffic, horns in the jams). `G` brings back
+the settings panel; `?xp=0` skips the experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
 
 ```
 npm run sim:setup                    # once: Python environment with SUMO 1.28 and libsumo (.venv-sim/)
@@ -109,13 +112,24 @@ npm run sim:validate                 # simulated vs counted traffic (GEH) -> val
   commuters from beyond the area enter through the roads that cross its edge, towards their municipio,
   biggest roads first; departure times by municipio of residence (ACS B08302); school runs, errands,
   deliveries and through traffic on top.
-- **Simulation and recording** (`run.py`): microscopic, every car with its own car-following and lane changes;
-  40% re-plan their route every ten minutes from the traffic as it is. Each car's track is kept to the
-  fewest points that stay within 35 cm of where SUMO had it at every second, and packed into five-minute
-  windows (`w_<t>.bin`), with the road speeds (`speeds.bin`), every signal's changes (`signals.json`) and
-  why each car drives (`trips.bin`).
+- **Network fixes that made the rush hour flow** (measured on a quarter of the demand, 7:00-7:15: waiting time
+  down five-fold): acceleration lanes on the expressway ramps, junctions OSM draws as several nodes joined,
+  actuated signals, and San Juan merging (a driver at a give-way line takes a smaller gap after 90 s).
+- **Routes** (`route.py`): made beforehand with contraction hierarchies on the travel times a previous run
+  measured (a step towards the routes drivers settle on). Re-planning during the run is an option
+  (`--reroute=0.15`), off by default: SUMO then spends most of its time waiting (6.7x slower measured).
+- **Buses** (`gtfs.py`): the ATI's GTFS feed; every Tuesday bus trip in the morning with its stops placed on
+  the kerb lane, calling at each until its timetabled departure; the Cataño ferry for the client.
+- **Simulation and recording** (`run.py`): microscopic, every car with its own car-following and continuous
+  lane changes. Each car's track is kept to the fewest points that hold it within 30 cm sideways and 1.5 m
+  along its way of where SUMO had it at every second, and packed into gzipped five-minute windows
+  (`w_<t>.bin.gz`, decoded in a worker), with the road speeds (`speeds.bin`), every signal's changes
+  (`signals.json`) and why each car drives (`trips.bin`). The apagón starts from the morning's saved state.
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
-  against the count's peak hour (AADT x 0.08), scored with the GEH statistic.
+  against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
+  direction is matched to the counted line (which runs down the median of a divided road). A run at a quarter
+  of the demand carried 0.30 of the counted traffic (freeways 0.25, arterials 0.38; r² 0.43), which is what
+  set the demand at 0.8. The figures for the published run are in the experience (¿Qué tan real?).
 
 What it is not: real cars. The trips are drawn from survey data and simulated; they are checked against
 counts, not recorded from traffic.

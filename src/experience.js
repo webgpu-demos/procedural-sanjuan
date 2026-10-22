@@ -270,7 +270,7 @@ export class Experience {
     app.atmosphere.vignette.darkness = 0.38; app.atmosphere.grain.blendMode.opacity.value = 0.05;
     app.stopRiding();
     if (!fromTitle) { app.controls.enabled = true; app.clockTime.live = false; app.clockTime.rate = 6; }
-    else { app.clockTime.rate = Math.max(app.clockTime.rate, 1); }
+    else { app.clockTime.rate = Math.max(app.clockTime.rate, 6); } // (the morning unfolding, not standing still)
     // the view the opening ended on, as a free camera over the Milla de Oro
     if (!fromTitle) {
       const s = this.shots[3];
@@ -284,12 +284,15 @@ export class Experience {
   // the moments of the morning, under the time line
   marks() {
     const box = this.dock.querySelector('#xp-time');
+    if (this.app.sim) { this.timeInput.min = String(this.app.sim.begin); this.timeInput.max = String(this.app.sim.end); }
     box.querySelectorAll('.mark').forEach((m) => m.remove());
     const at = (sec, text, cls = '') => {
       const m = document.createElement('div'); m.className = 'mark ' + cls; m.textContent = text;
-      m.style.left = `${((sec - 16200) / (36000 - 16200)) * 100}%`; box.appendChild(m);
+      const lo = this.app.sim?.begin ?? 16200, hi = this.app.sim?.end ?? 36000;
+      m.style.left = `${((sec - lo) / (hi - lo)) * 100}%`; box.appendChild(m);
     };
-    at(16200 + 600, '4:30'); at(6.32 * 3600, 'amanece'); at(7.25 * 3600, 'hora pico'); at(36000 - 600, '10:00');
+    const hi = this.app.sim?.end ?? 36000, end = clockLabel(hi / 3600);
+    at(16200 + 600, '4:30'); at(6.32 * 3600, 'amanece'); at(7.25 * 3600, 'hora pico'); at(hi - 600, end.t);
     if (this.app.sim?.index.apagon != null) at(this.app.sim.index.apagon, 'apagón', 'alert');
   }
 
@@ -353,6 +356,11 @@ export class Experience {
       this.shotT += dt;
       if (s.eye) this.place(s, this.shotT / s.dur);
       if (this.shotT > s.dur && !this.cutting) { this.cutting = true; this.cut(this.shot + 1).then(() => { this.cutting = false; }); }
+    }
+    // the end of the simulated morning: round again from before dawn (it can run as a loop, unattended)
+    if (sim && !this.directing && app.clockTime.rate > 0 && T >= sim.end - 30) {
+      app.clockTime.hour = 5.45; this.wave = null;
+      this.caption(['Otra mañana', 'the simulated morning begins again']); setTimeout(() => this.caption(null), 4000);
     }
     // the clock
     const c = clockLabel(app.clockTime.hour);

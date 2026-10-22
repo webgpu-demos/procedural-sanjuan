@@ -14,29 +14,6 @@ import { LAMP_LAYER, lampMaterial } from './lamplight.js';
 
 const NEAR = 700, MID = 2800, LIGHTS = 12000;           // metres from the camera
 const MAX_NEAR = 4500, MAX_MID = 40000, MAX_LIGHTS = 120000;
-const MAGIC = 0x31544a53; // 'SJT1'
-
-// A window file -> typed arrays (world frame: x east, y up, z south).
-function decode(buf) {
-  const dv = new DataView(buf);
-  if (dv.getUint32(0, true) !== MAGIC) throw new Error('not a track window');
-  const n = dv.getUint32(4, true), t0 = dv.getFloat32(8, true), t1 = dv.getFloat32(12, true);
-  const maxKnots = Math.ceil((buf.byteLength - 16) / 8) + n;
-  const vid = new Uint32Array(n), type = new Uint8Array(n), start = new Uint32Array(n), count = new Uint16Array(n);
-  const K = new Float32Array(maxKnots * 4); // t, x, y, z per knot
-  let o = 16, k = 0;
-  for (let i = 0; i < n; i++) {
-    vid[i] = dv.getUint32(o, true); type[i] = dv.getUint8(o + 4); const c = dv.getUint16(o + 6, true); o += 8;
-    let x = dv.getFloat32(o, true), y = dv.getFloat32(o + 4, true), z = dv.getFloat32(o + 8, true), t = dv.getFloat32(o + 12, true); o += 16;
-    start[i] = k; count[i] = c;
-    K[k * 4] = t; K[k * 4 + 1] = x; K[k * 4 + 2] = z; K[k * 4 + 3] = -y; k++;
-    for (let j = 1; j < c; j++) {
-      t += dv.getUint16(o, true) / 10; x += dv.getInt16(o + 2, true) / 20; y += dv.getInt16(o + 4, true) / 20; z += dv.getInt16(o + 6, true) / 100; o += 8;
-      K[k * 4] = t; K[k * 4 + 1] = x; K[k * 4 + 2] = z; K[k * 4 + 3] = -y; k++;
-    }
-  }
-  return { n, t0, t1, vid, type, start, count, K, cursor: new Uint16Array(n), heading: new Float32Array(n).fill(NaN) };
-}
 
 const hash = (v) => { v = Math.imul(v ^ (v >>> 16), 0x45d9f3b); v = Math.imul(v ^ (v >>> 16), 0x45d9f3b); return ((v ^ (v >>> 16)) >>> 0) / 4294967296; };
 
@@ -82,6 +59,16 @@ export class SimTraffic {
     this.base = base; this.index = index; this.surface = surface;
     this.begin = index.begin; this.end = index.end;
     this.windows = new Map(); // window start -> decoded | 'loading'
+    // the windows are fetched and decoded in a worker (simworker.js): a rush-hour window holds tens of thousands of tracks
+    this.worker = new Worker(new URL('./simworker.js', import.meta.url), { type: 'module' });
+    this.requests = new Map();
+    this.worker.onmessage = ({ data: { id, W, error } }) => {
+      const w0 = this.requests.get(id); this.requests.delete(id);
+      if (error || !W) { console.warn('track window', w0, error); this.windows.delete(w0); return; }
+      W.cursor = new Uint16Array(W.n); W.heading = new Float32Array(W.n).fill(NaN);
+      this.carry(w0, W); this.windows.set(w0, W);
+    };
+    this.nextRequest = 0;
     this.group = new THREE.Group(); this.group.name = 'simulated traffic';
     this.stats = { active: 0, near: 0, mid: 0, lights: 0 };
     this.headlights = 5;
@@ -169,10 +156,8 @@ export class SimTraffic {
     const entry = this.index.windows.find((w) => w[0] === w0);
     if (!entry) return;
     this.windows.set(w0, 'loading');
-    // (a .gz window is inflated here: a static host need not serve it compressed)
-    fetch(`${this.base}/${entry[1]}`).then((r) => (entry[1].endsWith('.gz') ? new Response(r.body.pipeThrough(new DecompressionStream('gzip'))) : r).arrayBuffer())
-      .then((buf) => { const W = decode(buf); this.carry(w0, W); this.windows.set(w0, W); })
-      .catch((e) => { console.warn('track window', entry[1], e.message); this.windows.delete(w0); });
+    const id = ++this.nextRequest; this.requests.set(id, w0);
+    this.worker.postMessage({ id, url: new URL(`${this.base}/${entry[1]}`, location.href).href });
   }
 
   // A car keeps the way it faced at the end of the window before (a long wait in a jam can span a whole window).
@@ -240,9 +225,11 @@ export class SimTraffic {
         SimTraffic.at(W, i, T, p);
       }
       const sin = Math.sin(heading), cos = Math.cos(heading);
-      // on the ground, unless on a raised road's deck (a flyover, a ramp, a bridge)
-      const ground = this.surface(p[0], p[2]);
-      const deck = p[1] > ground + 0.6 ? this.deckAt(p[0], p[2], p[1]) : null;
+      // on the ground, unless on a raised road's deck (a flyover, a ramp, a bridge); for a car seen only as its
+      // lamps, the simulation's own height is near enough (and the ground is not looked up for tens of thousands)
+      const seen = d2 < MID * MID || followed;
+      const ground = seen ? this.surface(p[0], p[2]) : p[1];
+      const deck = seen && p[1] > ground + 0.6 ? this.deckAt(p[0], p[2], p[1]) : null;
       const y = deck ?? ground;
       if (followed) this.view = { x: p[0], y, z: p[2], heading, speed, vid, type: W.type[i], brake };
       const t = W.type[i], spec = TYPES[t];
@@ -302,6 +289,8 @@ export class SimTraffic {
     this.beam.visible = night > 0.02;
     this.stats = { active, near: counts.reduce((a, b) => a + b, 0), mid, lights, nearSpeed: nearN ? nearSpeed / nearN : null, nearStopped, nearCount: nearN };
   }
+
+  dispose() { this.worker.terminate(); this.windows.clear(); }
 
   hide() {
     for (const f of this.fleets) f.mesh.count = f.beams.count = 0;

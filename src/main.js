@@ -164,7 +164,7 @@ async function setScenario(name) {
   const next = await SimTraffic.load(`tiles/${AREA}/sim/${name}`, streamer.surface, roads, (x, z) => streamer.ground(x, z));
   if (!next) return false;
   const lights = await fetch(`${next.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  if (sim) { scene.remove(sim.group); next.followed = sim.followed; }
+  if (sim) { scene.remove(sim.group); next.followed = sim.followed; sim.dispose(); }
   next.headlights = sim?.headlights ?? next.headlights;
   sim = next; scene.add(sim.group);
   if (lights && simSignals) simSignals.setTimeline(lights.timeline);
@@ -425,7 +425,14 @@ renderer.domElement.addEventListener('wheel', (e) => {
 function chaseCamera(dt) {
   const v = sim?.view;
   if (!chase.on) return;
-  if (!v) { if (!chase.fresh) stopRiding(); return; } // (the car has arrived)
+  // the car has arrived: ride on with another one near it (or let go, if there is none)
+  if (!v) {
+    if (chase.fresh) return;
+    const last = chase.target, T = clockTime.hour * 3600;
+    const next = sim.carsNear(T, last.x, last.z, 300, 60).filter((c) => c.moving)[0];
+    if (next) { sim.followed = next.vid; chase.fresh = false; } else stopRiding();
+    return;
+  }
   // ease the heading, so the camera swings round behind the car instead of snapping
   let dh = v.heading - chase.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
   chase.heading += dh * (chase.fresh ? 1 : 1 - Math.exp(-dt * 2.2));

@@ -18,7 +18,8 @@
     "sim:run": ".venv-sim/bin/python tools/sim/run.py",
     "sim:validate": ".venv-sim/bin/python tools/sim/validate.py",
     "sim:data": ".venv-sim/bin/python tools/sim/census.py",
-    "sim:route": ".venv-sim/bin/python tools/sim/route.py"
+    "sim:route": ".venv-sim/bin/python tools/sim/route.py",
+    "sim:all": "sh tools/sim/all.sh"
   },
   "license": "MIT",
   "dependencies": {
