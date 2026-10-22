@@ -1,6 +1,6 @@
 // Procedural San Juan client: streams the compiled city and renders it. Free camera for now; the car comes next.
 //
-// URL parameters: ?area=condado (default: sanjuan)  ?time=18.5 (San Juan hour; default: now)  ?night=1  ?cam=x,z,distance,azimuthDeg,elevationDeg  ?radius=3000  ?traffic=0  ?ortho=0  ?clouds=0.25 (on, with that cover)  ?birds=150  ?cars=600
+// URL parameters: ?area=condado (default: sanjuan)  ?time=18.5 (San Juan hour; default: now; the simulated morning if there is one)  ?sim=0  ?scenario=apagon  ?rate=60  ?night=1  ?cam=x,z,distance,azimuthDeg,elevationDeg  ?radius=3000  ?traffic=0  ?ortho=0  ?clouds=0.25 (on, with that cover)  ?birds=150  ?cars=600
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import GUI from 'lil-gui';
@@ -13,6 +13,11 @@ import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
 import { buildFlyovers } from './world/flyovers.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
+import { SimTraffic } from './world/simtraffic.js';
+import { SimSignals } from './world/simsignals.js';
+import { Experience } from './experience.js';
+import { SpeedMap } from './world/speedmap.js';
+import { Ferries } from './world/ferries.js';
 import { buildStructures } from './world/structures.js';
 import { loadOrtho } from './world/ortho.js';
 import { buildSurroundings } from './world/far.js';
@@ -81,6 +86,9 @@ const clockTime = {
   get m() { return Math.floor((this.hour % 1) * 60 + 1e-6); },
   set m(v) { this.live = false; this.hour = this.h + v / 60; },
   label() { const h = this.h, m = this.m; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; },
+  // how fast a set hour runs on: 0 stands still, 1 is real time, 60 a minute a second
+  rate: Number(params.get('rate') ?? 0),
+  tick(dt) { if (!this.live && this.rate) this.hour = (this.hour + (dt * this.rate) / 3600 + 24) % 24; },
 };
 
 const materials = createMaterials(await loadTextures(renderer));
@@ -129,9 +137,41 @@ const railways = await buildRailways(`tiles/${AREA}/${manifest.rails}`, (x, z) =
 scene.add(railways);
 scene.add(await buildFlyovers(`tiles/${AREA}/${manifest.roads}`, (x, z) => streamer.ground(x, z)));
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z)));
-const traffic = new Traffic(await (await fetch(`tiles/${AREA}/${manifest.roads}`)).json(), streamer.surface);
+const roads = await (await fetch(`tiles/${AREA}/${manifest.roads}`)).json();
+const traffic = new Traffic(roads, streamer.surface);
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
+// The simulated morning (tools/sim): every car a trip SUMO drove. Without a time in the link it opens on it,
+// running in real time from before dawn.
+let sim = params.get('sim') === '0' ? null : await SimTraffic.load(`tiles/${AREA}/sim/${params.get('scenario') || 'morning'}`, streamer.surface);
+// its signals: the heads at the junctions show what the simulation's lights showed (before any tile is built)
+const simSignals = sim && await fetch(`${sim.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).then((j) => j && new SimSignals(j, roads)).catch(() => null);
+if (simSignals) { props.signalSlot = (x, z, rot) => simSignals.slot(x, z, rot); props.mats.lens.uniforms.uSig.value = simSignals.texture; }
+if (sim) {
+  scene.add(sim.group);
+  if (params.get('time') == null && params.get('night') !== '1') { clockTime.live = false; clockTime.hour = 5.85; }
+  if (params.get('rate') == null) clockTime.rate = 1;
+}
+const simOn = () => sim && clockTime.hour * 3600 >= sim.begin && clockTime.hour * 3600 < sim.end;
+// the jam map: the main roads coloured by the simulation's speeds
+const speedMap = sim && await fetch(`${sim.base}/speeds.bin`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => b && new SpeedMap(sim.index, b, roads, (x, z) => streamer.ground(x, z))).catch(() => null);
+if (speedMap) scene.add(speedMap.mesh);
+// the lancha across the bay, on its timetable
+const ferries = sim && await Ferries.load(`tiles/${AREA}/sim/ferries.json`);
+if (ferries) scene.add(ferries.group);
+// Another run of the morning (the apagón): its cars and its signals in place of the current ones.
+async function setScenario(name) {
+  const next = await SimTraffic.load(`tiles/${AREA}/sim/${name}`, streamer.surface);
+  if (!next) return false;
+  const lights = await fetch(`${next.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (sim) { scene.remove(sim.group); next.followed = sim.followed; }
+  next.headlights = sim?.headlights ?? next.headlights;
+  sim = next; scene.add(sim.group);
+  if (lights && simSignals) simSignals.setTimeline(lights.timeline);
+  const speeds = await fetch(`${sim.base}/speeds.bin`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  if (speeds && speedMap) speedMap.setSpeeds(sim.index, speeds);
+  return true;
+}
 // the data sources: the button at the bottom opens the list of everything the city is made from (sources.js)
 {
   const list = document.getElementById('sources-list'), toggle = document.getElementById('sources-toggle');
@@ -149,7 +189,7 @@ camera.position.copy(controls.target).add(new THREE.Vector3().setFromSphericalCo
 controls.update();
 
 // ---------------------------------------------------------------- control panel
-let guiState, clockText;
+let guiState, clockText, guiPanel;
 {
   // the compiled areas (tools/pipeline/compile.mjs keeps the list); another city is another page load
   const areas = await fetch('tiles/areas.json').then((r) => (r.ok ? r.json() : null)).catch(() => null) ?? [{ id: AREA, name: manifest.name }];
@@ -173,6 +213,7 @@ let guiState, clockText;
   // the names of the cities, for the loading screen of the next visit (index.html reads them)
   try { for (const a of areas) localStorage.setItem(`procedural-sanjuan:name:${a.id}`, a.name); } catch { /* storage unavailable */ }
   const gui = new GUI({ title: 'Scene' });
+  guiPanel = gui;
   gui.add({ share: () => shareView() }, 'share').name('copy link to this view');
   if (innerWidth < 700) gui.close(); // (on a phone the open panel would cover the city: one tap on its title opens it)
   gui.add(state, 'city', Object.fromEntries(areas.map((a) => [a.name, a.id]))).onChange((id) => {
@@ -190,6 +231,13 @@ let guiState, clockText;
   clockText = document.createElement('span');
   clockText.style.cssText = 'min-width: 3.4em; padding-left: 8px; text-align: right; font-variant-numeric: tabular-nums;';
   slider.$widget.appendChild(clockText);
+  if (sim) {
+    const f = gui.addFolder('Simulated morning');
+    f.add(clockTime, 'rate', { paused: 0, 'real time': 1, '×4': 4, '×15': 15, '×60': 60, '×240': 240 }).name('time speed').listen();
+    f.add({ ride: () => rideRandom() }, 'ride').name('ride with a car');
+    f.add({ stop: () => stopRiding() }, 'stop').name('stop riding');
+    f.add(sim, 'headlights', 0, 20, 0.5).name('car headlights');
+  }
   gui.add(state, 'traffic');
   gui.add(traffic, 'count', 0, MAX_CARS, 10).name('cars');
   gui.add(traffic, 'highway', 0, 20, 0.5).name('highway traffic');
@@ -234,6 +282,7 @@ let guiState, clockText;
         const live = saved.folders?.['Time (San Juan)']?.controllers?.['live clock'];
         if (live != null) clockTime.live = live;
         if (params.get('time') != null) { clockTime.live = false; clockTime.hour = Number(params.get('time')); } // (the link's hour wins)
+        else if (sim) { clockTime.live = false; clockTime.hour = 5.85; } // (the simulated morning opens before dawn)
       }
     } catch (e) { console.warn('settings not restored:', e.message); }
   }
@@ -303,6 +352,7 @@ function keyboardPan(dt) {
 const zoom = { pending: 0, pivot: new THREE.Vector3(), ray: new THREE.Raycaster(), plane: new THREE.Plane() };
 renderer.domElement.addEventListener('wheel', (e) => {
   e.preventDefault();
+  if (chase.on) return; // (riding: the wheel sets how far behind the car the camera is)
   const notches = (e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 800 : e.deltaY) / 100;
   zoom.pending = THREE.MathUtils.clamp(zoom.pending + notches * 0.16, -1.6, 1.6);
   zoom.ray.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
@@ -328,9 +378,69 @@ renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
   raycaster.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+  if (sim && simOn()) {
+    const vid = sim.pick(raycaster.ray, clockTime.hour * 3600, Math.max(4, camera.position.distanceTo(controls.target) * 0.012));
+    if (vid != null) { ride(vid); return; }
+  }
   const hit = raycaster.intersectObjects(scene.children, true).find((h) => h.object.userData.facade);
   picked = hit ? streamer.buildingAt(hit) : null;
 });
+
+// ---------------------------------------------------------------- riding with a car
+// The camera follows one simulated car: behind and above it, easing after it through the turns. Esc, or a
+// drag of the view, lets it go.
+const chase = { on: false, target: new THREE.Vector3(), eye: new THREE.Vector3(), heading: 0, back: 13, up: 4.2, yaw: 0, tilt: 0.3, drag: null };
+function ride(vid) {
+  sim.followed = vid; chase.on = true; chase.fresh = true; chase.yaw = 0;
+  controls.enabled = false;
+}
+function stopRiding() { if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; }
+function rideRandom() {
+  const W = sim.windows.get(sim.windowStart(clockTime.hour * 3600));
+  if (!W || W === 'loading') return;
+  const p = [0, 0, 0], T = clockTime.hour * 3600;
+  for (let tries = 0; tries < 200; tries++) {
+    const i = Math.floor(Math.random() * W.n);
+    if (SimTraffic.at(W, i, T, p) && SimTraffic.at(W, i, T + 120, p)) { ride(W.vid[i]); return; }
+  }
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape') stopRiding(); });
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!chase.on) return;
+  if (e.button === 2) { stopRiding(); return; }
+  chase.drag = { x: e.clientX, y: e.clientY };
+});
+addEventListener('pointermove', (e) => {
+  if (!chase.on || !chase.drag) return;
+  // look around the car: sideways swings the camera round it, up and down raises or lowers it
+  chase.yaw -= (e.clientX - chase.drag.x) * 0.006;
+  chase.tilt = THREE.MathUtils.clamp(chase.tilt + (e.clientY - chase.drag.y) * 0.004, 0.05, 1.2);
+  chase.drag = { x: e.clientX, y: e.clientY };
+});
+addEventListener('pointerup', () => { chase.drag = null; });
+renderer.domElement.addEventListener('wheel', (e) => {
+  if (!chase.on) return;
+  chase.back = THREE.MathUtils.clamp(chase.back * Math.exp(Math.sign(e.deltaY) * 0.12), 6, 80);
+}, { passive: true });
+function chaseCamera(dt) {
+  const v = sim?.view;
+  if (!chase.on) return;
+  if (!v) { if (!chase.fresh) stopRiding(); return; } // (the car has arrived)
+  // ease the heading, so the camera swings round behind the car instead of snapping
+  let dh = v.heading - chase.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+  chase.heading += dh * (chase.fresh ? 1 : 1 - Math.exp(-dt * 2.2));
+  // (let go, the camera drifts back behind the car)
+  if (!chase.drag) chase.yaw *= Math.exp(-dt * 0.35);
+  const h = chase.heading + chase.yaw, flat = Math.cos(chase.tilt) * chase.back;
+  const want = new THREE.Vector3(v.x, v.y + 1.4, v.z);
+  const eye = new THREE.Vector3(v.x - Math.sin(h) * flat, v.y + 1.4 + Math.sin(chase.tilt) * chase.back, v.z - Math.cos(h) * flat);
+  if (chase.fresh) { chase.target.copy(want); chase.eye.copy(eye); chase.fresh = false; }
+  chase.target.lerp(want, 1 - Math.exp(-dt * 8));
+  chase.eye.lerp(eye, 1 - Math.exp(-dt * 3.5));
+  controls.target.copy(chase.target);
+  camera.position.copy(chase.eye);
+  camera.lookAt(chase.target);
+}
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -338,6 +448,20 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
   atmosphere.setSize(innerWidth, innerHeight);
 });
+
+// ---------------------------------------------------------------- the experience (the simulated morning to watch)
+const xp = sim && params.get('xp') !== '0' ? new Experience({
+  scene, camera, controls, streamer, clockTime, atmosphere, roads, manifest, chase, ride, stopRiding, setScenario, speedMap,
+  get sim() { return sim; },
+}) : null;
+if (xp) {
+  // a clean picture: the settings panel and the readout come back with G
+  guiPanel?.hide(); document.getElementById('hud').style.display = 'none';
+  addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyG' || document.activeElement?.tagName === 'INPUT') return;
+    const show = guiPanel._hidden; guiPanel.show(show); document.getElementById('hud').style.display = show ? '' : 'none';
+  });
+}
 
 // ---------------------------------------------------------------- loop
 const hud = document.getElementById('hud');
@@ -348,12 +472,12 @@ let loading = true;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   renderer.info.reset();
-  keyboardPan(dt);
-  wheelZoom(dt);
-  controls.update();
+  clockTime.tick(dt);
+  const directed = xp?.directing;
+  if (!chase.on && !directed) { keyboardPan(dt); wheelZoom(dt); controls.update(); }
 
   // keep the focus on the ground and the camera above it
-  controls.target.y = streamer.ground(controls.target.x, controls.target.z);
+  if (!chase.on && !directed) controls.target.y = streamer.ground(controls.target.x, controls.target.z);
   const floor = streamer.ground(camera.position.x, camera.position.z) + 2;
   if (camera.position.y < floor) camera.position.y = floor;
 
@@ -363,12 +487,21 @@ function frame() {
     const size = manifest.tileSize, wanted = manifest.tiles.filter((t) => Math.hypot((t.x + 0.5) * size - controls.target.x, (t.z + 0.5) * size - controls.target.z) <= Math.min(streamer.radius, 900)).length || 1;
     const got = Math.min(1, streamer.stats.loaded / wanted);
     loader.set(0.2 + 0.8 * got, `city tiles ${streamer.stats.loaded} / ${manifest.tiles.length}`);
-    if (got >= 1) { loading = false; loader.hide(); }
+    if (got >= 1) { loading = false; loader.hide(); xp?.showTitle(sim?.index.tripinfo?.count ?? sim?.index.stats?.vehicles?.loaded); }
   }
   props.update(dt);
   signs.update();
   railways.userData.trains.update(dt, env.night);
-  if (traffic.group.parent) traffic.update(dt, controls.target);
+  // the simulated morning while it lasts; the cars around the camera otherwise
+  const simulating = simOn();
+  traffic.group.visible = !simulating;
+  if (traffic.group.parent && !simulating) traffic.update(dt, controls.target);
+  if (sim) { if (simulating) sim.update(clockTime.hour * 3600, camera); else sim.hide(); }
+  if (simSignals) { props.mats.lens.uniforms.uSigOn.value = simulating ? 1 : 0; if (simulating) simSignals.update(clockTime.hour * 3600); }
+  chaseCamera(dt);
+  xp?.update(dt, { night: env.night, uGrid: shared.uGrid.value });
+  speedMap?.update(dt, clockTime.hour * 3600, camera.position.y - streamer.ground(camera.position.x, camera.position.z));
+  ferries?.update(clockTime.hour * 3600, manifest.sea ?? 0);
   env.setSky(...Object.values(atmosphere.setDate(clockTime.date())));
   clockText.textContent = clockTime.label();
   env.update(dt);
@@ -387,6 +520,7 @@ function frame() {
     `San Juan ${clockTime.label()}${clockTime.live ? ' (live)' : ''} · sun ${env.elevation.toFixed(0)}°\n` +
     `${fps.toFixed(0)} fps · ${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)}M tris\n` +
     `tiles ${s.loaded}/${manifest.tiles.length}${streamer.pending ? ` (+${streamer.pending})` : ''} · ${s.buildings} buildings\n` +
+    (sim && simOn() ? `simulated: ${sim.stats.active.toLocaleString()} cars on the road · ${sim.stats.near} near · ${clockTime.rate}×\n` : '') +
     (picked ? `\n▸ ${USAGE[picked.usage] ?? 'usage ' + picked.usage}, ${picked.height.toFixed(1)} m` +
       `${picked.storeys ? `, ${picked.storeys} floors` : ''}, base ${picked.base.toFixed(1)} m\n` : '') +
     `\ndrag pan · right-drag rotate · wheel zoom\nWASD move (shift fast) · N day/night · click building`;
@@ -394,4 +528,4 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink };
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, sim, clockTime, ride, stopRiding };

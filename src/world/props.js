@@ -6,7 +6,7 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { Tree } from '@dgreenheck/ez-tree';
 import { PROP, DECAL } from '../shared/tileformat.js';
 import { shared } from './materials.js';
-import { LAMP_LAYER, lampMaterial } from './lamplight.js';
+import { LAMP_LAYER, lampMaterial, gridAware } from './lamplight.js';
 import { parkedVehicles } from './traffic.js';
 import { DECAL_COLS, DECAL_ROWS } from './decals.js';
 
@@ -297,20 +297,27 @@ function decalTexture() {
   return t;
 }
 
-// Lenses of the traffic signals: unlit discs that cycle green -> yellow -> red from uTime.
+// Lenses of the traffic signals: unlit discs that cycle green -> yellow -> red from uTime; or, while the
+// simulated morning plays, what that head's signal shows in the simulation (simsignals.js: uSig, its slot).
 function lensMaterial() {
   return new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } },
+    uniforms: { uTime: { value: 0 }, uSig: { value: null }, uSigOn: { value: 0 } },
     vertexShader: /* glsl */ `
-      attribute vec2 aLens; // x: 0 green, 1 yellow, 2 red; y: phase 0 or 1 (crossing directions alternate)
-      varying vec2 vLens; varying vec2 vUv;
+      attribute vec3 aLens; // x: 0 green, 1 yellow, 2 red; y: phase 0 or 1 (crossing directions alternate); z: slot in uSig, or -1
+      varying vec3 vLens; varying vec2 vUv;
       void main() { vLens = aLens; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
-      uniform float uTime; varying vec2 vLens; varying vec2 vUv;
+      uniform float uTime; uniform sampler2D uSig; uniform float uSigOn; varying vec3 vLens; varying vec2 vUv;
       void main() {
-        float t = mod(uTime + vLens.y * 32.0, 64.0);            // 0-27 green, 27-30 yellow, 30-64 red
-        float state = t < 27.0 ? 0.0 : t < 30.0 ? 1.0 : 2.0;
-        float on = 1.0 - step(0.5, abs(state - vLens.x));
+        float state;
+        if (uSigOn > 0.5 && vLens.z >= 0.0) {
+          // 0 green, 1 yellow, 2 red, 3 dark
+          state = floor(texture2D(uSig, vec2((mod(vLens.z, 256.0) + 0.5) / 256.0, (floor(vLens.z / 256.0) + 0.5) / 32.0)).r * 255.0 + 0.5);
+        } else {
+          float t = mod(uTime + vLens.y * 32.0, 64.0);          // 0-27 green, 27-30 yellow, 30-64 red
+          state = t < 27.0 ? 0.0 : t < 30.0 ? 1.0 : 2.0;
+        }
+        float on = state > 2.5 ? 0.0 : 1.0 - step(0.5, abs(state - vLens.x));
         vec3 c = vLens.x < 0.5 ? vec3(0.0, 1.0, 0.62) : vLens.x < 1.5 ? vec3(1.0, 0.7, 0.0) : vec3(1.0, 0.08, 0.05);
         float d = length(vUv - 0.5) * 2.0;
         if (d > 1.0) discard;
@@ -577,9 +584,9 @@ export class Props {
       metal: std(), blob: std({ roughness: 0.95, metalness: 0 }),
       vending: new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.2 }),
       panel: new THREE.MeshBasicMaterial({ map: vendingTexture() }),
-      lamp: new THREE.MeshBasicMaterial({ color: 0xfff2d8 }),
+      lamp: gridAware(new THREE.MeshBasicMaterial({ color: 0xfff2d8 }), 'lamp-head-grid-v1'),
       // the footprint of a lamp's light, drawn into the light map (lamplight.js), not into the picture
-      pool: lampMaterial(glowTexture()),
+      pool: lampMaterial(glowTexture(), {}, { grid: true }),
       lens: lensMaterial(),
       poolCool: null,
       decal: new THREE.MeshStandardMaterial({
@@ -588,8 +595,9 @@ export class Props {
       }),
       wire: new THREE.LineBasicMaterial({ color: 0x14161a }),
     };
-    this.mats.poolCool = lampMaterial(this.mats.pool.map); // white LED lamps on the back streets
+    this.mats.poolCool = lampMaterial(this.mats.pool.map, {}, { grid: true }); // white LED lamps on the back streets
     this.time = 0;
+    this.signalSlot = null; // (x, z, rot) -> the head's slot in the simulated signals' texture (simsignals.js)
   }
 
   update(dt) {
@@ -665,15 +673,20 @@ export class Props {
         // Draped over the road in the tile worker and attached by Streamer.
       } else if (kind === PROP.SIGNAL) {
         instanced(rows, this.models.signal, this.mats.metal, { lift: 0.15 });
-        // three lenses per head; crossing directions alternate phase
+        // three lenses per head; crossing directions alternate phase (or follow the simulation: slot per head)
+        const slots = new Map();
         for (let lens = 0; lens < 3; lens++) {
           const mesh = instanced(rows, this.models.lens, this.mats.lens, {
             lift: 0.15, shadow: false, local: [-SIGNAL.arm + 0.35, SIGNAL.y + (lens - 1) * 0.4, 0.125], scale: (i) => props[i + 5],
           });
-          const a = new Float32Array(rows.length * 2);
-          rows.forEach((i, n) => { a[n * 2] = lens; a[n * 2 + 1] = Math.round(props[i + 2] / (Math.PI / 2)) % 2; });
+          const a = new Float32Array(rows.length * 3);
+          rows.forEach((i, n) => {
+            a[n * 3] = lens; a[n * 3 + 1] = Math.round(props[i + 2] / (Math.PI / 2)) % 2;
+            if (lens === 0) slots.set(i, this.signalSlot ? this.signalSlot(props[i + 3], props[i + 4], props[i + 2]) : -1);
+            a[n * 3 + 2] = slots.get(i);
+          });
           mesh.geometry = mesh.geometry.clone();
-          mesh.geometry.setAttribute('aLens', new THREE.InstancedBufferAttribute(a, 2));
+          mesh.geometry.setAttribute('aLens', new THREE.InstancedBufferAttribute(a, 3));
         }
       }
     }

@@ -11,7 +11,8 @@ const SIZE = 2048;
 const Y0 = 200, YSPAN = 1000; // heights are stored as (y + Y0) / YSPAN
 
 // Material for a lamp quad: `map` is the footprint; the colour (times the vertex colour, if any) is the light.
-export function lampMaterial(map, params = {}) {
+// grid: a street lamp, which goes out in an apagón (shared.uGrid); a car's lamps do not.
+export function lampMaterial(map, params = {}, { grid = false } = {}) {
   const m = new THREE.MeshBasicMaterial({
     map, side: THREE.DoubleSide, depthTest: false, depthWrite: false, transparent: true,
     blending: THREE.CustomBlending, blendEquation: THREE.MaxEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, ...params,
@@ -19,20 +20,44 @@ export function lampMaterial(map, params = {}) {
   // The height the light lies at goes into the alpha channel, so that a lamp under a flyover does not light
   // the deck above it, nor a car on the deck the street below.
   m.onBeforeCompile = (shader) => {
+    shader.uniforms.uGrid = shared.uGrid;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying float vLampY;')
+      .replace('#include <common>', '#include <common>\nvarying float vLampY;\nvarying vec2 vLampXZ;')
       .replace('#include <project_vertex>', `#include <project_vertex>
         vec4 lampWorld = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
         lampWorld = instanceMatrix * lampWorld;
         #endif
-        vLampY = (modelMatrix * lampWorld).y;`);
+        lampWorld = modelMatrix * lampWorld;
+        vLampY = lampWorld.y; vLampXZ = lampWorld.xz;`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vLampY;')
+      .replace('#include <common>', '#include <common>\nvarying float vLampY;\nvarying vec2 vLampXZ;\nuniform vec4 uGrid;')
       .replace('#include <opaque_fragment>', `#include <opaque_fragment>
+        ${grid ? 'if (uGrid.z >= 0.0) gl_FragColor.rgb *= smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vLampXZ, uGrid.xy));' : ''}
         gl_FragColor.a = dot(gl_FragColor.rgb, vec3(1.0)) > 0.004 ? (vLampY + ${Y0}.0) / ${YSPAN}.0 : 0.0;`);
   };
-  m.customProgramCacheKey = () => 'lamp-quad-v1';
+  m.customProgramCacheKey = () => (grid ? 'lamp-quad-grid-v2' : 'lamp-quad-v2');
+  return m;
+}
+
+// A plain material (a lamp's glowing head) that goes dark where the apagón has reached (shared.uGrid).
+export function gridAware(m, key) {
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uGrid = shared.uGrid;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGridXZ;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vec4 gridWorld = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+        gridWorld = instanceMatrix * gridWorld;
+        #endif
+        vGridXZ = (modelMatrix * gridWorld).xz;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vGridXZ;\nuniform vec4 uGrid;')
+      .replace('#include <opaque_fragment>', `#include <opaque_fragment>
+        if (uGrid.z >= 0.0) gl_FragColor.rgb *= mix(0.12, 1.0, smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vGridXZ, uGrid.xy)));`);
+  };
+  m.customProgramCacheKey = () => key;
   return m;
 }
 

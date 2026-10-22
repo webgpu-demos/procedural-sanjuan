@@ -68,7 +68,7 @@ export async function buildSurroundings(base, orthoBase, manifest, proj) {
   const material = new THREE.MeshStandardMaterial({ map, color: map ? 0xffffff : 0x6b7a58, roughness: 1, metalness: 0 });
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, {
-      uNight: shared.uNight, uOrtho: shared.uOrtho, uOrthoRect: shared.uOrthoRect, uOrthoOn: shared.uOrthoOn,
+      uNight: shared.uNight, uGrid: shared.uGrid, uOrtho: shared.uOrtho, uOrthoRect: shared.uOrthoRect, uOrthoOn: shared.uOrthoOn,
       uLoaded: shared.uLoaded, uExtent: shared.uLoadedRect,
       uLampOn: { value: 0 }, uLampMap: shared.uLampMap, // (no lamp light here; the sampler still needs its texture)
     });
@@ -77,7 +77,7 @@ export async function buildSurroundings(base, orthoBase, manifest, proj) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFarPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform float uNight, uOrthoOn; uniform sampler2D uOrtho, uLoaded; uniform vec4 uOrthoRect, uExtent; varying vec3 vFarPos;`)
+        uniform float uNight, uOrthoOn; uniform sampler2D uOrtho, uLoaded; uniform vec4 uOrthoRect, uExtent, uGrid; varying vec3 vFarPos;`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
         vec2 ext = (vFarPos.xz - uExtent.xy) / uExtent.zw;
         if (ext.x > 0.0 && ext.x < 1.0 && ext.y > 0.0 && ext.y < 1.0 && texture2D(uLoaded, ext).r > 0.5) discard; // a loaded tile`)
@@ -88,9 +88,11 @@ export async function buildSurroundings(base, orthoBase, manifest, proj) {
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float built = smoothstep(0.42, 0.72, dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)));
         diffuseColor.rgb *= 1.0 - 0.6 * uNight;
-        totalEmissiveRadiance += built * uNight * vec3(1.0, 0.72, 0.42) * 0.22;`);
+        // (an apagón: the island goes dark as the failure spreads, but for a few generators)
+        float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.12, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vFarPos.xz, uGrid.xy)));
+        totalEmissiveRadiance += built * uNight * vec3(1.0, 0.72, 0.42) * 0.22 * power;`);
   };
-  material.customProgramCacheKey = () => 'surroundings-v2';
+  material.customProgramCacheKey = () => 'surroundings-v3';
   const mesh = new THREE.Mesh(g, material);
   mesh.name = 'surroundings';
   mesh.receiveShadow = false;

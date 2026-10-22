@@ -6,7 +6,7 @@
 // local frame: worldToECEFMatrix places it on the globe, and the colour buffer is scaled into their units
 // before the effects and back after them.
 import * as THREE from 'three';
-import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, ToneMappingEffect, ToneMappingMode } from 'postprocessing';
+import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, ToneMappingEffect, ToneMappingMode, VignetteEffect, NoiseEffect, BlendFunction } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { WindowReflections } from './reflections.js';
 import { AerialPerspectiveEffect, PrecomputedTexturesGenerator, getSunDirectionECEF, getMoonDirectionECEF } from '@takram/three-atmosphere';
@@ -144,7 +144,11 @@ export class Atmosphere {
     this.composer.addPass(this.skyPass);
     this.composer.addPass(new EffectPass(camera, new Scale(1 / UNITS)));
     this.bloom = new BloomEffect({ intensity: 0.5, luminanceThreshold: 0.9, luminanceSmoothing: 0.2, mipmapBlur: true });
-    this.composer.addPass(new EffectPass(camera, this.bloom, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC })));
+    // the film: a soft vignette and a fine grain over the tone-mapped picture (the experience turns them up for its shots)
+    this.vignette = new VignetteEffect({ offset: 0.32, darkness: 0.38 });
+    this.grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
+    this.grain.blendMode.opacity.value = 0.05;
+    this.composer.addPass(new EffectPass(camera, this.bloom, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }), this.vignette, this.grain));
     this.connect();
     this.sun = new THREE.Vector3(); this.moon = new THREE.Vector3();
     this.cloudsOn = false; // volumetric clouds are heavy: off until asked for

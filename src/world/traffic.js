@@ -52,7 +52,7 @@ const wheel = (r, x, z) => [
 const PAINT = [1, 1, 1], GLASS = [0.03, 0.04, 0.05], TYRE = [0.015, 0.015, 0.015], TRIM = [0.05, 0.05, 0.055], LAMP = [1, 1, 1];
 // A vehicle along +z: length L, width W, body up to `belt`, cabin from z0 to z1 (fractions of L) up to `roof`,
 // its windscreen leaning back by `rake` metres.
-function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31 }) {
+export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31 }) {
   const zr = -L / 2, zf = L / 2, sill = 0.24, parts = [];
   parts.push(taper(W * 0.97, W, sill, belt, zr + 0.06, zf - 0.06, zr, zf - 0.02, PAINT));                 // body
   parts.push(part(W * 1.01, 0.16, L + 0.06, 0, sill + 0.04, 0, TRIM, 4));                                // bumpers and sills
@@ -91,7 +91,7 @@ export function beamTexture() {
   t.needsUpdate = true;
   return t;
 }
-function beamGeometry(L) {
+export function beamGeometry(L) {
   const g = new THREE.BufferGeometry(), y = 0.14, pos = [], uv = [], col = []; // (held clear of the road: it must never dip under it)
   const quad = (x, zNear, zFar, rgb) => {
     pos.push(-x, y, zNear, x, y, zNear, x, y, zFar, -x, y, zNear, x, y, zFar, -x, y, zFar);
@@ -107,7 +107,7 @@ function beamGeometry(L) {
 }
 // What drives in San Juan: compact cars and sedans, a great many SUVs and pickups, delivery trucks, and the
 // AMA's city buses.
-const TYPES = [
+export const TYPES = [
   { name: 'compact', share: 0.26, L: 4.2, spec: { L: 4.2, W: 1.74, belt: 0.92, roof: 1.46, z0: 0.18, z1: 0.8, rake: 0.7 } },
   { name: 'sedan', share: 0.22, L: 4.8, spec: { L: 4.8, W: 1.82, belt: 0.92, roof: 1.44, z0: 0.2, z1: 0.72, rake: 0.75 } },
   { name: 'suv', share: 0.26, L: 4.7, spec: { L: 4.7, W: 1.9, belt: 1.08, roof: 1.76, z0: 0.12, z1: 0.86, rake: 0.55, tyre: 0.36 } },
@@ -115,8 +115,8 @@ const TYPES = [
   { name: 'truck', share: 0.08, L: 7.0, spec: { L: 7.0, W: 2.3, belt: 1.05, roof: 2.4, z0: 0.76, z1: 0.97, rake: 0.18, tyre: 0.45, box: { h: 2.3, len: 0.7, z: 0.36 } } },
   { name: 'bus', share: 0.06, L: 12.0, spec: { L: 12.0, W: 2.55, belt: 1.25, roof: 3.1, z0: 0.02, z1: 0.98, rake: 0.14, tyre: 0.48 } },
 ];
-const CAR_COLORS = [0xd4d4d0, 0xd4d4d0, 0xd4d4d0, 0x111214, 0x111214, 0xa4a7ab, 0xa4a7ab, 0x6d7278, 0x1f3a6e, 0x8c1c1c, 0x2f6fb0, 0xc4b68f]; // (white kept off full brightness: it blooms)
-const BUS_COLORS = [0xe8e4d8, 0xe8e4d8, 0x1d5fa8];
+export const CAR_COLORS = [0xd4d4d0, 0xd4d4d0, 0xd4d4d0, 0x111214, 0x111214, 0xa4a7ab, 0xa4a7ab, 0x6d7278, 0x1f3a6e, 0x8c1c1c, 0x2f6fb0, 0xc4b68f]; // (white kept off full brightness: it blooms)
+export const BUS_COLORS = [0xe8e4d8, 0xe8e4d8, 0x1d5fa8];
 
 // Vehicle models for cars parked in car parks (props.js): geometries by type, the paint material, colours.
 let parkedKit = null;
@@ -125,16 +125,17 @@ export function parkedVehicles() {
   return parkedKit;
 }
 
-function carMaterial(lit = true) {
+export function carMaterial(lit = true) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.5 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; // (no lamp light here; the sampler still needs its texture)
     shader.uniforms.uNight = shared.uNight;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
+      // aBrake (per car, from simtraffic.js; 0 where a mesh has none): the tail lamps flare when it brakes
+      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nattribute float aBrake;\nvarying float vGlow;\nvarying float vBrake;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;\nvBrake = aBrake;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying float vGlow;')
+      .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying float vGlow;\nvarying float vBrake;')
       // lamps keep their own colour instead of the body paint, and shine at night
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec3 lamp = vGlow > 1.5 ? vec3(0.9, 0.03, 0.02) : vec3(1.0, 0.96, 0.85);
@@ -143,11 +144,12 @@ function carMaterial(lit = true) {
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vGlow > 3.5 ? 0.85 : vGlow > 2.5 ? 0.06 : roughnessFactor;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vGlow > 3.5 ? 0.0 : vGlow > 2.5 ? 0.9 : metalnessFactor;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        if (vGlow > 0.5 && vGlow < 2.5) totalEmissiveRadiance += lamp * (0.15 + uNight * ${lit ? '(vGlow > 1.5 ? 2.0 : 3.6)' : '0.0'});`)
+        if (vGlow > 0.5 && vGlow < 2.5) totalEmissiveRadiance += lamp * (0.15 + uNight * ${lit ? '(vGlow > 1.5 ? 2.0 : 3.6)' : '0.0'}
+          + (vGlow > 1.5 ? vBrake * (1.4 + uNight * 3.0) : 0.0));`)
       // (the windows are marked in alpha for the reflection pass, like those of the buildings)
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif (vGlow > 2.5 && vGlow < 3.5) gl_FragColor.a = 0.1;');
   };
-  m.customProgramCacheKey = () => (lit ? 'car-v3' : 'car-parked-v3');
+  m.customProgramCacheKey = () => (lit ? 'car-v4' : 'car-parked-v4');
   return m;
 }
 

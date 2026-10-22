@@ -30,7 +30,9 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
 - **Street objects** (`src/world/props.js`): coconut palms, royal palms and flamboyanes in flower among the
   shade trees, concrete utility poles with wires, street lights, signals that cycle, USPS collection
   boxes, pillar hydrants, bus stops, statues (Columbus on his column at Plaza Colón).
-- **Traffic**: compacts, sedans, SUVs, pickups, delivery trucks and AMA buses.
+- **Traffic**: the simulated morning (below): every car a trip SUMO drove, with its brake lights, its
+  lamps on the road at dawn, the signal heads showing the simulation's own lights. Outside the simulated
+  hours, compacts, sedans, SUVs, pickups, delivery trucks and AMA buses drive around the camera.
 - **Surroundings** (`far.js`): beyond the area, the rest of the island out to the horizon (the far shore of
   the bay, Cataño, Guaynabo, the mountains) as coarse terrain under a low-resolution aerial photo, over the sea.
 - **Atmosphere** (`atmosphere.js`, `environment.js`): physical sky and aerial perspective placed on the globe
@@ -79,6 +81,44 @@ Puerto Rico has nothing like Japan's PLATEAU survey of road surfaces, so the com
 `tools/pipeline/roadsurface.mjs` (right-of-way per road class) and `roadsplit.mjs` (carriageway and sidewalk).
 The terrain tiles carry bathymetry offshore; the compiler flattens the sea to 0 m inside the coastline,
 levels lagoons and ponds at their lowest shore, and keeps dry land above the sea.
+
+## The simulated morning (`tools/sim/`)
+
+A weekday morning in San Juan, 4:30 to 10:00, simulated with [Eclipse SUMO](https://eclipse.dev/sumo/) on the
+city's own road graph and played back in the browser. It opens with a title and four shots (dawn over the bay,
+the jam on PR-22, one commuter's ride, sunrise on the Milla de Oro); then the clock, the speed of time, the
+**apagón** (at 6:15 the grid fails: windows, street lamps and every signal go dark in a wave from the
+Monacillos transmission centre, and the traffic is simulated without them), riding with any car (click it),
+and the jam map. `G` brings back the settings panel; `?xp=0` skips the experience, `?sim=0` the simulation.
+
+```
+npm run sim:setup                    # once: Python environment with SUMO 1.28 and libsumo (.venv-sim/)
+npm run sim:data                     # Census: commuting flows, departure times, municipio boundaries
+npm run sim:net                      # roads.json -> SUMO network; buildings as trip ends; FHWA counts
+npm run sim:demand                   # the morning's trips (data/sim/<area>/morning/trips.xml)
+npm run sim:run                      # simulate and record -> public/tiles/<area>/sim/morning/
+npm run sim:run -- --scenario=apagon # the blackout, from the morning's state at 6:15
+npm run sim:validate                 # simulated vs counted traffic (GEH) -> validation.json
+```
+
+- **Network** (`network.mjs`): the graph in `roads.json` becomes SUMO's plain XML, the frames coinciding
+  (SUMO's y is the world's -z), so simulated lanes lie on the painted ones; netconvert joins the junctions
+  OSM draws as several nodes and gives the mapped signals fixed plans.
+- **Demand** (`demand.py`): a cordon model. Homes, jobs, schools and shops are the floor area of the city's
+  buildings, by use and municipio; the ACS municipio-to-municipio commuting flows say who drives where;
+  commuters from beyond the area enter through the roads that cross its edge, towards their municipio,
+  biggest roads first; departure times by municipio of residence (ACS B08302); school runs, errands,
+  deliveries and through traffic on top.
+- **Simulation and recording** (`run.py`): microscopic, every car with its own car-following and lane changes;
+  40% re-plan their route every ten minutes from the traffic as it is. Each car's track is kept to the
+  fewest points that stay within 35 cm of where SUMO had it at every second, and packed into five-minute
+  windows (`w_<t>.bin`), with the road speeds (`speeds.bin`), every signal's changes (`signals.json`) and
+  why each car drives (`trips.bin`).
+- **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
+  against the count's peak hour (AADT x 0.08), scored with the GEH statistic.
+
+What it is not: real cars. The trips are drawn from survey data and simulated; they are checked against
+counts, not recorded from traffic.
 
 ## Publishing
 

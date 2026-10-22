@@ -11,6 +11,10 @@ import { TILE as TILE_SIZE } from '../shared/geo.js';
 
 export const shared = {
   uNight: { value: 0 }, // 0 day .. 1 night
+  // The grid (an apagón): where it failed (x, z), how far the darkness has spread from there (m; < 0: the power
+  // is on everywhere) and how wide its edge is. Lit windows, signs and street lamps go out inside it, except
+  // where a building has its own generator.
+  uGrid: { value: new THREE.Vector4(0, 0, -1, 300) },
   uTime: { value: 0 },  // seconds, for wind and signals
   // aerial photo over the area: texture, and its rectangle in world x/z as (minX, minZ, sizeX, sizeZ)
   uOrtho: { value: null }, uOrthoRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uOrthoOn: { value: 0 },
@@ -64,6 +68,7 @@ uniform float uTime;
 uniform vec2 uWindowLife;
 uniform float uCityGlass;
 uniform float uNightBlue;
+uniform vec4 uGrid;
 uniform vec3 uSunDir;
 uniform vec3 uSunGlint;
 uniform float uGlintOn;
@@ -75,6 +80,12 @@ varying vec4 vFacade;
 varying vec4 vBldg;
 varying vec3 vWPos;
 varying vec3 vWNrm;
+// the power at this building: 1 on, 0 cut by the apagón; one building in seven runs on a generator, dimmer
+float gridPower(float seed) {
+  if (uGrid.z < 0.0) return 1.0;
+  float dark = 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy));
+  return mix(1.0, step(0.86, fract(seed * 29.37)) * 0.55, dark);
+}
 float gRough, gMetal;
 vec3 gGlint = vec3(0.0); // the sun mirrored in a pane (added to the specular light where the sun reaches it)
 float gPane = 0.0; // how much of a mirror this fragment is: window glass (written to alpha for the reflection pass)
@@ -233,7 +244,8 @@ const FACADE_MAIN = /* glsl */ `
       gNm = mix(gNm, vec3(0.0, 0.0, 1.0), leaves);
     }
     float daylight = (1.0 - uNight) * (shop ? 0.3 : cat > 4.5 ? 0.06 : 0.12);
-    gEmissive = pane * interior * (daylight + uNight * on * glow * 1.25 * lamp);
+    float power = gridPower(seed);
+    gEmissive = pane * interior * (daylight + uNight * on * glow * 1.25 * lamp * power);
     // The sun in the glass. Each pane sits a little out of true and float glass is never quite flat, so the
     // mirrored sun is a hot core with a glare around it that wanders from pane to pane as the view moves. The
     // third, wide term is not physics: the true mirror image is only seen from below the sun's own height, and
@@ -270,7 +282,7 @@ const FACADE_MAIN = /* glsl */ `
         city = tintC * spot * 5.0 / (1.0 + reach * reach / 4.0e5);
         city += vec3(1.0, 0.75, 0.5) * 0.035 * smoothstep(0.0, 900.0, reach);  // and their haze towards the horizon
       }
-      gEmissive += city * fresnel * pane * tall * uNight * uCityGlass * (1.0 - on * 0.9);
+      gEmissive += city * fresnel * pane * tall * uNight * uCityGlass * (1.0 - on * 0.9) * (0.25 + 0.75 * power);
     }
     gPane = pane * (1.0 - 0.7 * far) * (1.0 - 0.85 * uNight * on); // (a lit room shows itself, not a reflection)
     // the lintel shades the top of the opening
@@ -281,7 +293,7 @@ const FACADE_MAIN = /* glsl */ `
       float sign = box(fy, 0.84, 0.985, wy) * box(fx, 0.03, 0.97, wx) * valid * step(0.25, hash12(room + 57.0));
       vec3 sc = mix(hue(hash12(room + 71.0)), vec3(0.93), 0.35 + 0.35 * step(0.6, hash12(room + 83.0))); // (painted boards, not neon)
       diffuseColor.rgb = mix(diffuseColor.rgb, sc * 0.75, sign);
-      gEmissive += sign * sc * uNight * 1.6;
+      gEmissive += sign * sc * uNight * 1.6 * gridPower(seed);
       gRough = mix(gRough, 0.4, sign);
     }
   }
@@ -317,7 +329,7 @@ function facadeMaterial(tex) {
     Object.assign(shader.uniforms, {
       uLampOn: { value: 0 }, uLampMap: shared.uLampMap, // (no lamp light on buildings; the sampler still needs its texture)
       uPhoto: m.userData.photo, uPhotoOn: m.userData.photoOn, uPhotoRange: shared.uPhotoRange, uPhotoMix: shared.uPhotoMix,
-      uNight: shared.uNight, uTime: shared.uTime, uWindowLife: shared.uWindowLife, uCityGlass: shared.uCityGlass, uNightBlue: shared.uNightBlue, uSunDir: shared.uSunDir, uSunGlint: shared.uSunGlint, uGlintOn: shared.uGlintOn, uWallAlb: { value: tex.wall.albedo }, uWallNor: { value: tex.wall.normal },
+      uNight: shared.uNight, uTime: shared.uTime, uWindowLife: shared.uWindowLife, uCityGlass: shared.uCityGlass, uNightBlue: shared.uNightBlue, uGrid: shared.uGrid, uSunDir: shared.uSunDir, uSunGlint: shared.uSunGlint, uGlintOn: shared.uGlintOn, uWallAlb: { value: tex.wall.albedo }, uWallNor: { value: tex.wall.normal },
       uWallScale: { value: tex.wall.scales }, uWallDetail: { value: tex.wall.details },
     });
     shader.vertexShader = shader.vertexShader
@@ -334,7 +346,7 @@ function facadeMaterial(tex) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gPane;');
   };
-  m.customProgramCacheKey = () => 'facade-v22';
+  m.customProgramCacheKey = () => 'facade-v23';
   return m;
 }
 
@@ -421,13 +433,13 @@ function blocksMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; // (no lamp light up here; the sampler still needs its texture)
-    shader.uniforms.uNight = shared.uNight;
+    shader.uniforms.uNight = shared.uNight; shader.uniforms.uGrid = shared.uGrid;
     shader.uniforms.uLoaded = shared.uLoaded; shader.uniforms.uLoadedRect = shared.uLoadedRect;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${WORLD_VARYINGS_VERT}\nattribute vec2 aTile;\nvarying vec2 vTile;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WORLD_VARYINGS_SET}\nvTile = aTile;`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uNight;\nuniform sampler2D uLoaded;\nuniform vec4 uLoadedRect;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying vec2 vTile;\n${NOISE}`)
+      .replace('#include <common>', `#include <common>\nuniform float uNight;\nuniform vec4 uGrid;\nuniform sampler2D uLoaded;\nuniform vec4 uLoadedRect;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying vec2 vTile;\n${NOISE}`)
       // the building's tile is in in full: its detailed version stands here
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
         if (texture2D(uLoaded, ((vTile + 0.5) * ${TILE_SIZE}.0 - uLoadedRect.xy) / uLoadedRect.zw).r > 0.5) discard;`)
@@ -439,10 +451,13 @@ function blocksMaterial() {
           float win = mix(step(0.25, f.x) * step(f.x, 0.75) * step(0.3, f.y) * step(f.y, 0.8), 0.25, blur);
           float lit = mix(step(0.74, hash12(cell + floor(vWPos.xz / 97.0) * 7.0)), 0.26, blur);
           diffuseColor.rgb *= 0.9 - 0.5 * win; // (as dark as a detailed facade is with its glass, from afar)
-          totalEmissiveRadiance += win * lit * uNight * vec3(1.0, 0.78, 0.5) * 1.1;
+          // (an apagón: dark inside the spreading edge, but for the odd generator)
+          float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, step(0.88, hash12(floor(vWPos.xz / 37.0))) * 0.5,
+            1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
+          totalEmissiveRadiance += win * lit * uNight * vec3(1.0, 0.78, 0.5) * 1.1 * power;
         }`);
   };
-  m.customProgramCacheKey = () => 'blocks-v3';
+  m.customProgramCacheKey = () => 'blocks-v4';
   return m;
 }
 
