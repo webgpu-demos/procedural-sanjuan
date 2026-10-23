@@ -143,7 +143,9 @@ export class Driver {
     // so the car climbs onto it; driving under a flyover, the deck is far above and the ground is the way)
     const ground = this.surface(this.x, this.z, -2), deck = sim?.deckAt(this.x, this.z, this.y + 0.5) ?? null;
     const want = deck != null && Math.abs(deck - this.y) < 2.4 ? deck : ground;
-    this.y += (want - this.y) * (1 - Math.exp(-dt * 12));
+    // (no steeper than a road climbs: the elevation model has the odd bridge embankment in it, a wall to drive into)
+    const moved = Math.hypot(nx - this.x, nz - this.z) + Math.abs(v) * dt, climb = 0.35 * moved + 0.02;
+    this.y += THREE.MathUtils.clamp((want - this.y) * (1 - Math.exp(-dt * 12)), -climb * 2, climb);
     // pitch and roll from the ground under the wheels (on a deck: level)
     if (want === ground) {
       const f = this.surface(this.x + s * 1.4, this.z + c * 1.4, -2) - this.surface(this.x - s * 1.4, this.z - c * 1.4, -2);

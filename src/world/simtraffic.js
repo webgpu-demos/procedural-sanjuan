@@ -163,12 +163,13 @@ export class SimTraffic {
   deckAt(x, z, y) {
     if (!this.decks) return null;
     const cx = Math.floor(x / 24), cz = Math.floor(z / 24);
-    let best = null, bd = 14;
+    // (the deck at the car's own height: a ramp under a flyover is a different deck from the flyover)
+    let best = null, score = Infinity;
     for (let i = cx - 1; i <= cx + 1; i++) for (let j = cz - 1; j <= cz + 1; j++) {
       for (const [x0, y0, z0, x1, y1, z1] of this.decks.get(i + ',' + j) ?? []) {
         const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
-        const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f;
-        if (d < bd && Math.abs(h - y) < 4.5) { bd = d; best = h; }
+        const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f, s = d + 4 * Math.abs(h - y);
+        if (d < 14 && Math.abs(h - y) < 2.0 && s < score) { score = s; best = h; }
       }
     }
     return best;
@@ -279,8 +280,11 @@ export class SimTraffic {
       // in its deck); a car well above the ground whose deck is not found keeps the simulation's own height.
       // Onto a ramp, it rises from the ground to the deck over a stretch (between 0.6 and 2.2 m up in the
       // simulation), not at a step.
+      // (the elevation model has a bridge's embankment in it here and there, metres above a road passing under:
+      // where the ground stands well above the simulation's own height for the road, the road's height it is)
       const seen = d2 < MID * MID || followed;
-      const ground = seen ? this.surface(p[0], p[2], -2) : p[1];
+      const terrain = seen ? this.surface(p[0], p[2], -2) : p[1];
+      const ground = terrain + (p[1] - terrain) * smooth(1.5, 3.5, terrain - p[1]); // (over a span, not at a step)
       const up = seen ? smooth(0.6, 2.2, p[1] - ground) : 0, raised = up > 0.5;
       const deck = up > 0 ? this.deckAt(p[0], p[2], p[1]) : null;
       let y = seen ? ground + ((deck ?? p[1]) - ground) * up : p[1];
