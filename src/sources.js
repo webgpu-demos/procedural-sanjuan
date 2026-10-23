@@ -78,8 +78,8 @@ export const SOURCES = [
     group: 'Music',
     items: [
       {
-        name: 'Callejón de Panderetas', url: 'https://suno.com',
-        what: 'The plena on the radio, made for this project with Suno.',
+        name: 'Callejón de Panderetas, Fiesta de la Memoria', url: 'https://suno.com',
+        what: 'The plenas on the radio, made for this project with Suno.',
         license: 'made with Suno',
       },
     ],

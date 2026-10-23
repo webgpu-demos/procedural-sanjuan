@@ -1,10 +1,10 @@
-// The sound of the morning: a plena on the radio ("Callejón de Panderetas", public/audio), and the road under it.
-//   the radio  the song, on a loop; in the apagón it dies with the power (with a deep thump and the crackle of
-//              the lines), then comes back faint and dull, a battery radio somewhere down the street, until the
-//              power is back
+// The sound of the morning: plenas on the radio (two songs, public/audio), and the road under it.
+//   the radio  one song after the other, round again; in the apagón it dies with the power (with a deep thump
+//              and the crackle of the lines), then comes back faint and dull, a battery radio somewhere down the
+//              street, until the power is back
 //   the road   a low rumble of traffic that swells with the cars near the camera and how fast they go
 // Starts on a gesture (browsers keep audio off until one).
-const SONG = 'audio/callejon-de-panderetas.m4a';
+const SONGS = ['audio/callejon-de-panderetas.m4a', 'audio/fiesta-de-la-memoria.m4a'];
 const LEVEL = 0.6; // the radio, against the rest
 
 export class CitySound {
@@ -16,7 +16,8 @@ export class CitySound {
     this.master = ctx.createGain(); this.master.gain.value = 0; this.master.connect(ctx.destination);
     this.master.gain.setTargetAtTime(0.9, ctx.currentTime, 1.2);
     // the radio: the song through a tone control (open, or the muffled radio of the apagón) and its own level
-    this.song = new Audio(SONG); this.song.loop = true; this.song.preload = 'auto';
+    this.track = 0; this.song = new Audio(SONGS[0]); this.song.preload = 'auto';
+    this.song.addEventListener('ended', () => { this.track = (this.track + 1) % SONGS.length; this.song.src = SONGS[this.track]; this.song.play().catch(() => {}); });
     this.tone = ctx.createBiquadFilter(); this.tone.type = 'lowpass'; this.tone.frequency.value = 20000; this.tone.Q.value = 0.7;
     this.radio = ctx.createGain(); this.radio.gain.value = LEVEL;
     ctx.createMediaElementSource(this.song).connect(this.tone).connect(this.radio).connect(this.master);
