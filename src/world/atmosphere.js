@@ -6,7 +6,7 @@
 // local frame: worldToECEFMatrix places it on the globe, and the colour buffer is scaled into their units
 // before the effects and back after them.
 import * as THREE from 'three';
-import { EffectComposer, RenderPass, EffectPass, Effect, EffectAttribute, BloomEffect, ToneMappingEffect, ToneMappingMode, VignetteEffect, NoiseEffect, BlendFunction } from 'postprocessing';
+import { EffectComposer, RenderPass, EffectPass, Effect, EffectAttribute, DepthOfFieldEffect, BloomEffect, ToneMappingEffect, ToneMappingMode, VignetteEffect, NoiseEffect, BlendFunction } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { WindowReflections } from './reflections.js';
 import { shared } from './materials.js';
@@ -190,6 +190,11 @@ export class Atmosphere {
     this.composer.addPass(new EffectPass(camera, new Scale(1 / UNITS)));
     this.bloom = new BloomEffect({ intensity: 0.5, luminanceThreshold: 0.9, luminanceSmoothing: 0.2, mipmapBlur: true });
     // the film: a soft vignette and a fine grain over the tone-mapped picture (the experience turns them up for its shots)
+    // depth of field, for riding with a car: the car sharp, the city behind it soft (off unless focus() is called)
+    this.dof = new DepthOfFieldEffect(camera, { focusDistance: 14, focusRange: 9, bokehScale: 2.2, resolutionScale: 0.5 });
+    this.dofPass = new EffectPass(camera, this.dof);
+    this.dofPass.enabled = false;
+    this.composer.addPass(this.dofPass);
     this.twilight = new TwilightSky(camera);
     this.vignette = new VignetteEffect({ offset: 0.32, darkness: 0.38 });
     this.grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
@@ -228,5 +233,11 @@ export class Atmosphere {
   }
 
   setSize(w, h) { this.composer.setSize(w, h); }
+  // Riding: focus at that distance (m); null: no depth of field.
+  focus(distance) {
+    this.dofPass.enabled = distance != null;
+    if (distance != null) { this.dof.cocMaterial.focusDistance = distance; this.dof.cocMaterial.focusRange = Math.max(6, distance * 0.6); }
+  }
+
   render(dt) { this.composer.render(dt); }
 }

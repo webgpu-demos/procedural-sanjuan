@@ -3,6 +3,7 @@
 //             frogs scattered round the listener; loud before dawn, gone by full day, quiet high above the city
 //   the road  a rumble of traffic that swells with the cars near the camera and how fast they go
 //   the grid  the faint 60 Hz hum of the powered city, which stops dead when the power does
+//   birds     after first light: quick high whistles and trills (a pitirre, a reinita), near the ground
 //   horns     in a jam, now and then; often, in the apagón
 // Starts on a gesture (browsers keep audio off until one).
 export class CitySound {
@@ -52,6 +53,22 @@ export class CitySound {
     o.start(t); o.stop(t + 0.34);
   }
 
+  // a bird: a few quick notes, high and sliding, somewhere to one side
+  bird(gain) {
+    const ctx = this.ctx, pan = ctx.createStereoPanner(); pan.pan.value = Math.random() * 2 - 1;
+    const g = ctx.createGain(); g.gain.value = 0; g.connect(pan).connect(this.master);
+    const o = ctx.createOscillator(); o.type = 'sine'; o.connect(g);
+    const base = 2600 + Math.random() * 2200, notes = 2 + Math.floor(Math.random() * 5);
+    let t = ctx.currentTime + 0.02;
+    for (let i = 0; i < notes; i++) {
+      const len = 0.05 + Math.random() * 0.09, f0 = base * (0.85 + Math.random() * 0.3), f1 = f0 * (Math.random() < 0.5 ? 1.25 : 0.8);
+      o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.035 * gain, t + 0.01); g.gain.linearRampToValueAtTime(0, t + len);
+      t += len + 0.02 + Math.random() * 0.06;
+    }
+    o.start(ctx.currentTime); o.stop(t + 0.05);
+  }
+
   horn(near) {
     const ctx = this.ctx, t = ctx.currentTime + 0.01, len = 0.18 + Math.random() * 0.5;
     const pan = ctx.createStereoPanner(); pan.pan.value = Math.random() * 1.6 - 0.8;
@@ -90,6 +107,9 @@ export class CitySound {
     const chorus = Math.min(1, Math.max(0, (night - 0.15) / 0.5)) * (1 - 0.6 * up);
     this.frogBus.gain.setTargetAtTime(chorus * 0.9, now, 1.2);
     if (chorus > 0.02) for (const f of this.frogs) { f.at -= dt; if (f.at <= 0) { f.at = f.every * (0.8 + Math.random() * 0.4); if (Math.random() < 0.85) this.chirp(f); } }
+    // birds: from the first light, near the ground, fewer as the traffic swells
+    const morning = Math.min(1, Math.max(0, (0.75 - night) / 0.4)) * (1 - up) * (1 - 0.6 * traffic);
+    if (morning > 0.05 && Math.random() < morning * dt * 0.9) this.bird(morning);
     // horns: a jam near the camera, at street level
     this.nextHorn -= dt;
     const urge = jammed * (powered > 0.5 ? 0.012 : 0.05) * (1 - up);

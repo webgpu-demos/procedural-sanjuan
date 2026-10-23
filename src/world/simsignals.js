@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 
 const SIZE = 256; // texture width; heads in rows of SIZE
-const STATE = { G: 0, g: 0, y: 1, Y: 1, r: 2, R: 2, u: 2, s: 2, o: 3, O: 3 };
+const STATE = { G: 0, g: 0, y: 1, Y: 1, r: 2, R: 2, u: 2, s: 2, o: 3, O: 3, w: 3 }; // (o, O, w: switched off)
 
 export class SimSignals {
   // signals: signals.json; roads: roads.json (the edges SUMO's "e<i>" / "r<i>" are made from)

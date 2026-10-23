@@ -141,9 +141,9 @@ export class Experience {
     this.dock.querySelector('.ride').addEventListener('click', () => this.rideNear());
     this.dock.querySelector('.snd').addEventListener('click', () => this.toggleSound());
     this.dock.querySelector('.truth').addEventListener('click', () => this.toggleTruth());
-    this.dock.querySelector('.map').addEventListener('click', (e) => {
+    this.dock.querySelector('.map').addEventListener('click', () => {
       const m = this.app.speedMap; if (!m) return;
-      m.on = !m.on; e.currentTarget.classList.toggle('on', m.on); e.currentTarget.style.background = m.on ? 'rgba(255,122,69,0.45)' : '';
+      m.on = !m.on; this.mapButton();
     });
     this.skip.addEventListener('click', () => this.endIntro());
     addEventListener('keydown', (e) => { if (this.directing && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); this.endIntro(); } });
@@ -196,24 +196,55 @@ export class Experience {
       según el Censo (ACS), con los conteos de la FHWA y las calles de OpenStreetMap.<br>Every car you will see is a simulated trip.</div>
       <div class="row"><button class="go">▶ Comenzar · with sound</button><button class="free">Explorar libremente</button></div>`;
     this.start.querySelector('.go').addEventListener('click', () => { this.sound.start(); this.setSoundButton(); this.hideTitle(); this.beginIntro(); });
-    this.start.querySelector('.free').addEventListener('click', () => { this.hideTitle(); this.endIntro(true); });
+    this.start.querySelector('.free').addEventListener('click', () => { this.clouds(); this.hideTitle(); this.endIntro(true); });
   }
   hideTitle() { this.start?.classList.add('gone'); setTimeout(() => this.start?.remove(), 1100); }
 
-  // The opening: dark (5:28), blue hour on the expressway (5:58), a ride with the headlights on (6:06), the
-  // sun coming up behind the towers of the Milla de Oro (it rises about 6:19 in late October)
+  // The opening: dark (5:28), blue hour over the expressway into the city (5:58), a ride with the headlights on
+  // (6:06), the sun coming up behind the towers of the Milla de Oro, looking east (it rises about 6:19 in late
+  // October, a little south of east)
   get shots() {
     return [
       { hour: 5.47, rate: 20, dur: 13, eye: [[1300, 520, 7700], [1950, 470, 7050]], at: [[5400, 40, 3000], [5600, 40, 3150]],
         cap: ['San Juan, 5:28 a.m.', 'Un martes, antes del amanecer · a Tuesday, before dawn'] },
-      { hour: 5.97, rate: 14, dur: 13, eye: [[1720, 34, 5330], [2330, 34, 5370]], at: [[2700, 6, 5250], [3350, 6, 5020]],
+      { hour: 5.97, rate: 14, dur: 13, eye: [[1700, 46, 5330], [2010, 38, 5192]], at: [[2900, 3, 5193], [3250, 3, 5100]],
         cap: ['138,000 personas entran a San Juan cada mañana', 'commuters driving in every weekday · U.S. Census ACS'] },
       { hour: 6.1, rate: 1, dur: 18, ride: [2700, 5273, 420] },
-      { hour: 6.2, rate: 20, dur: 16, eye: [[5330, 22, 5400], [5030, 310, 6050]], at: [[5760, 45, 4520], [5820, 70, 4300]],
+      { hour: 6.25, rate: 20, dur: 16, eye: [[4950, 40, 4250], [5060, 170, 4340]], at: [[6250, 80, 4600], [6260, 60, 4620]],
         cap: ['Puerto Rico en movimiento', 'Cada carro es un viaje simulado · every car is a simulated trip'] },
     ];
   }
+  // the trade-wind cumulus over the island, lit by the dawn (unless the link set the clouds itself)
+  clouds() {
+    const a = this.app.atmosphere;
+    if (new URLSearchParams(location.search).has('clouds') || innerWidth < 700) return; // (heavy: not on a phone)
+    a.coverage = 0.3; a.quality = 'medium'; a.cloudsOn = true;
+  }
+  // The apagón as a scene: high over Hato Rey, looking south to Monacillos as the grid stumbles and the dark rolls
+  // towards the camera; then down at Ponce de León and Roosevelt, its signals dead; then the city two hours on, locked solid
+  apagonShots(at) {
+    const h = (s) => (at + s) / 3600;
+    return [
+      { hour: h(-9), rate: 1, dur: 21, eye: [[4150, 560, 2350], [4250, 520, 2750]], at: [[4450, 0, 7600], [4450, 0, 7700]],
+        cap: ['5:45 a.m.', 'Monacillos, Río Piedras · el centro de transmisión'], capAt: 1.5 },
+      { hour: h(70), rate: 2, dur: 15, eye: [[6345, 15, 4690], [6318, 10, 4660]], at: [[6255, 3, 4591], [6250, 2, 4586]],
+        cap: ['Ponce de León y Roosevelt · sin semáforos', 'every traffic signal in the city is dark'] },
+      { hour: 7.3, rate: 30, dur: 15, map: true, eye: [[2600, 900, 3600], [3000, 760, 3900]], at: [[4700, 0, 5600], [4800, 0, 5700]],
+        cap: ['7:18 a.m. · sin semáforos', 'the rush hour, with no signals: red is the jam'] },
+    ];
+  }
+  playApagon(at) {
+    if (innerWidth < 700) return false; // (a phone: just the clock and the caption)
+    this.reel = this.apagonShots(at); this.reelName = 'apagon';
+    this.directing = true; this.app.controls.enabled = false;
+    this.bars.classList.add('on'); this.skip.style.display = 'block';
+    this.app.atmosphere.vignette.darkness = 0.55;
+    this.shot = -1; this.cut(0);
+    return true;
+  }
   beginIntro() {
+    this.clouds();
+    this.reel = this.shots; this.reelName = 'intro';
     this.directing = true; this.app.controls.enabled = false;
     this.bars.classList.add('on'); this.skip.style.display = 'block';
     this.app.atmosphere.vignette.darkness = 0.55; this.app.atmosphere.grain.blendMode.opacity.value = 0.08;
@@ -221,7 +252,7 @@ export class Experience {
   }
   // to shot k, through black
   async cut(k) {
-    const shots = this.shots;
+    const shots = this.reel;
     this.fade.classList.add('on'); this.caption(null);
     await new Promise((r) => setTimeout(r, 750));
     if (!this.directing) return;
@@ -241,12 +272,15 @@ export class Experience {
     }
     if (s.ride) {
       const cars = sim.carsNear(T, s.ride[0], s.ride[1], s.ride[2], s.dur + 20).filter((c) => c.moving && Math.sin(c.heading) > 0.3);
-      // a commuter from beyond the city, if there is one in reach: the story of the morning
-      const pick = cars.find((c) => { const t = this.trip(c.vid); return t && t.kind === 'work' && t.from && t.from !== 'San Juan'; }) ?? cars[0];
+      // a commuter from beyond the city, if there is one in reach (on the expressway, at its speed, if one is):
+      // the story of the morning
+      const commuter = (c) => { const t = this.trip(c.vid); return t && t.kind === 'work' && t.from && t.from !== 'San Juan'; };
+      const pick = cars.find((c) => c.speed > 16 && commuter(c)) ?? cars.find(commuter) ?? cars[0];
       if (pick) app.ride(pick.vid);
     }
     app.clockTime.rate = s.rate;
-    if (s.cap) setTimeout(() => this.directing && this.shot === k && this.caption(s.cap), 900);
+    if (app.speedMap) { app.speedMap.on = !!s.map; this.mapButton(); }
+    if (s.cap) setTimeout(() => this.directing && this.shot === k && this.caption(s.cap), (s.capAt ?? 0.9) * 1000);
     this.fade.classList.remove('on');
   }
   place(s, f) {
@@ -263,17 +297,18 @@ export class Experience {
     this.cap.classList.add('on');
   }
   endIntro(fromTitle = false) {
-    const app = this.app;
-    this.directing = false; this.shot = -1;
+    const app = this.app, reel = this.reelName;
+    this.directing = false; this.shot = -1; this.reelName = null;
     this.bars.classList.remove('on'); this.skip.style.display = 'none'; this.caption(null);
     this.fade.classList.remove('on');
     app.atmosphere.vignette.darkness = 0.38; app.atmosphere.grain.blendMode.opacity.value = 0.05;
     app.stopRiding();
+    if (reel === 'apagon') { app.controls.enabled = true; app.clockTime.rate = 6; this.dock.classList.remove('hidden'); return; } // (where the scene ended)
     if (!fromTitle) { app.controls.enabled = true; app.clockTime.live = false; app.clockTime.rate = 6; }
     else { app.clockTime.rate = Math.max(app.clockTime.rate, 6); } // (the morning unfolding, not standing still)
     // the view the opening ended on, as a free camera over the Milla de Oro
     if (!fromTitle) {
-      const s = this.shots[3];
+      const s = this.shots.at(-1);
       app.clockTime.hour = Math.max(app.clockTime.hour, s.hour + 0.05);
       this.place(s, 1);
     }
@@ -313,6 +348,7 @@ export class Experience {
     this.scenario = name; this.wave = null; this.marks();
     await this.loadStories(this.app.sim);
     const at = this.app.sim.index.apagon;
+    if (at != null && !this.directing && this.playApagon(at)) return;
     if (at != null) {
       const T = this.app.clockTime.hour * 3600;
       // before the failure: bring the clock to a minute before it, so the moment can be watched
@@ -344,6 +380,10 @@ export class Experience {
       for (const [c, m, f] of v.points) { g.fillStyle = f <= 2 ? '#ff7a45' : f <= 4 ? '#f2c94c' : '#5fe0d0'; g.beginPath(); g.arc(sx(c), sy(m), 5, 0, Math.PI * 2); g.fill(); }
     }
   }
+  mapButton() {
+    const b = this.dock.querySelector('.map'), on = !!this.app.speedMap?.on;
+    b.classList.toggle('on', on); b.style.background = on ? 'rgba(255,122,69,0.45)' : '';
+  }
   toggleSound() { if (this.sound.on) this.sound.stop(); else this.sound.start(); this.setSoundButton(); }
   setSoundButton() { this.dock.querySelector('.snd').textContent = this.sound.on ? '🔊 Sonido' : '🔈 Sin sonido'; }
 
@@ -352,7 +392,7 @@ export class Experience {
     const app = this.app, sim = app.sim, T = app.clockTime.hour * 3600;
     // the opening's camera
     if (this.directing && this.shot >= 0) {
-      const s = this.shots[this.shot];
+      const s = this.reel[this.shot];
       this.shotT += dt;
       if (s.eye) this.place(s, this.shotT / s.dur);
       if (this.shotT > s.dur && !this.cutting) { this.cutting = true; this.cut(this.shot + 1).then(() => { this.cutting = false; }); }
@@ -365,7 +405,7 @@ export class Experience {
     // the clock
     const c = clockLabel(app.clockTime.hour);
     this.dock.querySelector('.t').textContent = c.t; this.dock.querySelector('.ap').textContent = c.ap;
-    this.dock.querySelector('.day').textContent = 'martes';
+    this.dock.querySelector('.day').textContent = sim && !sim.ready(T) ? 'cargando…' : 'martes'; // (the clock waiting for the cars)
     if (!this.scrubbing) this.timeInput.value = String(Math.round(app.clockTime.hour * 3600));
     this.dock.querySelectorAll('.speed button').forEach((b) => b.classList.toggle('on', Number(b.dataset.r) === app.clockTime.rate));
     // the apagón: the darkness spreads from where the grid failed, at a few hundred metres a second

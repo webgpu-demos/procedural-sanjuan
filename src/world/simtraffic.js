@@ -64,11 +64,11 @@ export class SimTraffic {
     this.requests = new Map();
     this.worker.onmessage = ({ data: { id, W, error } }) => {
       const w0 = this.requests.get(id); this.requests.delete(id);
-      if (error || !W) { console.warn('track window', w0, error); this.windows.delete(w0); return; }
+      if (error || !W) { console.warn('track window', w0, error); this.windows.delete(w0); this.failed.set(w0, performance.now()); return; }
       W.cursor = new Uint16Array(W.n); W.heading = new Float32Array(W.n).fill(NaN);
       this.carry(w0, W); this.windows.set(w0, W);
     };
-    this.nextRequest = 0;
+    this.nextRequest = 0; this.failed = new Map(); // window start -> when it last failed (tried again after a while)
     this.group = new THREE.Group(); this.group.name = 'simulated traffic';
     this.stats = { active: 0, near: 0, mid: 0, lights: 0 };
     this.headlights = 5;
@@ -153,11 +153,20 @@ export class SimTraffic {
   windowStart(T) { return this.begin + Math.floor((T - this.begin) / this.index.window) * this.index.window; }
   ensure(w0) {
     if (w0 < this.begin || w0 >= this.end || this.windows.has(w0)) return;
+    if (performance.now() - (this.failed.get(w0) ?? -1e9) < 5000) return;
     const entry = this.index.windows.find((w) => w[0] === w0);
     if (!entry) return;
     this.windows.set(w0, 'loading');
     const id = ++this.nextRequest; this.requests.set(id, w0);
     this.worker.postMessage({ id, url: new URL(`${this.base}/${entry[1]}`, location.href).href });
+  }
+
+  // Is the window under the clock here? (the clock waits for it, rather than the cars standing still while it runs on)
+  ready(T) {
+    if (T < this.begin || T >= this.end) return true;
+    const w0 = this.windowStart(T); this.ensure(w0);
+    const W = this.windows.get(w0);
+    return (!!W && W !== 'loading') || this.failed.has(w0);
   }
 
   // A car keeps the way it faced at the end of the window before (a long wait in a jam can span a whole window).
@@ -189,7 +198,7 @@ export class SimTraffic {
     const span = this.index.window;
     this.ensure(this.windowStart(T)); this.ensure(this.windowStart(T) + span); this.ensure(this.windowStart(T) - span);
     // drop windows far from the clock
-    for (const k of this.windows.keys()) if (Math.abs(k - this.windowStart(T)) > span * 2) this.windows.delete(k);
+    for (const k of this.windows.keys()) if (Math.abs(k - this.windowStart(T)) > span) this.windows.delete(k); // (a rush-hour window decodes to tens of MB)
     if (T < this.begin || T >= this.end) { this.hide(); return; }
     if (!W || W === 'loading') return; // (the window is on its way: the cars hold where they were for a frame or two)
 
@@ -206,14 +215,21 @@ export class SimTraffic {
       const vid = W.vid[i], followed = vid === this.followed;
       // (beyond the boxes only the lamps show, and only from dusk to dawn)
       if (!followed && (d2 > LIGHTS * LIGHTS || (d2 > MID * MID && night <= 0.02))) continue;
-      // heading and speed from where it was half a second ago and will be half a second on
-      const hadQ = SimTraffic.at(W, i, T - 0.5, q), hadR = SimTraffic.at(W, i, T + 0.5, r);
-      SimTraffic.at(W, i, T, p); // (restore the cursor)
-      const hx = (hadR ? r[0] : p[0]) - (hadQ ? q[0] : p[0]), hz = (hadR ? r[2] : p[2]) - (hadQ ? q[2] : p[2]);
-      const moved = Math.hypot(hx, hz), speed = moved / ((hadQ ? 0.5 : 0) + (hadR ? 0.5 : 0) || 1);
-      let heading = W.heading[i];
-      if (moved > 0.02) { heading = Math.atan2(hx, hz); W.heading[i] = heading; }
-      else if (Number.isNaN(heading)) heading = W.heading[i] = this.restHeading(W, i, T);
+      let heading = W.heading[i], speed = 0, hadQ = false;
+      if (d2 > MID * MID && !followed) {
+        // only its lamps show: the way along its stretch of track is near enough (tens of thousands of these)
+        const a = (W.start[i] + W.cursor[i]) * 4, K = W.K, hx = K[a + 5] - K[a + 1], hz = K[a + 7] - K[a + 3];
+        if (hx * hx + hz * hz > 0.01) heading = W.heading[i] = Math.atan2(hx, hz);
+        else if (Number.isNaN(heading)) heading = W.heading[i] = this.restHeading(W, i, T);
+      } else {
+        // heading and speed from where it was half a second ago and will be half a second on
+        hadQ = SimTraffic.at(W, i, T - 0.5, q); const hadR = SimTraffic.at(W, i, T + 0.5, r);
+        SimTraffic.at(W, i, T, p); // (restore the cursor)
+        const hx = (hadR ? r[0] : p[0]) - (hadQ ? q[0] : p[0]), hz = (hadR ? r[2] : p[2]) - (hadQ ? q[2] : p[2]);
+        const moved = Math.hypot(hx, hz); speed = moved / ((hadQ ? 0.5 : 0) + (hadR ? 0.5 : 0) || 1);
+        if (moved > 0.02) { heading = Math.atan2(hx, hz); W.heading[i] = heading; }
+        else if (Number.isNaN(heading)) heading = W.heading[i] = this.restHeading(W, i, T);
+      }
       // braking: slower than half a second ago by more than ~1.2 m/s², or standing in a queue
       let brake = 0;
       if (hadQ && (d2 < NEAR * NEAR || followed || (night > 0.02 && d2 < 2000 * 2000))) { // (only where a brake light can be seen)
@@ -327,7 +343,8 @@ export class SimTraffic {
       const K = W.K, last = (W.start[i] + W.count[i] - 1) * 4;
       if (K[last] < T + until && K[last] < this.windowStart(T) + this.index.window - 1) continue; // (arrives too soon)
       if (!SimTraffic.at(W, i, T + 2, q)) continue;
-      out.push({ vid: W.vid[i], x: p[0], z: p[2], heading: Math.atan2(q[0] - p[0], q[2] - p[2]), moving: Math.hypot(q[0] - p[0], q[2] - p[2]) > 4 });
+      const d = Math.hypot(q[0] - p[0], q[2] - p[2]);
+      out.push({ vid: W.vid[i], x: p[0], z: p[2], heading: Math.atan2(q[0] - p[0], q[2] - p[2]), moving: d > 4, speed: d / 2 });
     }
     return out;
   }

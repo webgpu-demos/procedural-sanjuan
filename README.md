@@ -89,7 +89,10 @@ city's own road graph and played back in the browser: some 360,000 car trips and
 opens with a title and four shots (the city before dawn, the headlights on PR-22, one commuter's ride, the sun
 coming up behind the Milla de Oro: it rises about 6:19 AST in late October); then the clock and its time line,
 the speed of time, the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
-wave from the Monacillos transmission centre, and the rush is simulated without them), riding with any car
+wave from the Monacillos transmission centre, and the rush is simulated without them, every dark signal an
+all-way stop as the law has it; it plays as a scene of
+its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two hours
+on), riding with any car
 (click it: where it comes from, why it drives, its delay), the jam map, the lancha crossing to Cataño on its
 timetable, and the sound of the morning (coquíes before dawn, the traffic, horns in the jams). `G` brings back
 the settings panel; `?xp=0` skips the experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
@@ -100,7 +103,7 @@ npm run sim:data                     # Census: commuting flows, departure times,
 npm run sim:net                      # roads.json -> SUMO network; buildings as trip ends; FHWA counts
 npm run sim:demand                   # the morning's trips (data/sim/<area>/morning/trips.xml)
 npm run sim:run                      # simulate and record -> public/tiles/<area>/sim/morning/
-npm run sim:run -- --scenario=apagon # the blackout, from the morning's state at 6:15
+npm run sim:run -- --scenario=apagon # the blackout, from the morning's state at 5:45
 npm run sim:validate                 # simulated vs counted traffic (GEH) -> validation.json
 ```
 
@@ -122,9 +125,12 @@ npm run sim:validate                 # simulated vs counted traffic (GEH) -> val
   the kerb lane, calling at each until its timetabled departure; the Cataño ferry for the client.
 - **Simulation and recording** (`run.py`): microscopic, every car with its own car-following and continuous
   lane changes. Each car's track is kept to the fewest points that hold it within 30 cm sideways and 1.5 m
-  along its way of where SUMO had it at every second, and packed into gzipped five-minute windows
-  (`w_<t>.bin.gz`, decoded in a worker), with the road speeds (`speeds.bin`), every signal's changes
-  (`signals.json`) and why each car drives (`trips.bin`). The apagón starts from the morning's saved state.
+  along its way of where SUMO had it at every second, and packed into gzipped windows of two and a half minutes
+  (`w_<t>.bin.gz`, decoded in a worker; in columns, each step stored as what is left after guessing it from
+  the step before, a third smaller than packed as rows), with the road speeds (`speeds.bin`), every signal's changes
+  (`signals.json`) and why each car drives (`trips.bin`). The apagón starts from the morning's saved state
+  and switches every signal to SUMO's `off` program, on a copy of the network whose dark signals are all-way
+  stops (`--dark=priority` keeps netconvert's priorities instead).
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
   direction is matched to the counted line (which runs down the median of a divided road). A run at a quarter

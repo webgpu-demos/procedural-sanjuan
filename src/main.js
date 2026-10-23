@@ -394,7 +394,7 @@ function ride(vid) {
   sim.followed = vid; chase.on = true; chase.fresh = true; chase.yaw = 0;
   controls.enabled = false;
 }
-function stopRiding() { if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; }
+function stopRiding() { if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; atmosphere.focus(null); }
 function rideRandom() {
   const W = sim.windows.get(sim.windowStart(clockTime.hour * 3600));
   if (!W || W === 'loading') return;
@@ -447,6 +447,7 @@ function chaseCamera(dt) {
   controls.target.copy(chase.target);
   camera.position.copy(chase.eye);
   camera.lookAt(chase.target);
+  atmosphere.focus(camera.position.distanceTo(chase.target)); // (the car sharp, the city behind it soft)
 }
 
 addEventListener('resize', () => {
@@ -479,7 +480,7 @@ let loading = true;
 function frame(_, manual) {
   const dt = manual ?? Math.min(clock.getDelta(), 0.1); // (manual: a step driven from outside, for testing with the page hidden)
   renderer.info.reset();
-  clockTime.tick(dt);
+  clockTime.tick(sim && simOn() && !sim.ready(clockTime.hour * 3600) ? 0 : dt); // (the clock waits for the cars' next window)
   const directed = xp?.directing;
   if (!chase.on && !directed) { keyboardPan(dt); wheelZoom(dt); controls.update(); }
 

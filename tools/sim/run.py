@@ -9,7 +9,7 @@ shows) and ALONG metres along its way (a little early or late: that does not). A
 clearing a jam) is split there: the client hides it over the jump.
 
   public/tiles/<area>/sim/<scenario>/index.json  windows, types, municipios, the run's statistics
-  .../w_<t>.bin.gz  the cars on the road in each five-minute window: see encode() for the layout
+  .../w_<t>.bin.gz  the cars on the road in each window of WINDOW seconds: see window() for the layout
   .../speeds.bin    mean speed / free speed of every edge per 5 min (u8 / 254; 255 no cars), for the jam map
   .../trips.bin     per car: why it drives and between which municipios (the follow camera tells it)
   .../tripinfo.bin  per car: its delay and its distance
@@ -34,7 +34,7 @@ NET = os.path.join(SIM, f'{AREA}.net.xml.gz')
 BEGIN, END = 4.5 * 3600, float(args.get('end', 10.25)) * 3600
 APAGON_AT = 5.75 * 3600  # (5:45: still dark, the city lit; sunrise in late October is about 6:19 AST; the rush still to come)
 CROSS, ALONG, RISE, MAX_GAP = 0.3, 1.5, 0.6, 30.0
-WINDOW = 300                  # seconds of the morning per file
+WINDOW = 150                  # seconds of the morning per file (a rush-hour one decodes to ~40 MB; it must divide APAGON_AT - BEGIN)
 TYPES = ['compact', 'sedan', 'suv', 'pickup', 'truck', 'bus']  # (src/world/traffic.js TYPES, in order)
 t0 = time.time()
 def log(m): print(f'{time.time() - t0:7.1f}s {m}', flush=True)
@@ -52,19 +52,30 @@ apagon = SCEN == 'apagon'
 STATE = os.path.join(SIM, 'morning', f'state_{int(APAGON_AT)}.xml.gz')  # the normal morning, as it stood when the grid failed
 begin = APAGON_AT if apagon and os.path.exists(STATE) else BEGIN
 extra = []
+SUMO_NET = NET
 if apagon:
-    # the grid fails: every signal switches to a program of one phase, all "O" (no signal: the junction's rules
-    # of way apply), at the moment of the failure
+    # the grid fails: at that moment every signal switches to SUMO's "off" program (an explicit program of "O"
+    # phases is refused). A dark signal then shows each link's off state from the network: by default "w", an
+    # all-way stop (--dark=allway: each driver stops, then goes in turn; how the law has it, and near enough how
+    # San Juan drives it), else netconvert's "O" go / "o" give way by the roads' priorities (--dark=priority: the
+    # avenue carries on as if it had the green). The all-way stop runs on a copy of the network with the off
+    # state of every signalled connection set to "w" (the same lanes and ids, so the morning's state loads).
+    if args.get('dark', 'allway') == 'allway':
+        import re
+        SUMO_NET = os.path.join(WORK, 'allway.net.xml.gz')
+        off = re.compile(r'(<connection [^>]* tl="[^"]+"[^>]* state=")[oO](")')
+        with gzip.open(NET, 'rt') as src, gzip.open(SUMO_NET, 'wt', compresslevel=1) as dst:
+            for line in src: dst.write(off.sub(r'\1w\2', line))
     with open('apagon.add.xml', 'w') as f:
         f.write('<additional>\n')
-        for tl, n in TLS.items(): f.write(f'  <tlLogic id="{tl}" programID="off" type="static" offset="0"><phase duration="86400" state="{"O" * n}"/></tlLogic>\n')
+        for tl in TLS: f.write(f'  <tlLogic id="{tl}" programID="off" type="static" offset="0"/>\n')
         f.write(f'  <WAUT id="grid" refTime="0" startProg="0"><wautSwitch time="{APAGON_AT + 1:.0f}" to="off"/></WAUT>\n')
         for tl in TLS: f.write(f'  <wautJunction wautID="grid" junctionID="{tl}"/>\n')
         f.write('</additional>\n')
     extra = [os.path.join(WORK, 'apagon.add.xml')]
 ROUTES = os.path.join(SIM, DEMAND, 'routes.rou.xml')  # routes made beforehand (route.py)
 STOPS = os.path.join(SIM, DEMAND, 'busstops.add.xml')  # the AMA's stops (gtfs.py)
-cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', NET, '-r', ROUTES if os.path.exists(ROUTES) else os.path.join(SIM, DEMAND, 'trips.xml'),
+cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if os.path.exists(ROUTES) else os.path.join(SIM, DEMAND, 'trips.xml'),
        '--begin', str(begin), '--end', str(END),
        '--additional-files', ','.join([os.path.join(WORK, 'outputs.add.xml')] + ([STOPS] if os.path.exists(STOPS) else []) + extra),
        '--time-to-teleport', '240', '--ignore-route-errors', '--max-depart-delay', '900',
@@ -98,28 +109,37 @@ for ev, el in ET.iterparse('tripinfo.xml', events=('end',)):
 kind_of = lambda v: TYPES.index(vtype[v]) if vtype.get(v) in TYPES else 0
 
 # ---------------------------------------------------------------- tracks
-def simplify(t, P):
-    """Indices to keep: Douglas-Peucker on the synchronized error (where the car is at the same moment), split
-    into sideways, along-the-way and height parts with their own tolerances; a knot at least every MAX_GAP s."""
-    n = len(t); keep = np.zeros(n, bool); keep[0] = keep[-1] = True
-    stack = [(0, n - 1)]
-    while stack:
-        i, j = stack.pop()
-        if j <= i + 1: continue
-        k = np.arange(i + 1, j)
-        f = ((t[k] - t[i]) / (t[j] - t[i]))[:, None]
-        err = P[k] - (P[i] + (P[j] - P[i]) * f)
-        ux, uy = P[j, 0] - P[i, 0], P[j, 1] - P[i, 1]; ul = math.hypot(ux, uy)
-        if ul > 0.5:
-            ux, uy = ux / ul, uy / ul
-            along = np.abs(err[:, 0] * ux + err[:, 1] * uy); cross = np.abs(err[:, 0] * uy - err[:, 1] * ux)
-        else:  # (standing, or nearly: any movement counts)
-            along = cross = np.hypot(err[:, 0], err[:, 1])
+def simplify(t, P, first):
+    """Which samples to keep as knots, for every track of a batch at once (first: where each track starts).
+    Douglas-Peucker on the synchronized error (where the car is at the same moment), split into sideways,
+    along-the-way and height parts with their own tolerances, and a knot at least every MAX_GAP s; breadth first,
+    every track's spans in one go (the same knots as depth first, 5x faster than track by track)."""
+    n = len(t); idx = np.arange(n)
+    keep = first.copy(); keep[np.r_[np.flatnonzero(first)[1:] - 1, n - 1]] = True  # (each track's ends)
+    open_ = ~keep  # samples in spans still to look at
+    while True:
+        c = np.flatnonzero(open_)
+        if not len(c): break
+        L = np.maximum.accumulate(np.where(keep, idx, 0))[c]                  # the knot before
+        R = np.minimum.accumulate(np.where(keep, idx, n)[::-1])[::-1][c]      # and after
+        f = ((t[c] - t[L]) / (t[R] - t[L]))[:, None]
+        err = P[c] - (P[L] + (P[R] - P[L]) * f)
+        ux, uy = P[R, 0] - P[L, 0], P[R, 1] - P[L, 1]; ul = np.hypot(ux, uy)
+        moving = ul > 0.5; ul = np.where(moving, ul, 1); ux, uy = ux / ul, uy / ul  # (standing, or nearly: any movement counts)
+        along = np.abs(err[:, 0] * ux + err[:, 1] * uy); cross = np.abs(err[:, 0] * uy - err[:, 1] * ux)
+        h = np.hypot(err[:, 0], err[:, 1]); along = np.where(moving, along, h); cross = np.where(moving, cross, h)
         e = np.maximum(np.maximum(cross / CROSS, along / ALONG), np.abs(err[:, 2]) / RISE)
-        m = int(e.argmax())
-        if e[m] > 1 or t[j] - t[i] > MAX_GAP:
-            if e[m] <= 1: m = len(k) // 2  # (only too long: split it in the middle)
-            keep[k[m]] = True; stack += [(i, int(k[m])), (int(k[m]), j)]
+        # per span: its worst sample (the first, on a tie)
+        g0 = np.flatnonzero(np.r_[True, L[1:] != L[:-1]]); glen = np.diff(np.r_[g0, len(c)])
+        gmax = np.maximum.reduceat(e, g0)
+        hit = np.flatnonzero(e == np.repeat(gmax, glen)); gid = np.repeat(np.arange(len(g0)), glen)[hit]
+        worst = c[hit[np.r_[True, gid[1:] != gid[:-1]]]]
+        Lg, Rg = L[g0], R[g0]
+        split = gmax > 1
+        long_ = ~split & (t[Rg] - t[Lg] > MAX_GAP)  # (only too long: split it in the middle)
+        new = np.r_[worst[split], (Lg + 1 + (Rg - Lg - 1) // 2)[long_]]
+        keep[new] = True
+        open_[c[np.repeat(~(split | long_), glen)]] = False; open_[new] = False
     return keep
 
 finished = []   # (vehicle, type, knots float32 [n, 4]: t, x, y, z)
@@ -148,32 +168,34 @@ for batch in reader:
     if carry is not None: t, v, x, y, z = (np.concatenate([a, b]) for a, b in zip(carry, (t, v, x, y, z)))
     tmax = t.max()
     o = np.lexsort((t, v)); t, v, x, y, z = t[o], v[o], x[o], y[o], z[o]
-    starts = np.flatnonzero(np.r_[True, v[1:] != v[:-1]]); ends = np.r_[starts[1:], len(v)]
+    P = np.column_stack([x, y, z])
+    # a track per car, split where it teleports or goes missing for more than a second
+    newv = np.r_[True, v[1:] != v[:-1]]
+    first = newv | np.r_[False, (np.diff(t) > 1.5) | (np.hypot(np.diff(x), np.diff(y)) > 60)]
+    kidx = np.flatnonzero(simplify(t, P, first)); KN = np.column_stack([t[kidx], P[kidx]])
+    starts = np.flatnonzero(first); ends = np.r_[starts[1:], len(t)]
+    ks, ke = np.searchsorted(kidx, starts), np.searchsorted(kidx, ends)
+    on = np.r_[newv, True][ends] & (t[ends - 1] >= tmax - 1.0)  # the car's last track here, and still driving
     keep_rows = []
-    for a, b in zip(starts, ends):
-        vid = int(v[a]); T = t[a:b]; P = np.column_stack([x[a:b], y[a:b], z[a:b]])
-        # teleports, or a car missing for more than a second: split there
-        cut = np.flatnonzero((np.diff(T) > 1.5) | (np.hypot(*np.diff(P[:, :2], axis=0).T) > 60)) + 1
-        segs = np.split(np.arange(len(T)), cut)
-        for k, seg in enumerate(segs):
-            last = k == len(segs) - 1
-            if len(seg) < 2:
-                if last and T[seg[-1]] >= tmax - 1.0: keep_rows.append(a + seg[-1])
-                elif k == 0 and vid in pieces: close(vid, np.column_stack([T[seg], P[seg]]))  # (its track ends here)
-                continue
-            knots = np.column_stack([T[seg], P[seg]])[simplify(T[seg], P[seg])]
-            if last and T[seg[-1]] >= tmax - 1.0:
-                # still driving at the end of the batch: keep what there is, carry its last sample on
-                pieces.setdefault(vid, []).append(knots if vid not in pieces else knots[1:])
-                keep_rows.append(a + seg[-1])
-            else:
-                close(vid, knots)
+    for a, b, k0, k1, fs, op in zip(starts.tolist(), ends.tolist(), ks.tolist(), ke.tolist(), newv[starts].tolist(), on.tolist()):
+        vid = int(v[a])
+        if b - a < 2:
+            if op: keep_rows.append(a)
+            elif fs and vid in pieces: close(vid, KN[k0:k1])  # (its track ends here)
+            continue
+        if op:
+            # still driving at the end of the batch: keep what there is, carry its last sample on
+            if vid in pieces: pieces[vid].append(KN[k0 + 1:k1])  # (each piece starts where the last ended)
+            else: pieces[vid] = [KN[k0:k1]]
+            keep_rows.append(b - 1)
+        else:
+            close(vid, KN[k0:k1])
     kr = np.array(keep_rows, dtype=np.int64)
     carry = (t[kr], v[kr], x[kr], y[kr], z[kr])
     if rows // 20_000_000 != (rows - len(batch)) // 20_000_000:
         log(f'tracks: {rows / 1e6:.0f} M samples read, up to {t.max() / 3600:.2f} h, {len(finished)} tracks, {len(pieces)} on the road')
 # what is still on the road at the end
-for vid in list(pieces): close(vid, pieces[vid].pop() if pieces[vid] else np.zeros((0, 4)))
+for vid in list(pieces): close(vid, np.zeros((1, 4)))  # (its pieces, as they are)
 log(f'{len(finished)} tracks from {rows / 1e6:.0f} M samples; peak {peak} cars on the road at once')
 
 # ---------------------------------------------------------------- what each signal showed
@@ -185,27 +207,40 @@ for ev, el in ET.iterparse('tls.xml', events=('end',)):
         el.clear()
 
 # ---------------------------------------------------------------- pack: windows of the morning
-# window file: u32 'SJT1' | u32 count | f32 t0 | f32 t1 | per track:
-#   u32 vehicle | u8 type | u8 0 | u16 knots | f32 x0 | f32 y0 | f32 z0 | f32 t0 |
-#   knots-1 x (u16 dt 0.1 s | i16 dx 5 cm | i16 dy 5 cm | i16 dz 1 cm), each from the previous knot as decoded
-# (SUMO's frame: y north; the client turns it into the world's z = -y)
+# window file 'SJT2', in columns (each squeezes well on its own):
+#   u32 'SJT2' | u32 tracks n | f32 t0 | f32 t1 | u32 steps m (the knots after each track's first)
+#   per track, column by column: u32 vehicle | u8 type | u16 knots | i32 x | i32 y | i32 z | i32 t (its first knot)
+#   per step, byte plane by byte plane: u16 dt | u24 dx | u24 dy | u24 dz
+# units: x, y 5 cm, z 1 cm, t 0.1 s (SUMO's frame: y north; the client turns it into the world's z = -y). A step is
+# stored as what is left over after guessing it from the step before (the same velocity for this step's dt; integer
+# arithmetic, so the client guesses exactly the same), zigzagged (small either way -> small).
+UNITS = np.array([10, 20, 20, 100])  # t, x, y, z
 def encode(knots, lo, hi):
-    """The knots of a track that matter in [lo, hi): one before, one after."""
+    """The knots of a track that matter in [lo, hi), on the grid: one before, one after."""
     t = knots[:, 0]
     i0 = max(0, int(np.searchsorted(t, lo, 'right')) - 1); i1 = min(len(t), int(np.searchsorted(t, hi, 'left')) + 1)
-    k = knots[i0:i1].astype(np.float64)
-    if len(k) < 2: return None
-    out = bytearray()
-    x, y, z, tt = k[0, 1], k[0, 2], k[0, 3], k[0, 0]
-    out += struct.pack('<ffff', x, y, z, tt)
-    rx, ry, rz, rt = np.float32(x), np.float32(y), np.float32(z), np.float32(tt)
-    rx, ry, rz, rt = float(rx), float(ry), float(rz), float(rt)
-    for row in k[1:]:
-        dt = int(round((row[0] - rt) * 10)); dx = int(round((row[1] - rx) * 20)); dy = int(round((row[2] - ry) * 20)); dz = int(round((row[3] - rz) * 100))
-        dt, dx, dy, dz = min(65535, max(0, dt)), max(-32768, min(32767, dx)), max(-32768, min(32767, dy)), max(-32768, min(32767, dz))
-        out += struct.pack('<Hhhh', dt, dx, dy, dz)
-        rt += dt / 10; rx += dx / 20; ry += dy / 20; rz += dz / 100
-    return len(k), out
+    if i1 - i0 < 2: return None
+    q = np.round(knots[i0:i1].astype(np.float64) * UNITS).astype(np.int64)
+    keep = np.r_[True, np.diff(q[:, 0]) > 0]  # (two knots on the same tenth of a second: one)
+    return q[keep] if keep.sum() >= 2 else None
+
+def window(tracks):
+    """[(vehicle, type, q)] -> the bytes after the magic: n, m, the track columns, the step planes."""
+    n = len(tracks); cnt = np.array([len(q) for _, _, q in tracks], np.int64)
+    Q = np.concatenate([q for _, _, q in tracks]); first = np.r_[0, np.cumsum(cnt)[:-1]]
+    d = np.diff(Q, axis=0); step = np.ones(len(d), bool); step[first[1:] - 1] = False; d = d[step]  # (within tracks)
+    # the guess: the step before's velocity over this step's dt (none for a track's first step)
+    lead = np.zeros(len(d), bool); lead[np.r_[0, np.cumsum(cnt - 1)[:-1]]] = True
+    dt, dtp = d[:, 0], np.r_[1, d[:-1, 0]]
+    guess = (d[:-1, 1:] * dt[1:, None] + (dtp[1:, None] >> 1)) // dtp[1:, None]
+    r = d[:, 1:].copy(); r[1:] -= np.where(lead[1:, None], 0, guess)
+    zz = (r << 1) ^ (r >> 63)
+    planes = [((dt >> s) & 255).astype(np.uint8) for s in (0, 8)] + [((zz[:, c] >> s) & 255).astype(np.uint8) for c in range(3) for s in (0, 8, 16)]
+    assert dt.max(initial=0) < 65536 and zz.max(initial=0) < 1 << 24
+    head = Q[first]
+    cols = [np.array([v for v, _, _ in tracks], '<u4'), np.array([k for _, k, _ in tracks], 'u1'), cnt.astype('<u2'),
+            head[:, 1].astype('<i4'), head[:, 2].astype('<i4'), head[:, 3].astype('<i4'), head[:, 0].astype('<i4')]
+    return struct.pack('<II', n, len(d)), b''.join(c.tobytes() for c in cols) + b''.join(p.tobytes() for p in planes)
 
 windows, total = [], 0
 if begin != BEGIN:
@@ -215,19 +250,19 @@ if begin != BEGIN:
 spans = sorted(((float(k[0, 0]), float(k[-1, 0]), i) for i, (_, _, k) in enumerate(finished)))
 for w0 in np.arange(begin, END, WINDOW):
     w1 = w0 + WINDOW
-    body, n = bytearray(), 0
+    tracks = []
     for a, b, i in spans:
         if a >= w1: break
         if b < w0: continue
         vid, typ, knots = finished[i]
-        enc = encode(knots, w0, w1)
-        if not enc: continue
-        cnt, data = enc
-        body += struct.pack('<IBBH', vid, typ, 0, cnt) + data; n += 1
+        q = encode(knots, w0, w1)
+        if q is not None: tracks.append((vid, typ, q))
+    nm, body = window(tracks) if tracks else (struct.pack('<II', 0, 0), b'')
     name = f'w_{int(w0)}.bin.gz'  # (gzipped: the client inflates it with DecompressionStream)
-    with gzip.open(os.path.join(OUT, name), 'wb', compresslevel=6) as f: f.write(struct.pack('<IIff', 0x31544a53, n, w0, w1) + body)
+    with gzip.open(os.path.join(OUT, name), 'wb', compresslevel=9) as f:
+        f.write(struct.pack('<I', 0x32544a53) + nm[:4] + struct.pack('<ff', w0, w1) + nm[4:] + body)
     size = os.path.getsize(os.path.join(OUT, name))
-    windows.append([int(w0), name, n, size]); total += size
+    windows.append([int(w0), name, len(tracks), size]); total += size
 log(f'{len(windows)} windows, {total / 1e6:.1f} MB (gzipped)')
 
 # ---------------------------------------------------------------- edge speeds every 5 min

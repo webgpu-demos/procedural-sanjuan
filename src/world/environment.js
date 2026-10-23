@@ -5,10 +5,12 @@ import { shared } from './materials.js';
 
 const SHADOW_SIZE = 4096;
 
-const DAY = { hemi: 0.55, sun: 3.4, sunColor: new THREE.Color(0xfff0dc), env: 1.0, exposure: 0.82, bloom: 0.12 };
+const DAY = { hemi: 0.55, sun: 3.4, sunColor: new THREE.Color(0xfff0dc), env: 1.0, exposure: 0.82, bloom: 0.12,
+  sky: new THREE.Color(0xfff4e6), ground: new THREE.Color(0x8a8172) };
+// (a dark night: the city is its lights, the walls and roofs only a little moonlit blue)
 const NIGHT = {
-  hemi: 0.42, sun: 0.32, sunColor: new THREE.Color(0x9fb4e0),
-  env: 1.0, exposure: 1.15, bloom: 0.45,
+  hemi: 0.085, sun: 0.18, sunColor: new THREE.Color(0x9fb4e0),
+  env: 0.4, exposure: 1.15, bloom: 0.45, sky: new THREE.Color(0x6f86b8), ground: new THREE.Color(0x1c2230),
 };
 
 const SUNSET = new THREE.Color(0xff9a52);
@@ -36,7 +38,7 @@ export class Environment {
     this.envScene.add(this.envSky);
     this.bakeEnvironment();
 
-    this.hemi = new THREE.HemisphereLight(0xfff4e6, 0x8a8172);
+    this.hemi = new THREE.HemisphereLight(DAY.sky, DAY.ground);
     scene.add(this.hemi);
 
     this.sun = new THREE.DirectionalLight();
@@ -111,6 +113,7 @@ export class Environment {
     const t = this.dark, lerp = (a, b) => a + (b - a) * t;
     this.sky.material.uniforms.uNight.value = t;
     this.hemi.intensity = lerp(DAY.hemi, NIGHT.hemi);
+    this.hemi.color.copy(DAY.sky).lerp(NIGHT.sky, t); this.hemi.groundColor.copy(DAY.ground).lerp(NIGHT.ground, t);
     this.sun.intensity = DAY.sun * this.daylight + NIGHT.sun * this.moonlight;
     this.sun.color.copy(DAY.sunColor).lerp(SUNSET, this.warmth).lerp(NIGHT.sunColor, this.moonlight);
     this.scene.environmentIntensity = lerp(DAY.env, NIGHT.env); // (the map itself darkens with the sky)
