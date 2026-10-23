@@ -366,6 +366,10 @@ export class Experience {
     this.truth.innerHTML = `<h3>¿Qué tan real es esto?</h3><div class="sub">How real is this</div>
       <div>${n} viajes simulados con SUMO, de las 4:30 a las 10:00, a partir de los flujos de viaje al trabajo del Censo (ACS),
       las horas de salida de cada municipio y los edificios de la ciudad. Se comparan con los conteos de tránsito de la FHWA (HPMS 2024).</div>
+      ${sim.index.share ? `<div class="not">Se simula el ${Math.round(sim.index.share * 100)}% de la demanda estimada: con toda, las
+      intersecciones de la red simulada (trazadas de OpenStreetMap, con semáforos supuestos) se trancan por completo hacia las 8. Es un
+      límite del modelo, no de la ciudad. · ${Math.round(sim.index.share * 100)}% of the estimated demand: with all of it, the simulated
+      network locks solid by 8 a.m.</div>` : ''}
       ${a ? `<div class="nums"><div>conteos comparados<b>${a.n}</b></div><div>GEH &lt; 5 (meta: 85%)<b>${Math.round(a.geh5 * 100)}%</b></div><div>simulado / contado<b>${a.ratio.toFixed(2)}</b></div></div>
       <canvas width="1040" height="380"></canvas>` : '<div class="not">(la validación de esta corrida no está disponible)</div>'}
       <div class="not">Lo que no es: tránsito en vivo ni carros reales. Es un modelo, calibrado con datos públicos y comparado con conteos;

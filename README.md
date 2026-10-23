@@ -117,7 +117,10 @@ npm run sim:validate                 # simulated vs counted traffic (GEH) -> val
   deliveries and through traffic on top.
 - **Network fixes that made the rush hour flow** (measured on a quarter of the demand, 7:00-7:15: waiting time
   down five-fold): acceleration lanes on the expressway ramps, junctions OSM draws as several nodes joined,
-  actuated signals, and San Juan merging (a driver at a give-way line takes a smaller gap after 90 s).
+  actuated signals, and San Juan merging (a driver at a give-way line takes a smaller gap after 90 s). And lane
+  drops: OSM draws a toll plaza as stretches of five or six lanes, and SUMO leaves the lanes beyond a narrowing
+  as dead ends drivers must leave at walking pace (PR-22 at Buchanan, six lanes into two and an exit, locked the
+  west of the city at the rush); an expressway is made at most one lane wider than the lanes leaving its end.
 - **Routes** (`route.py`): made beforehand with contraction hierarchies on the travel times a previous run
   measured (a step towards the routes drivers settle on). Re-planning during the run is an option
   (`--reroute=0.15`), off by default: SUMO then spends most of its time waiting (6.7x slower measured).

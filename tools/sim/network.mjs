@@ -55,6 +55,32 @@ roads.edges.forEach((e, i) => {
   }
 });
 
+// Lane drops. OSM draws a toll plaza as stretches of five, six or eight lanes, and where a road narrows SUMO
+// connects only as many lanes as there are beyond: the rest are dead ends whose drivers must find a gap at
+// walking pace, and at the rush hour the expressway stops there (PR-22 at Buchanan, 6 lanes into 2 and an exit,
+// locked the west side of the city). An expressway stretch is made at most one lane wider than all the lanes
+// leaving its end, from the end back upstream, so a road narrows a lane at a time as drivers merge.
+{
+  const fast = (e) => /^(motorway|trunk)(_link)?$/.test(roads.edges[+e.id.slice(1)].highway);
+  const main = (e) => !roads.edges[+e.id.slice(1)].highway.endsWith('_link');
+  const outOf = new Map();
+  for (const e of edges) if (fast(e)) (outOf.get(e.from) ?? outOf.set(e.from, []).get(e.from)).push(e);
+  let n = 0;
+  for (let pass = 0; pass < 6; pass++) {
+    let changed = 0;
+    for (const e of edges) {
+      if (!fast(e) || !main(e)) continue;
+      const on = (outOf.get(e.to) ?? []).filter((o) => o.id.slice(1) !== e.id.slice(1)); // (not the other way back)
+      if (!on.length) continue;
+      const room = on.reduce((s, o) => s + o.lanes, 0) + 1;
+      if (e.lanes > room) { e.lanes = room; changed++; }
+    }
+    n += changed;
+    if (!changed) break;
+  }
+  log(`${n} expressway stretches narrowed to the lanes beyond them`);
+}
+
 const signals = new Set(roads.signals);
 const nodeXml = ['<nodes>'];
 for (const k of used) {

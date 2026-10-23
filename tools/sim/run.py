@@ -323,6 +323,7 @@ with open(os.path.join(OUT, 'trips.bin'), 'wb') as f: f.write(rows)
 st = ET.parse('stats.xml').getroot()
 stats = {k: dict(st.find(k).attrib) for k in ('vehicles', 'teleports', 'vehicleTripStatistics') if st.find(k) is not None}
 json.dump({'version': 1, 'scenario': SCEN, 'begin': BEGIN, 'end': END, 'window': WINDOW, 'windows': windows,
+           'share': float(args['share']) if 'share' in args else None,  # (of the estimated demand: --share)
            'types': TYPES, 'kinds': KINDS, 'municipios': munis, 'edges': ids, 'speedInterval': 300, 'speedBegin': speed_begin,
            'apagon': APAGON_AT if apagon else None, 'stats': stats, 'peak': peak,
            'tripinfo': {'count': len(ti), 'meanDuration': float(np.mean([v[0] for v in ti.values()])) if ti else 0,
