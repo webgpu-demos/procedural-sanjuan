@@ -50,12 +50,13 @@ const USAGE = {
 
 // ---------------------------------------------------------------- renderer, scene, camera
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // (the frame-rate governor sets it from here on)
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.info.autoReset = false; // the composer renders several passes; count the whole frame
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false; // (redrawn when needed: see the frame loop)
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -188,6 +189,55 @@ camera.position.copy(controls.target).add(new THREE.Vector3().setFromSphericalCo
   dist, THREE.MathUtils.degToRad(90 - el), THREE.MathUtils.degToRad(az)));
 controls.update();
 
+// ---------------------------------------------------------------- the frame rate, kept up
+// When the frames come slower than 45 a second, the costliest things give way first, a step at a time: pixel
+// density, the clouds' detail, ambient occlusion, the window reflections and depth of field, the clouds, the
+// shadows' sharpness; when there is room again (57 or more for a while) they come back the same way, and a step
+// back up that does not hold is tried again only after longer. ?quality=high keeps everything, low starts lean.
+const governor = (() => {
+  const top = Math.min(devicePixelRatio, 1.5), lean = { ao: false, reflect: false, dof: false }; // (2x costs a quarter more for little)
+  const LEVELS = [ // (detail: how far off the small things are drawn, as a share of the full distance)
+    { ratio: top },
+    { ratio: top, clouds: 'low' },
+    { ratio: Math.min(top, 1.25), clouds: 'low' },
+    { ratio: Math.min(top, 1.25), clouds: 'low', ao: false, detail: 0.8 },
+    { ratio: Math.min(top, 1.25), clouds: 'low', ...lean, detail: 0.8 },
+    { ratio: 1, clouds: 'off', ...lean, detail: 0.6 },
+    { ratio: 1, clouds: 'off', ...lean, shadow: 2048, detail: 0.5 },
+    { ratio: 0.8, clouds: 'off', ...lean, shadow: 1024, detail: 0.4 },
+  ];
+  const q = params.get('quality');
+  // (it starts a little lean and earns the rest: a slow first minute is worse than a plain one)
+  const g = { auto: q !== 'high', level: q === 'low' ? 5 : q === 'high' ? 0 : 2, times: [], settle: 2, slow: 0, fast: 0, upWait: 5, raisedAt: -1e9 };
+  g.apply = () => {
+    const L = LEVELS[g.level];
+    g.detail = L.detail ?? 1;
+    if (renderer.getPixelRatio() !== L.ratio) { renderer.setPixelRatio(L.ratio); renderer.setSize(innerWidth, innerHeight); atmosphere.setSize(innerWidth, innerHeight); }
+    atmosphere.limit({ clouds: L.clouds ?? 'ultra', reflect: L.reflect !== false, dof: L.dof !== false });
+    ao.enabled = L.ao !== false;
+    const size = L.shadow ?? 4096;
+    if (env.sun.shadow.mapSize.x !== size) { env.sun.shadow.mapSize.set(size, size); env.sun.shadow.map?.dispose(); env.sun.shadow.map = null; }
+  };
+  g.update = (dt, busy) => {
+    if (!g.auto || document.hidden || !(dt > 0)) return;
+    g.times.push(dt); if (g.times.length > 45) g.times.shift();
+    if ((g.settle -= dt) > 0 || busy || g.times.length < 45) return;
+    const typical = [...g.times].sort((a, b) => a - b)[22]; // (the median: a tile arriving is one slow frame, not a slow scene)
+    g.slow = typical > 1 / 45 ? g.slow + dt : 0;
+    g.fast = typical < 1 / 57 ? g.fast + dt : 0;
+    const now = performance.now() / 1000;
+    if (g.slow > 1 && g.level < LEVELS.length - 1) {
+      if (now - g.raisedAt < 6) g.upWait = Math.min(120, g.upWait * 2); // (the step up did not hold)
+      g.level = Math.min(LEVELS.length - 1, g.level + (typical > 1 / 25 ? 2 : 1)); // (far too slow: two steps at once)
+      g.apply(); g.settle = 1.5; g.slow = g.fast = 0; g.times.length = 0;
+    } else if (g.fast > g.upWait && g.level > 0) {
+      g.level--; g.apply(); g.settle = 2; g.slow = g.fast = 0; g.times.length = 0; g.raisedAt = now;
+    }
+  };
+  g.apply();
+  return g;
+})();
+
 // ---------------------------------------------------------------- control panel
 let guiState, clockText, guiPanel;
 {
@@ -201,7 +251,7 @@ let guiState, clockText, guiPanel;
     get traffic() { return !!traffic.group.parent; }, set traffic(v) { if (v) scene.add(traffic.group); else scene.remove(traffic.group); },
     get trains() { return trains.visible; }, set trains(v) { trains.visible = v; },
     get photo() { return orthoWanted; }, set photo(v) { orthoWanted = v; shared.uOrthoOn.value = v && orthoLoaded ? 1 : 0; },
-    get shadows() { return env.sun.castShadow; }, set shadows(v) { env.sun.castShadow = v; },
+    shadowsWanted: true, get shadows() { return this.shadowsWanted; }, set shadows(v) { this.shadowsWanted = v; },
     get occlusion() { return ao.configuration.intensity > 0; }, set occlusion(v) { ao.configuration.intensity = v ? AO : 0; },
     bloom: true,
     // the whole city at once, or only what lies within the view radius of the point looked at (fewer tiles: more frames)
@@ -266,6 +316,7 @@ let guiState, clockText, guiPanel;
   quality.add(state, 'shadows');
   quality.add(state, 'occlusion').name('ambient occlusion');
   quality.add(state, 'bloom');
+  quality.add(governor, 'auto').name('auto quality (keeps the frame rate)');
 
   // The panel's settings are kept (in this browser) and are the same for every city: what is switched off in
   // one is off in the next. A URL that sets something itself (?time=, ?cars=, ...) is taken as it stands.
@@ -476,7 +527,28 @@ const hud = document.getElementById('hud');
 const clock = new THREE.Clock();
 let frames = 0, fpsTime = 0, fps = 0;
 
-let loading = true;
+let loading = true, shadowKey = '', shadowFrame = 0, detailFrame = 0;
+// Small things are not drawn far off: parked cars beyond 800 m and street furniture beyond 600 m are a pixel or
+// two each, yet most of the draw calls of a wide view (the governor brings them nearer on a slow machine)
+function cullSmall() {
+  const size = manifest.tileSize, c = camera.position, up = Math.max(0, c.y - streamer.ground(c.x, c.z));
+  for (const tile of scene.children) {
+    if (!tile.name.startsWith('tile ')) continue;
+    if (!tile.userData.small) {
+      tile.userData.small = [];
+      tile.traverse((o) => {
+        if (!o.isInstancedMesh) return;
+        const key = String((Array.isArray(o.material) ? o.material[0] : o.material).customProgramCacheKey?.() ?? '');
+        if (key.startsWith('car-parked')) tile.userData.small.push([o, 800]);
+        else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, 600]);
+      });
+      const [x, z] = tile.name.slice(5).split('_').map(Number);
+      tile.userData.centre = [(x + 0.5) * size, (z + 0.5) * size];
+    }
+    const [x, z] = tile.userData.centre, d = Math.max(0, Math.hypot(x - c.x, z - c.z, up) - size * 0.7);
+    for (const [o, far] of tile.userData.small) o.visible = d < far * governor.detail;
+  }
+}
 function frame(_, manual) {
   const dt = manual ?? Math.min(clock.getDelta(), 0.1); // (manual: a step driven from outside, for testing with the page hidden)
   renderer.info.reset();
@@ -490,6 +562,7 @@ function frame(_, manual) {
   if (camera.position.y < floor) camera.position.y = floor;
 
   streamer.update(controls.target, camera.position);
+  if (++detailFrame % 15 === 0) cullSmall();
   // the loading screen stays until the tiles around the view are in
   if (loading) {
     const size = manifest.tileSize, wanted = manifest.tiles.filter((t) => Math.hypot((t.x + 0.5) * size - controls.target.x, (t.z + 0.5) * size - controls.target.z) <= Math.min(streamer.radius, 900)).length || 1;
@@ -514,9 +587,20 @@ function frame(_, manual) {
   clockText.textContent = clockTime.label();
   env.update(dt);
   env.follow(controls.target, camera);
+  // Shadows: faded out once the sun is down (the moon's, at this strength, would not show) and then not drawn at
+  // all; by day the map is drawn again when its frustum moves, else every third frame (for the cars): it is a
+  // whole second pass over the city. (The light keeps casting: switching that recompiles every material.)
+  env.sun.castShadow = guiState.shadowsWanted;
+  env.sun.shadow.intensity = Math.min(1, env.daylight / 0.15);
+  {
+    const p = env.sun.target.position, key = `${p.x},${p.z},${env.shadowExtent}`;
+    renderer.shadowMap.needsUpdate = env.sun.shadow.intensity > 0 && (key !== shadowKey || ++shadowFrame % 3 === 0);
+    shadowKey = key;
+  }
   lampLight.update(scene, controls.target, camera.position, env.night);
   atmosphere.bloom.intensity = guiState.bloom ? env.bloom * 3 : 0;
   atmosphere.render(dt);
+  if (manual == null) governor.update(dt, loading);
   if (!loading) updateViewLink(performance.now());
 
   frames++; fpsTime += dt;
@@ -526,7 +610,7 @@ function frame(_, manual) {
   hud.textContent =
     `${manifest.name}  ${Math.abs(lat).toFixed(5)}${lat < 0 ? 'S' : 'N'} ${Math.abs(lon).toFixed(5)}${lon < 0 ? 'W' : 'E'}  ${controls.target.y.toFixed(1)} m\n` +
     `San Juan ${clockTime.label()}${clockTime.live ? ' (live)' : ''} · sun ${env.elevation.toFixed(0)}°\n` +
-    `${fps.toFixed(0)} fps · ${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)}M tris\n` +
+    `${fps.toFixed(0)} fps${governor.level ? ` (quality step ${governor.level})` : ''} · ${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)}M tris\n` +
     `tiles ${s.loaded}/${manifest.tiles.length}${streamer.pending ? ` (+${streamer.pending})` : ''} · ${s.buildings} buildings\n` +
     (sim && simOn() ? `simulated: ${sim.stats.active.toLocaleString()} cars on the road · ${sim.stats.near} near · ${clockTime.rate}×\n` : '') +
     (picked ? `\n▸ ${USAGE[picked.usage] ?? 'usage ' + picked.usage}, ${picked.height.toFixed(1)} m` +
@@ -536,4 +620,4 @@ function frame(_, manual) {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, xp, frame: (dt) => frame(0, dt) };
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, xp, governor, frame: (dt) => frame(0, dt) };

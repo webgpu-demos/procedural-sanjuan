@@ -94,7 +94,9 @@ all-way stop as the law has it; it plays as a scene of
 its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two hours
 on), riding with any car
 (click it: where it comes from, why it drives, its delay), the jam map, the lancha crossing to Cataño on its
-timetable, and the sound of the morning (coquíes before dawn, the traffic, horns in the jams). `G` brings back
+timetable, and a plena under it all (synthesized in the browser: three panderos, a güiro, a plucked cuatro and
+bass, fuller as the city fills; in the apagón the strings die with the power and the panderos play on). The
+frame rate is kept up by stepping quality down and back up as needed (`?quality=high` keeps it all). `G` brings back
 the settings panel; `?xp=0` skips the experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
 
 ```

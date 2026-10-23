@@ -36,3 +36,6 @@ desktop.ini
 # traffic simulation: Python environment and working files (re-create with npm run sim:setup / the sim scripts)
 .venv-sim/
 data/sim/
+
+# audio previews rendered for review
+samples/

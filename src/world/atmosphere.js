@@ -202,13 +202,27 @@ export class Atmosphere {
     this.composer.addPass(new EffectPass(camera, this.twilight, this.bloom, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }), this.vignette, this.grain));
     this.connect();
     this.sun = new THREE.Vector3(); this.moon = new THREE.Vector3();
+    // what is asked for, and what the frame-rate governor (main.js) allows: clouds no finer than cap.clouds
+    // ('off': none), the window reflections, depth of field
+    this.want = { clouds: false, quality: 'medium', reflect: true };
+    this.cap = { clouds: 'ultra', reflect: true, dof: true };
     this.cloudsOn = false; // volumetric clouds are heavy: off until asked for
   }
 
-  get cloudsOn() { return this.cloudPass.enabled; }
-  set cloudsOn(v) { this.cloudPass.enabled = v; this.skyPass.enabled = !v; }
-  get reflect() { return this.reflectionPass.enabled; }
-  set reflect(v) { this.reflectionPass.enabled = v; }
+  get cloudsOn() { return this.want.clouds; }
+  set cloudsOn(v) { this.want.clouds = v; this.limit(); }
+  get reflect() { return this.want.reflect; }
+  set reflect(v) { this.want.reflect = v; this.limit(); }
+  // what is asked for, within what the governor allows
+  limit(cap) {
+    if (cap) Object.assign(this.cap, cap);
+    const order = ['low', 'medium', 'high', 'ultra'], on = this.want.clouds && this.cap.clouds !== 'off';
+    this.cloudPass.enabled = on; this.skyPass.enabled = !on;
+    const q = order[Math.min(order.indexOf(this.want.quality), order.indexOf(this.cap.clouds))] ?? 'low';
+    if (on && q !== this.applied) { this.clouds.qualityPreset = q; this.applied = q; }
+    this.reflectionPass.enabled = this.want.reflect && this.cap.reflect;
+    if (!this.cap.dof) this.dofPass.enabled = false;
+  }
   get coverage() { return this.clouds.coverage; }
   set coverage(v) { this.clouds.coverage = v; }
   // Altitude of the base of the two low cloud layers (the second starts 250 m above the first, as by default).
@@ -217,8 +231,8 @@ export class Atmosphere {
   // clouds over the area only, or over the whole sky
   get overCity() { return this.cityFade.value < 1e6; }
   set overCity(v) { this.cityFade.value = v ? FADE : 1e9; }
-  get quality() { return this.clouds.qualityPreset; }
-  set quality(v) { this.clouds.qualityPreset = v; }
+  get quality() { return this.want.quality; }
+  set quality(v) { this.want.quality = v; this.applied = null; this.limit(); }
 
   // Puts the sun and the moon where they stand over the area at `date`. Returns their directions in world
   // space (unit vectors, y up) for the scene's own light.
@@ -235,7 +249,7 @@ export class Atmosphere {
   setSize(w, h) { this.composer.setSize(w, h); }
   // Riding: focus at that distance (m); null: no depth of field.
   focus(distance) {
-    this.dofPass.enabled = distance != null;
+    this.dofPass.enabled = distance != null && this.cap.dof;
     if (distance != null) { this.dof.cocMaterial.focusDistance = distance; this.dof.cocMaterial.focusRange = Math.max(6, distance * 0.6); }
   }
 
