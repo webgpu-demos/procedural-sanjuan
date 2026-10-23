@@ -95,9 +95,9 @@ its own: the dark rolling across the city, Ponce de León and Roosevelt with its
 on), riding with any car
 (click it: where it comes from, why it drives, its delay), the jam map, the lancha crossing to Cataño on its
 timetable, and plenas on the radio ("Callejón de Panderetas", "Fiesta de la Memoria" and "Romanoctubre", made
-for the project with Suno, one after the other; in the apagón the radio dies with the power, and comes back faint, a battery
-radio somewhere down the street). The frame rate is kept up by stepping quality down and back up as needed
-(`?quality=high` keeps it all). `G` brings back
+for the project with Suno, one after the other; in the apagón the radio dies with the power, and comes back
+faint, a battery radio somewhere down the street). The frame rate is kept up by stepping quality down and back
+up as needed (`?quality=high` keeps it all). `G` brings back
 the settings panel; `?xp=0` skips the experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
 
 ```
