@@ -78,7 +78,7 @@ export const SOURCES = [
     group: 'Music',
     items: [
       {
-        name: 'Callejón de Panderetas, Fiesta de la Memoria', url: 'https://suno.com',
+        name: 'Callejón de Panderetas, Fiesta de la Memoria, Romanoctubre', url: 'https://suno.com',
         what: 'The plenas on the radio, made for this project with Suno.',
         license: 'made with Suno',
       },

@@ -1,10 +1,10 @@
-// The sound of the morning: plenas on the radio (two songs, public/audio), and the road under it.
+// The sound of the morning: plenas on the radio (three songs, public/audio), and the road under it.
 //   the radio  one song after the other, round again; in the apagón it dies with the power (with a deep thump
 //              and the crackle of the lines), then comes back faint and dull, a battery radio somewhere down the
 //              street, until the power is back
 //   the road   a low rumble of traffic that swells with the cars near the camera and how fast they go
 // Starts on a gesture (browsers keep audio off until one).
-const SONGS = ['audio/callejon-de-panderetas.m4a', 'audio/fiesta-de-la-memoria.m4a'];
+const SONGS = ['audio/callejon-de-panderetas.m4a', 'audio/fiesta-de-la-memoria.m4a', 'audio/romanoctubre.m4a'];
 const LEVEL = 0.6; // the radio, against the rest
 
 export class CitySound {
