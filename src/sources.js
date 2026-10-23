@@ -75,6 +75,16 @@ export const SOURCES = [
     ],
   },
   {
+    group: 'Music',
+    items: [
+      {
+        name: 'Callejón de Panderetas', url: 'https://suno.com',
+        what: 'The plena on the radio, made for this project with Suno.',
+        license: 'made with Suno',
+      },
+    ],
+  },
+  {
     group: 'Software',
     items: [
       {
