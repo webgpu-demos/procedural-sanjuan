@@ -254,21 +254,25 @@ export class Experience {
   // to shot k, through black
   async cut(k) {
     const shots = this.reel;
-    this.fade.classList.add('on'); this.caption(null);
+    this.fade.classList.add('on'); this.caption(null); this.fading = true; // (in the black: a moment for changes that would show)
     await new Promise((r) => setTimeout(r, 750));
     if (!this.directing) return;
     if (k >= shots.length) { this.endIntro(); return; }
     const s = shots[k], app = this.app;
     this.shot = k; this.shotT = 0;
     app.stopRiding();
+    if (app.sim) app.sim.near = 1300; // (a directed shot: every car in the picture as itself, out to the middle distance)
     app.clockTime.live = false; app.clockTime.hour = s.hour; app.clockTime.rate = 0;
     // place the camera at the start of the shot and let the city and the cars arrive before the picture does
     if (s.eye) this.place(s, 0); else { app.controls.target.set(s.ride[0], 0, s.ride[1]); app.camera.position.set(s.ride[0] - 60, 80, s.ride[1] + 60); }
     const sim = app.sim, T = s.hour * 3600;
-    sim?.ensure(sim.windowStart(T)); sim?.ensure(sim.windowStart(T) + sim.index.window);
-    for (let i = 0; i < 60; i++) {
-      const w = sim?.windows.get(sim.windowStart(T));
-      if ((!sim || (w && w !== 'loading')) && !app.streamer.pending && i > 6) break;
+    // every window of cars the shot will play through, loaded before it is seen and kept until it ends (the
+    // clock would otherwise wait for one mid-shot, and every car stand still while the camera glides on)
+    const span = [T, T + s.dur * Math.max(1, s.rate) + 20], ws = [];
+    if (sim) { sim.keep = span; for (let w = sim.windowStart(span[0]); w < span[1]; w += sim.index.window) { sim.ensure(w); ws.push(w); } }
+    for (let i = 0; i < 100; i++) {
+      const ready = ws.every((w) => { const W = sim.windows.get(w); return (W && W !== 'loading') || w >= sim.end || sim.failed.has(w); });
+      if ((!sim || ready) && !app.streamer.pending && i > 6) break;
       await new Promise((r) => setTimeout(r, 100));
     }
     if (s.ride) {
@@ -282,7 +286,7 @@ export class Experience {
     app.clockTime.rate = s.rate;
     if (app.speedMap) { app.speedMap.on = !!s.map; this.mapButton(); }
     if (s.cap) setTimeout(() => this.directing && this.shot === k && this.caption(s.cap), (s.capAt ?? 0.9) * 1000);
-    this.fade.classList.remove('on');
+    this.fade.classList.remove('on'); this.fading = false;
   }
   place(s, f) {
     const g = (x, z) => this.app.streamer.ground(x, z), e = ease(Math.min(1, f));
@@ -299,7 +303,9 @@ export class Experience {
   }
   endIntro(fromTitle = false) {
     const app = this.app, reel = this.reelName;
-    this.directing = false; this.shot = -1; this.reelName = null;
+    this.directing = false; this.shot = -1; this.reelName = null; this.fading = false;
+    if (app.sim) app.sim.keep = null;
+    if (app.sim) app.sim.near = app.sim.constructor.NEAR;
     this.bars.classList.remove('on'); this.skip.style.display = 'none'; this.caption(null);
     this.fade.classList.remove('on');
     app.atmosphere.vignette.darkness = 0.38; app.atmosphere.grain.blendMode.opacity.value = 0.05;

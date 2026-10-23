@@ -8,11 +8,13 @@
 //   lights every car out to the horizon as its lamps: white ahead, red behind (they show from dusk to dawn)
 // Tracks come in windows of the morning (w_<t>.bin, WINDOW s each), fetched ahead of the clock.
 import * as THREE from 'three';
-import { TYPES, vehicle, carMaterial, beamGeometry, beamTexture, CAR_COLORS, BUS_COLORS } from './traffic.js';
+import { TYPES, vehicle, carMaterial, dissolve, beamGeometry, beamTexture, CAR_COLORS, BUS_COLORS } from './traffic.js';
 import { shared } from './materials.js';
-import { LAMP_LAYER, lampMaterial } from './lamplight.js';
+import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
 
-const NEAR = 700, MID = 2800, LIGHTS = 12000;           // metres from the camera
+const NEAR = 700, MID = 2800, LIGHTS = 12000;           // metres from the camera (near: the default; sim.near)
+const BAND = 110;
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };                                       // a car hands over from its model to its box over this
 const MAX_NEAR = 4500, MAX_MID = 40000, MAX_LIGHTS = 120000;
 
 const hash = (v) => { v = Math.imul(v ^ (v >>> 16), 0x45d9f3b); v = Math.imul(v ^ (v >>> 16), 0x45d9f3b); return ((v ^ (v >>> 16)) >>> 0) / 4294967296; };
@@ -29,14 +31,15 @@ function lightsMaterial() {
         vColor = color;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = clamp(uScale * 2600.0 / -mv.z, 3.0 * uScale, 16.0 * uScale); // (uScale: device pixels per CSS pixel)
+        // a lamp, not a ball of light: small up close (the model shows its own), never under two pixels far off
+        gl_PointSize = clamp(uScale * 1100.0 / -mv.z, 2.2 * uScale, 8.0 * uScale); // (uScale: device pixels per CSS pixel)
       }`,
     fragmentShader: /* glsl */`
       uniform float uNight;
       varying vec3 vColor;
       void main() {
         vec2 d = gl_PointCoord - 0.5;
-        float a = exp(-dot(d, d) * 16.0);
+        float a = exp(-dot(d, d) * 24.0);
         gl_FragColor = vec4(vColor * a * (0.3 + 5.0 * uNight), 1.0);
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
@@ -44,6 +47,7 @@ function lightsMaterial() {
 }
 
 export class SimTraffic {
+  static NEAR = NEAR;
   // base: the scenario's folder (tiles/<area>/sim/<scenario>); surface(x, z): height of the road surface.
   static async load(base, surface, roads = null, ground = surface) {
     const index = await fetch(`${base}/index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -82,6 +86,9 @@ export class SimTraffic {
       const brake = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
       brake.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aBrake', brake);
+      const hide = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
+      hide.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('aHide', hide);
       const mesh = new THREE.InstancedMesh(geo, material, cap);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.castShadow = true; mesh.frustumCulled = false; mesh.count = 0;
@@ -90,11 +97,16 @@ export class SimTraffic {
       beams.instanceMatrix = mesh.instanceMatrix;
       beams.frustumCulled = false; beams.count = 0; beams.layers.set(LAMP_LAYER);
       this.group.add(mesh, beams);
-      return { ...t, mesh, beams, brake, cap };
+      return { ...t, mesh, beams, brake, hide, cap };
     });
     // mid distance: one box per car, sized to its type
-    this.boxes = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
-      new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.3 }), MAX_MID);
+    const boxGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), boxMat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.3 });
+    this.boxHide = new THREE.InstancedBufferAttribute(new Float32Array(MAX_MID), 1); this.boxHide.setUsage(THREE.DynamicDrawUsage);
+    boxGeo.setAttribute('aHide', this.boxHide);
+    // (the lamp uniforms too, which every material otherwise gets by default: a sampler left unset collides
+    // with the shadow map's, and then no box is drawn at all)
+    boxMat.onBeforeCompile = (shader) => { lampUniforms(shader); dissolve(shader); }; boxMat.customProgramCacheKey = () => 'car-box-v2';
+    this.boxes = new THREE.InstancedMesh(boxGeo, boxMat, MAX_MID);
     this.boxes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.boxes.frustumCulled = false; this.boxes.count = 0;
     this.boxes.setColorAt(0, new THREE.Color());
@@ -112,6 +124,11 @@ export class SimTraffic {
     this.color = new THREE.Color();
     this.m = new THREE.Matrix4();
     this.back = [0, 0, 0];
+    this.near = NEAR;      // within this, a car is drawn as its model (further for a directed shot)
+    this.keep = null;      // [from, to] (s): windows a directed shot will play through, loaded ahead and kept
+    this.trace = null;     // (testing: called with each seen car's placement, to find what would show as a glitch)
+    this.heights = new Map(); this.frameNo = 0; // (each seen car's eased height, and the frame it was set)
+    this.rate = 1;         // the clock's speed: a car's arrival and departure fade over about half a second of it
     this.followed = null;  // vehicle id the camera rides with
     this.view = null;      // the followed car's place this frame: { x, y, z, heading, speed }
   }
@@ -136,15 +153,18 @@ export class SimTraffic {
       }
     }
   }
-  // the deck under (x, z) near height y, or null
+  // the deck under (x, z) near height y, or null (the cells round about too: a wide deck's centreline can run
+  // through the next cell, and a car on its outer lane is well off the line)
   deckAt(x, z, y) {
-    const cell = this.decks?.get(Math.floor(x / 24) + ',' + Math.floor(z / 24));
-    if (!cell) return null;
-    let best = null, bd = 7.5;
-    for (const [x0, y0, z0, x1, y1, z1] of cell) {
-      const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
-      const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f;
-      if (d < bd && Math.abs(h - y) < 4.5) { bd = d; best = h; }
+    if (!this.decks) return null;
+    const cx = Math.floor(x / 24), cz = Math.floor(z / 24);
+    let best = null, bd = 14;
+    for (let i = cx - 1; i <= cx + 1; i++) for (let j = cz - 1; j <= cz + 1; j++) {
+      for (const [x0, y0, z0, x1, y1, z1] of this.decks.get(i + ',' + j) ?? []) {
+        const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
+        const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f;
+        if (d < bd && Math.abs(h - y) < 4.5) { bd = d; best = h; }
+      }
     }
     return best;
   }
@@ -193,12 +213,14 @@ export class SimTraffic {
   }
 
   // ---------------------------------------------------------------- the frame
-  update(T, camera) {
+  update(T, camera, dt = 1 / 60) {
     const W = this.windows.get(this.windowStart(T));
     const span = this.index.window;
     this.ensure(this.windowStart(T)); this.ensure(this.windowStart(T) + span); this.ensure(this.windowStart(T) - span);
-    // drop windows far from the clock
-    for (const k of this.windows.keys()) if (Math.abs(k - this.windowStart(T)) > span) this.windows.delete(k); // (a rush-hour window decodes to tens of MB)
+    // drop windows far from the clock (a rush-hour window decodes to tens of MB), but those a directed shot has
+    // asked to keep (this.keep: [from, to] in seconds, the time the shot plays through)
+    const keep = this.keep;
+    for (const k of this.windows.keys()) if (Math.abs(k - this.windowStart(T)) > span && !(keep && k + span > keep[0] && k < keep[1])) this.windows.delete(k);
     if (T < this.begin || T >= this.end) { this.hide(); return; }
     if (!W || W === 'loading') return; // (the window is on its way: the cars hold where they were for a frame or two)
 
@@ -208,6 +230,11 @@ export class SimTraffic {
     let mid = 0, lights = 0, active = 0, nearSpeed = 0, nearStopped = 0, nearN = 0;
     const m = this.m.elements, night = shared.uNight.value;
     this.view = null;
+    // A seen car's height is eased over a tenth of a second: the ground under some roads (the elevation model
+    // round an overpass's fill) rises and falls a few metres in a few, and at the speed of the opening a car
+    // would hop there. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
+    const ease = 1 - Math.exp(-dt / 0.1), frame = ++this.frameNo;
+    if (frame % 120 === 0) for (const [k, v] of this.heights) if (frame - v[1] > 60) this.heights.delete(k);
     for (let i = 0; i < W.n; i++) {
       if (!SimTraffic.at(W, i, T, p)) continue;
       active++;
@@ -232,7 +259,7 @@ export class SimTraffic {
       }
       // braking: slower than half a second ago by more than ~1.2 m/s², or standing in a queue
       let brake = 0;
-      if (hadQ && (d2 < NEAR * NEAR || followed || (night > 0.02 && d2 < 2000 * 2000))) { // (only where a brake light can be seen)
+      if (hadQ && (d2 < this.near * this.near || followed || (night > 0.02 && d2 < 2000 * 2000))) { // (only where a brake light can be seen)
         const back = this.back;
         if (SimTraffic.at(W, i, T - 1.0, back)) {
           const before = Math.hypot(q[0] - back[0], q[2] - back[2]) / 0.5;
@@ -242,20 +269,41 @@ export class SimTraffic {
       }
       const sin = Math.sin(heading), cos = Math.cos(heading);
       // on the ground, unless on a raised road's deck (a flyover, a ramp, a bridge); for a car seen only as its
-      // lamps, the simulation's own height is near enough (and the ground is not looked up for tens of thousands)
+      // lamps, the simulation's own height is near enough (and the ground is not looked up for tens of thousands).
+      // The ground is the terrain under any deck (the surface's top would put a car passing under a flyover up
+      // in its deck); a car well above the ground whose deck is not found keeps the simulation's own height.
+      // Onto a ramp, it rises from the ground to the deck over a stretch (between 0.6 and 2.2 m up in the
+      // simulation), not at a step.
       const seen = d2 < MID * MID || followed;
-      const ground = seen ? this.surface(p[0], p[2]) : p[1];
-      const deck = seen && p[1] > ground + 0.6 ? this.deckAt(p[0], p[2], p[1]) : null;
-      const y = deck ?? ground;
+      const ground = seen ? this.surface(p[0], p[2], -2) : p[1];
+      const up = seen ? smooth(0.6, 2.2, p[1] - ground) : 0, raised = up > 0.5;
+      const deck = up > 0 ? this.deckAt(p[0], p[2], p[1]) : null;
+      let y = seen ? ground + ((deck ?? p[1]) - ground) * up : p[1];
+      if (seen) {
+        const h = this.heights.get(vid);
+        if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12) y = h[0] + (y - h[0]) * ease;
+        if (h) { h[0] = y; h[1] = frame; } else this.heights.set(vid, [y, frame]);
+      }
+      // A car setting off or arriving (or split where SUMO cleared a jam) fades in or out, over about half a
+      // second as watched: its track starts or ends inside this window, not at its edge.
+      const s0 = W.start[i] * 4, s1 = (W.start[i] + W.count[i] - 1) * 4, fade = Math.max(1, this.rate * 0.5);
+      let shown = 1;
+      if (W.K[s0] >= W.t0) shown = Math.min(shown, (T - W.K[s0]) / fade);
+      if (W.K[s1] < W.t1 - 0.5) shown = Math.min(shown, (W.K[s1] - T) / fade);
+      shown = smooth(0, 1, shown);
+      if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], ground, deck, shown);
       if (followed) this.view = { x: p[0], y, z: p[2], heading, speed, vid, type: W.type[i], brake };
       const t = W.type[i], spec = TYPES[t];
       if (d2 < 250 * 250) { nearN++; nearSpeed += speed; if (speed < 0.5) nearStopped++; }
-      if (d2 < NEAR * NEAR || followed) {
+      // near: the model; across the band at its edge it dissolves into the box, which stands in from there out
+      const d = Math.sqrt(d2), near = this.near, handover = followed ? 0 : smooth(near - BAND, near, d);
+      let boxed = true, modelled = false;
+      if (d < near || followed) {
         const f = this.fleets[t];
         if (counts[t] < f.cap) {
           const k = counts[t]++;
           // nose up or down with the road
-          const ahead = deck != null ? 0 : (this.surface(p[0] + sin * 2.5, p[2] + cos * 2.5) - this.surface(p[0] - sin * 2.5, p[2] - cos * 2.5)) / 5;
+          const ahead = raised ? 0 : (this.surface(p[0] + sin * 2.5, p[2] + cos * 2.5, -2) - this.surface(p[0] - sin * 2.5, p[2] - cos * 2.5, -2)) / 5;
           const pitch = -Math.atan(ahead), cp = Math.cos(pitch), sp = Math.sin(pitch);
           // rotation Y(heading) * X(pitch), then translation
           m[0] = cos; m[1] = 0; m[2] = -sin; m[3] = 0;
@@ -265,10 +313,11 @@ export class SimTraffic {
           f.mesh.setMatrixAt(k, this.m);
           f.mesh.setColorAt(k, this.color.setHex(this.paint(vid, t)));
           f.brake.array[k] = brake;
-          continue;
+          f.hide.array[k] = 1 - shown * (1 - handover);
+          boxed = handover > 0; modelled = true;
         }
       }
-      if (d2 < MID * MID && mid < MAX_MID) {
+      if (boxed && d2 < MID * MID && mid < MAX_MID) {
         const L = spec.L, Wd = spec.spec.W, H = spec.spec.roof;
         m[0] = cos * Wd; m[1] = 0; m[2] = -sin * Wd; m[3] = 0;
         m[4] = 0; m[5] = H; m[6] = 0; m[7] = 0;
@@ -276,6 +325,7 @@ export class SimTraffic {
         m[12] = p[0]; m[13] = y + 0.15; m[14] = p[2]; m[15] = 1;
         this.boxes.setMatrixAt(mid, this.m);
         this.boxes.setColorAt(mid, this.color.setHex(this.paint(vid, t)));
+        this.boxHide.array[mid] = 1 - shown * (modelled ? handover : 1); // (no model drawn: the box is the car)
         mid++;
       }
       if (night > 0.02 && lights < MAX_LIGHTS) {
@@ -283,8 +333,8 @@ export class SimTraffic {
         const L = spec.L * 0.48, h = y + 0.75, o = lights * 6;
         this.lightPos[o] = p[0] + sin * L; this.lightPos[o + 1] = h; this.lightPos[o + 2] = p[2] + cos * L;
         this.lightPos[o + 3] = p[0] - sin * L; this.lightPos[o + 4] = h; this.lightPos[o + 5] = p[2] - cos * L;
-        this.lightCol[o] = 1.0; this.lightCol[o + 1] = 0.9; this.lightCol[o + 2] = 0.72;
-        const red = brake ? 1.0 : 0.45;
+        this.lightCol[o] = shown; this.lightCol[o + 1] = 0.9 * shown; this.lightCol[o + 2] = 0.72 * shown;
+        const red = (brake ? 1.0 : 0.45) * shown;
         this.lightCol[o + 3] = red; this.lightCol[o + 4] = 0.03 * red; this.lightCol[o + 5] = 0.02 * red;
         lights++;
       }
@@ -293,8 +343,9 @@ export class SimTraffic {
       f.mesh.count = f.beams.count = counts[k];
       f.mesh.instanceMatrix.needsUpdate = true;
       if (f.mesh.instanceColor) f.mesh.instanceColor.needsUpdate = true;
-      f.brake.needsUpdate = true;
+      f.brake.needsUpdate = true; f.hide.needsUpdate = true;
     });
+    this.boxHide.needsUpdate = true;
     this.boxes.count = mid; this.boxes.instanceMatrix.needsUpdate = true;
     if (this.boxes.instanceColor) this.boxes.instanceColor.needsUpdate = true;
     const g = this.lights.geometry;
@@ -357,7 +408,7 @@ export class SimTraffic {
     let best = null, bestD = radius;
     for (let i = 0; i < W.n; i++) {
       if (!SimTraffic.at(W, i, T, p)) continue;
-      v.set(p[0], this.surface(p[0], p[2]) + 0.8, p[2]);
+      v.set(p[0], (p[1] > this.surface(p[0], p[2], -2) + 1.5 ? p[1] : this.surface(p[0], p[2], -2)) + 0.8, p[2]);
       const d = ray.distanceToPoint(v);
       if (d < bestD) { bestD = d; best = W.vid[i]; }
     }

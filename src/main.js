@@ -218,7 +218,9 @@ const governor = (() => {
     const size = L.shadow ?? 4096;
     if (env.sun.shadow.mapSize.x !== size) { env.sun.shadow.mapSize.set(size, size); env.sun.shadow.map?.dispose(); env.sun.shadow.map = null; }
   };
-  g.update = (dt, busy) => {
+  // busy: not a frame to judge by (loading); hold: judge, but change nothing until the hold is off (a shot of the
+  // opening is playing: a change of resolution mid-shot shows; it waits for the next cut to black)
+  g.update = (dt, busy, hold = false) => {
     if (!g.auto || document.hidden || !(dt > 0)) return;
     g.times.push(dt); if (g.times.length > 45) g.times.shift();
     if ((g.settle -= dt) > 0 || busy || g.times.length < 45) return;
@@ -226,6 +228,7 @@ const governor = (() => {
     g.slow = typical > 1 / 45 ? g.slow + dt : 0;
     g.fast = typical < 1 / 57 ? g.fast + dt : 0;
     const now = performance.now() / 1000;
+    if (hold) return;
     if (g.slow > 1 && g.level < LEVELS.length - 1) {
       if (now - g.raisedAt < 6) g.upWait = Math.min(120, g.upWait * 2); // (the step up did not hold)
       g.level = Math.min(LEVELS.length - 1, g.level + (typical > 1 / 25 ? 2 : 1)); // (far too slow: two steps at once)
@@ -577,7 +580,7 @@ function frame(_, manual) {
   const simulating = simOn();
   traffic.group.visible = !simulating;
   if (traffic.group.parent && !simulating) traffic.update(dt, controls.target);
-  if (sim) { if (simulating) sim.update(clockTime.hour * 3600, camera); else sim.hide(); }
+  if (sim) { sim.rate = clockTime.rate; if (simulating) sim.update(clockTime.hour * 3600, camera, dt); else sim.hide(); }
   if (simSignals) { props.mats.lens.uniforms.uSigOn.value = simulating ? 1 : 0; if (simulating) simSignals.update(clockTime.hour * 3600); }
   chaseCamera(dt);
   xp?.update(dt, { night: env.night, uGrid: shared.uGrid.value });
@@ -600,7 +603,7 @@ function frame(_, manual) {
   lampLight.update(scene, controls.target, camera.position, env.night);
   atmosphere.bloom.intensity = guiState.bloom ? env.bloom * 3 : 0;
   atmosphere.render(dt);
-  if (manual == null) governor.update(dt, loading);
+  if (manual == null) governor.update(dt, loading, xp?.directing && !xp.fading);
   if (!loading) updateViewLink(performance.now());
 
   frames++; fpsTime += dt;

@@ -125,6 +125,19 @@ export function parkedVehicles() {
   return parkedKit;
 }
 
+// A per-car dissolve (aHide 0 shown .. 1 gone; 0 where a mesh has none): pixels drop out in a fine, steady
+// pattern, so a car appearing, leaving or handing over to its box at a distance fades instead of popping
+export const DISSOLVE = {
+  vertex: ['#include <common>', '#include <common>\nattribute float aHide;\nvarying float vHide;', '#include <begin_vertex>', '#include <begin_vertex>\nvHide = aHide;'],
+  fragment: ['#include <common>', '#include <common>\nvarying float vHide;', '#include <clipping_planes_fragment>',
+    '#include <clipping_planes_fragment>\nif (vHide > 0.0 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) < vHide) discard;'],
+};
+export function dissolve(shader) {
+  const [a, b, c, d] = DISSOLVE.vertex, [e, f, g, h] = DISSOLVE.fragment;
+  shader.vertexShader = shader.vertexShader.replace(a, b).replace(c, d);
+  shader.fragmentShader = shader.fragmentShader.replace(e, f).replace(g, h);
+}
+
 export function carMaterial(lit = true) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.5 });
   m.onBeforeCompile = (shader) => {
@@ -148,8 +161,9 @@ export function carMaterial(lit = true) {
           + (vGlow > 1.5 ? vBrake * (1.4 + uNight * 3.0) : 0.0));`)
       // (the windows are marked in alpha for the reflection pass, like those of the buildings)
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif (vGlow > 2.5 && vGlow < 3.5) gl_FragColor.a = 0.1;');
+    dissolve(shader);
   };
-  m.customProgramCacheKey = () => (lit ? 'car-v4' : 'car-parked-v4');
+  m.customProgramCacheKey = () => (lit ? 'car-v5' : 'car-parked-v5');
   return m;
 }
 
