@@ -49,7 +49,7 @@ with open('outputs.add.xml', 'w') as f:
     for tl in TLS: f.write(f'  <timedEvent type="SaveTLSSwitchStates" source="{tl}" dest="tls.xml"/>\n')
     f.write('</additional>\n')
 apagon = SCEN == 'apagon'
-STATE = os.path.join(SIM, 'morning', f'state_{int(APAGON_AT)}.xml.gz')  # the normal morning, as it stood when the grid failed
+STATE = os.path.join(SIM, args.get('from', 'morning') if apagon else SCEN, f'state_{int(APAGON_AT)}.xml.gz')  # the normal morning, as it stood when the grid failed
 begin = APAGON_AT if apagon and os.path.exists(STATE) else BEGIN
 extra = []
 SUMO_NET = NET
@@ -93,7 +93,7 @@ cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if
 # SUMO then spends most of its time waiting: measured 6.7x slower at full scale.
 if float(args.get('reroute', 0)) > 0:
     cmd += ['--device.rerouting.probability', args['reroute'], '--device.rerouting.period', '900']
-if SCEN == 'morning': cmd += ['--save-state.times', str(APAGON_AT), '--save-state.files', STATE, '--save-state.rng']
+if not apagon: cmd += ['--save-state.times', str(APAGON_AT), '--save-state.files', STATE, '--save-state.rng']
 if begin != BEGIN: cmd += ['--load-state', STATE]  # (the apagón: the same morning until the failure)
 if args.get('skip-sumo') != '1':
     log(f'sumo {SCEN}: {begin / 3600:.2f} h to {END / 3600:.2f} h ...')

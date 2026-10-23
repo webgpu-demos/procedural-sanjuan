@@ -220,16 +220,17 @@ export class Experience {
     if (new URLSearchParams(location.search).has('clouds') || innerWidth < 700) return; // (heavy: not on a phone)
     a.coverage = 0.3; a.quality = 'medium'; a.cloudsOn = true;
   }
+  // (the high shots stay under the trade-wind cumulus: its base is at 450 m)
   // The apagón as a scene: high over Hato Rey, looking south to Monacillos as the grid stumbles and the dark rolls
   // towards the camera; then down at Ponce de León and Roosevelt, its signals dead; then the city two hours on, locked solid
   apagonShots(at) {
     const h = (s) => (at + s) / 3600;
     return [
-      { hour: h(-9), rate: 1, dur: 21, eye: [[4150, 560, 2350], [4250, 520, 2750]], at: [[4450, 0, 7600], [4450, 0, 7700]],
+      { hour: h(-9), rate: 1, dur: 21, eye: [[4150, 410, 2350], [4250, 390, 2750]], at: [[4450, 0, 7600], [4450, 0, 7700]],
         cap: ['5:45 a.m.', 'Monacillos, Río Piedras · el centro de transmisión'], capAt: 1.5 },
-      { hour: h(70), rate: 2, dur: 15, eye: [[6345, 15, 4690], [6318, 10, 4660]], at: [[6255, 3, 4591], [6250, 2, 4586]],
+      { hour: h(70), rate: 2, dur: 15, eye: [[6292, 15, 4740], [6282, 10, 4702]], at: [[6257, 2, 4598], [6254, 2, 4588]],
         cap: ['Ponce de León y Roosevelt · sin semáforos', 'every traffic signal in the city is dark'] },
-      { hour: 7.3, rate: 30, dur: 15, map: true, eye: [[2600, 900, 3600], [3000, 760, 3900]], at: [[4700, 0, 5600], [4800, 0, 5700]],
+      { hour: 7.3, rate: 30, dur: 15, map: true, eye: [[2900, 380, 3900], [3200, 330, 4150]], at: [[4700, 0, 5600], [4800, 0, 5700]],
         cap: ['7:18 a.m. · sin semáforos', 'the rush hour, with no signals: red is the jam'] },
     ];
   }

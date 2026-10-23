@@ -272,7 +272,7 @@ const FACADE_MAIN = /* glsl */ `
       vec3 paneN = normalize(gT * gNm.x + gB * gNm.y + gN * gNm.z), R = reflect(V, paneN);
       float fresnel = 0.1 + 0.9 * pow(1.0 - max(dot(-V, paneN), 0.0), 4.0);
       vec3 city = vec3(0.0);
-      if (R.y < -0.015) {
+      if (R.y < -0.015 && vWPos.y > 12.5) {                         // (glass lower than the street lights mirrors none)
         float reach = (vWPos.y - 12.0) / -R.y;                      // metres along the ray to street level
         vec2 g = (vWPos.xz + R.xz * reach) / 26.0, cell = floor(g);
         vec2 at = vec2(hash12(cell + 3.1), hash12(cell + 7.7));
@@ -284,6 +284,8 @@ const FACADE_MAIN = /* glsl */ `
       }
       gEmissive += city * fresnel * pane * tall * uNight * uCityGlass * (1.0 - on * 0.9) * (0.25 + 0.75 * power);
     }
+    // (one NaN or infinite pixel here and the bloom spreads it over the whole frame: never let one out)
+    if (any(isnan(gEmissive)) || any(isinf(gEmissive))) gEmissive = vec3(0.0);
     gPane = pane * (1.0 - 0.7 * far) * (1.0 - 0.85 * uNight * on); // (a lit room shows itself, not a reflection)
     // the lintel shades the top of the opening
     diffuseColor.rgb *= 1.0 - 0.35 * inWin * (1.0 - smoothstep(0.0, 0.18, wmax.y - pm.y)) * (1.0 - far);
@@ -346,7 +348,7 @@ function facadeMaterial(tex) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gPane;');
   };
-  m.customProgramCacheKey = () => 'facade-v23';
+  m.customProgramCacheKey = () => 'facade-v24';
   return m;
 }
 
