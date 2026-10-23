@@ -59,6 +59,13 @@ const CSS = `
 #xp-story .g div { font-size: 11px; color: rgba(246,241,231,0.55); text-transform: uppercase; letter-spacing: 0.08em; }
 #xp-story .g b { display: block; font-size: 16px; color: #fff; text-transform: none; letter-spacing: 0; margin-top: 2px; font-variant-numeric: tabular-nums; }
 #xp-story .st { margin-top: 10px; font-size: 12px; color: rgba(246,241,231,0.7); min-height: 1.3em; }
+#xp-dock .act .k { font-size: 10px; padding: 1px 5px; margin-left: 4px; border-radius: 4px; background: rgba(255,255,255,0.14); color: rgba(246,241,231,0.8); }
+#xp-drive { position: fixed; right: 26px; bottom: 96px; z-index: 935; text-align: right; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; text-shadow: 0 2px 14px rgba(0,0,0,0.7); }
+#xp-drive.on { opacity: 1; }
+#xp-drive .v { font-size: 64px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+#xp-drive .u { font-size: 13px; letter-spacing: 0.2em; color: rgba(246,241,231,0.7); }
+#xp-drive .st { margin-top: 6px; font-size: 15px; font-weight: 600; }
+#xp-drive .help { margin-top: 10px; font-size: 11px; letter-spacing: 0.06em; color: rgba(246,241,231,0.55); }
 #xp-time { flex-basis: 100%; position: relative; height: 22px; margin: 2px 4px 0; }
 #xp-time input { width: 100%; margin: 0; appearance: none; -webkit-appearance: none; height: 22px; background: transparent; cursor: pointer; position: relative; z-index: 2; }
 #xp-time input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0b2a44 0%, #2a5d8a 22%, #f2a65a 33%, #ffe6b0 40%, #9fd4ff 100%); }
@@ -120,11 +127,14 @@ export class Experience {
       <div class="g"><div>salió<b class="dep">–</b></div><div>velocidad<b class="spd">–</b></div><div>demora del viaje<b class="loss">–</b></div><div>vehículo<b class="typ">–</b></div></div>
       <div class="st"></div></div>`);
     this.skip = el('<button id="xp-skip" class="xp">Saltar intro · skip ›</button>');
+    this.speedo = el(`<div id="xp-drive" class="xp"><div class="v">0</div><div class="u">KM/H</div><div class="st"></div>
+      <div class="help">W A S D · Espacio freno de mano · Shift turbo · arrastra para mirar · E salir</div></div>`);
     this.dock = el(`<div id="xp-dock" class="xp hidden">
       <div id="xp-time"><input type="range" min="16200" max="36000" step="30" value="21060"></div>
       <div class="clock"><span class="t">5:50</span><span class="ap">a.m.</span><span class="day"></span></div>
       <div class="grp speed"><button data-r="0" title="pausa">❚❚</button><button data-r="1">1×</button><button data-r="6">6×</button><button data-r="30">30×</button><button data-r="120">120×</button></div>
       <div class="grp scen"><button data-s="morning" class="on">Mañana normal</button><button data-s="apagon" class="alert">Apagón</button></div>
+      <button class="act drive">🚘 Manejar <span class="k">E</span></button>
       <button class="act ride">🚗 Seguir un carro</button>
       <button class="act map">🗺️ Tapón</button>
       <button class="act snd">🔊 Sonido</button>
@@ -139,6 +149,7 @@ export class Experience {
     this.marks();
     this.dock.querySelectorAll('.scen button').forEach((b) => b.addEventListener('click', () => this.setScenario(b.dataset.s)));
     this.dock.querySelector('.ride').addEventListener('click', () => this.rideNear());
+    this.dock.querySelector('.drive').addEventListener('click', (e) => { e.currentTarget.blur(); if (this.app.driver?.on) this.app.stopDriving(); else this.app.drive(); });
     this.dock.querySelector('.snd').addEventListener('click', () => this.toggleSound());
     this.dock.querySelector('.truth').addEventListener('click', () => this.toggleTruth());
     this.dock.querySelector('.map').addEventListener('click', () => {
@@ -147,6 +158,9 @@ export class Experience {
     });
     this.skip.addEventListener('click', () => this.endIntro());
     addEventListener('keydown', (e) => { if (this.directing && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); this.endIntro(); } });
+    // driving wants a keyboard: on a touch screen alone, the button is not offered
+    this.canDrive = !!app.drive && !(matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches);
+    if (!this.canDrive) this.dock.querySelector('.drive').style.display = 'none';
     this.trips = null; this.tripinfo = null; this.loadStories(this.app.sim);
     this.nameIndex = this.indexNames(app.roads);
   }
@@ -205,12 +219,12 @@ export class Experience {
   // October, a little south of east)
   get shots() {
     return [
-      { hour: 5.47, rate: 20, dur: 13, eye: [[1300, 520, 7700], [1950, 470, 7050]], at: [[5400, 40, 3000], [5600, 40, 3150]],
+      { hour: 5.47, rate: 1, dur: 13, eye: [[1300, 520, 7700], [1950, 470, 7050]], at: [[5400, 40, 3000], [5600, 40, 3150]],
         cap: ['San Juan, 5:28 a.m.', 'Un martes, antes del amanecer · a Tuesday, before dawn'] },
-      { hour: 5.97, rate: 14, dur: 13, eye: [[1700, 46, 5330], [2010, 38, 5192]], at: [[2900, 3, 5193], [3250, 3, 5100]],
+      { hour: 5.97, rate: 1, dur: 13, eye: [[1700, 46, 5330], [2010, 38, 5192]], at: [[2900, 3, 5193], [3250, 3, 5100]],
         cap: ['138,000 personas entran a San Juan cada mañana', 'commuters driving in every weekday · U.S. Census ACS'] },
       { hour: 6.1, rate: 1, dur: 18, ride: [2700, 5273, 420] },
-      { hour: 6.25, rate: 20, dur: 16, eye: [[4950, 40, 4250], [5060, 170, 4340]], at: [[6250, 80, 4600], [6260, 60, 4620]],
+      { hour: 6.322, rate: 1, dur: 16, eye: [[4950, 40, 4250], [5060, 170, 4340]], at: [[6250, 80, 4600], [6260, 60, 4620]],
         cap: ['Puerto Rico en movimiento', 'Cada carro es un viaje simulado · every car is a simulated trip'] },
     ];
   }
@@ -228,9 +242,9 @@ export class Experience {
     return [
       { hour: h(-9), rate: 1, dur: 21, eye: [[4150, 410, 2350], [4250, 390, 2750]], at: [[4450, 0, 7600], [4450, 0, 7700]],
         cap: ['5:45 a.m.', 'Monacillos, Río Piedras · el centro de transmisión'], capAt: 1.5 },
-      { hour: h(70), rate: 2, dur: 15, eye: [[6292, 15, 4740], [6282, 10, 4702]], at: [[6257, 2, 4598], [6254, 2, 4588]],
+      { hour: h(70), rate: 1, dur: 15, eye: [[6292, 15, 4740], [6282, 10, 4702]], at: [[6257, 2, 4598], [6254, 2, 4588]],
         cap: ['Ponce de León y Roosevelt · sin semáforos', 'every traffic signal in the city is dark'] },
-      { hour: 7.3, rate: 30, dur: 15, map: true, eye: [[2900, 380, 3900], [3200, 330, 4150]], at: [[4700, 0, 5600], [4800, 0, 5700]],
+      { hour: 7.3, rate: 1, dur: 15, map: true, eye: [[2900, 380, 3900], [3200, 330, 4150]], at: [[4700, 0, 5600], [4800, 0, 5700]],
         cap: ['7:18 a.m. · sin semáforos', 'the rush hour, with no signals: red is the jam'] },
     ];
   }
@@ -310,9 +324,10 @@ export class Experience {
     this.fade.classList.remove('on');
     app.atmosphere.vignette.darkness = 0.38; app.atmosphere.grain.blendMode.opacity.value = 0.05;
     app.stopRiding();
-    if (reel === 'apagon') { app.controls.enabled = true; app.clockTime.rate = 6; this.dock.classList.remove('hidden'); return; } // (where the scene ended)
-    if (!fromTitle) { app.controls.enabled = true; app.clockTime.live = false; app.clockTime.rate = 6; }
-    else { app.clockTime.rate = Math.max(app.clockTime.rate, 6); } // (the morning unfolding, not standing still)
+    if (reel === 'apagon') { app.controls.enabled = true; app.clockTime.rate = 1; this.dock.classList.remove('hidden'); return; } // (where the scene ended)
+    // the morning at its own pace: every car at the speed it drives (the dock's buttons speed the clock up)
+    if (!fromTitle) { app.controls.enabled = true; app.clockTime.live = false; app.clockTime.rate = 1; }
+    else { app.clockTime.rate = Math.max(app.clockTime.rate, 1); }
     // the view the opening ended on, as a free camera over the Milla de Oro
     if (!fromTitle) {
       const s = this.shots.at(-1);
@@ -321,6 +336,8 @@ export class Experience {
     }
     app.controls.enabled = true;
     this.dock.classList.remove('hidden');
+    // what can be done now: drive (a keyboard's), or look
+    if (this.canDrive) { this.caption(['Pulsa E para manejar', 'press E to drive · W A S D · drag to look around']); setTimeout(() => !this.directing && this.caption(null), 6000); }
   }
 
   // the moments of the morning, under the time line
@@ -435,8 +452,17 @@ export class Experience {
       this.stats.innerHTML = st.active ? `SUMO · <b>${st.active.toLocaleString('es-PR')}</b> carros en la calle${st.nearSpeed != null ? ` · cerca, <b>${Math.round(st.nearSpeed * 3.6)}</b> km/h` : ''}${uGrid.z >= 0 ? ' · <b style="color:#ff6a4d">apagón</b>' : ''}` : '';
       this.stats.style.opacity = this.directing ? 0 : 1;
     }
+    // driving: the speed, the street
+    const dv = app.driver?.on ? app.driver.view : null;
+    this.speedo.classList.toggle('on', !!dv);
+    this.dock.querySelector('.drive').firstChild.textContent = dv ? '🚘 Salir del carro ' : '🚘 Manejar ';
+    if (dv) {
+      this.speedo.querySelector('.v').textContent = Math.round(dv.kmh);
+      const street = this.streetAt(dv.x, dv.z);
+      if (street !== this.lastStreet) { this.speedo.querySelector('.st').textContent = street ?? ''; this.lastStreet = street; }
+    }
     // the story of the car being ridden with
-    const v = sim?.view;
+    const v = dv ? null : sim?.view;
     if (v && app.chase.on) {
       const t = this.trip(v.vid), bus = sim.buses?.[v.vid];
       this.story.classList.add('on');

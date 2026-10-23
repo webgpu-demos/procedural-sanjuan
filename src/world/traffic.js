@@ -45,32 +45,127 @@ function taper(w0, w1, y0, y1, zA0, zB0, zA1, zB1, rgb, code = 0) {
   flat.computeVertexNormals();
   return finish(flat, rgb, code);
 }
-const wheel = (r, x, z) => [
-  finish(new THREE.CylinderGeometry(r, r, 0.24, 14).rotateZ(Math.PI / 2).translate(x, r, z), TYRE, 4),
-  finish(new THREE.CylinderGeometry(r * 0.58, r * 0.58, 0.25, 10).rotateZ(Math.PI / 2).translate(x, r, z), [0.55, 0.56, 0.58], 4),
-];
+// a wheel: the tyre, its rim set in a little, five spokes (the driven car's: rounder)
+const wheel = (r, x, z, hi = false, lo = false) => {
+  const out = Math.sign(x), seg = hi ? 28 : lo ? 8 : 14;
+  if (lo) return [finish(new THREE.CylinderGeometry(r, r, 0.23, seg).rotateZ(Math.PI / 2).translate(x, r, z), TYRE, 4)]; // (far off: a tyre)
+  const parts = [
+    finish(new THREE.CylinderGeometry(r, r, 0.23, seg).rotateZ(Math.PI / 2).translate(x, r, z), TYRE, 4),
+    finish(new THREE.CylinderGeometry(r * 0.66, r * 0.66, 0.02, seg).rotateZ(Math.PI / 2).translate(x + out * 0.1, r, z), [0.08, 0.08, 0.09], 4),
+    finish(new THREE.CylinderGeometry(r * 0.16, r * 0.16, 0.05, 8).rotateZ(Math.PI / 2).translate(x + out * 0.12, r, z), [0.7, 0.71, 0.74], 4),
+  ];
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * Math.PI * 2;
+    parts.push(finish(new THREE.BoxGeometry(0.03, r * 0.56, 0.06).translate(0, r * 0.3, 0).rotateX(a).translate(x + out * 0.115, r, z), [0.72, 0.73, 0.76], 4));
+  }
+  return parts;
+};
 const PAINT = [1, 1, 1], GLASS = [0.03, 0.04, 0.05], TYRE = [0.015, 0.015, 0.015], TRIM = [0.05, 0.05, 0.055], LAMP = [1, 1, 1];
 // A vehicle along +z: length L, width W, body up to `belt`, cabin from z0 to z1 (fractions of L) up to `roof`,
-// its windscreen leaning back by `rake` metres.
-export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31 }) {
-  const zr = -L / 2, zf = L / 2, sill = 0.24, parts = [];
-  parts.push(taper(W * 0.97, W, sill, belt, zr + 0.06, zf - 0.06, zr, zf - 0.02, PAINT));                 // body
-  parts.push(part(W * 1.01, 0.16, L + 0.06, 0, sill + 0.04, 0, TRIM, 4));                                // bumpers and sills
-  const c0 = zr + z0 * L, c1 = zr + z1 * L, back = rake * 0.6, zm = (c0 + c1) / 2;
-  parts.push(taper(W * 0.9, W * 0.76, belt, roof, c0, c1, c0 + back, c1 - rake, GLASS, 3));               // glasshouse
-  parts.push(taper(W * 0.78, W * 0.72, roof - 0.02, roof + 0.05, c0 + back - 0.02, c1 - rake + 0.02, c0 + back + 0.1, c1 - rake - 0.1, PAINT)); // roof
-  if (c1 - c0 > 2.2) parts.push(taper(W * 0.905, W * 0.765, belt, roof, zm - 0.07, zm + 0.07, zm - 0.07, zm + 0.07, PAINT)); // the pillar between the doors
-  if (box) parts.push(part(W, box.h, box.len * L, 0, belt + box.h / 2, (box.z - 0.5) * L, [0.92, 0.92, 0.9])); // cargo body (not tinted much)
-  parts.push(part(W * 0.5, 0.16, 0.05, 0, belt - 0.3, zf, TRIM, 4));                                      // grille
-  for (const z of [zf + 0.01, zr - 0.01]) parts.push(part(0.34, 0.13, 0.03, 0, sill + 0.22, z, [0.9, 0.9, 0.86], 4)); // number plates
+// its windscreen leaning back by `rake` metres. Sculpted rather than boxed: the body is lofted through rounded
+// sections (rounded corners in plan, the bonnet and boot falling away to the ends, the sides tucked in at the
+// bottom, wheel arches cut out of the sill), the glasshouse through narrower ones that lean in towards the roof,
+// with its pillars and roof in paint. detail 0: a car of the traffic seen from afar (about 450 triangles);
+// 1: near (about 1,700); 2: the one driven.
+export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31 }, detail = 1) {
+  const parts = [], zr = -L / 2, zf = L / 2, sill = 0.2, hi = detail > 1, lo = detail < 1;
+  const wheelZ = (L > 8 ? 0.34 : 0.31) * L;
+  const plan = (z) => { const zn = Math.min(1, Math.abs(z) / (L / 2)); return Math.pow(Math.max(0, 1 - Math.pow(zn, 7)), 1 / 7); };
+  const halfW = (z) => (W / 2) * (0.9 + 0.1 * plan(z)) * Math.pow(plan(z), 0.35);
+  // the top of the body: the bonnet falls towards the nose, the boot a little towards the tail
+  const deck = (z) => {
+    const zn = z / (L / 2);
+    return belt + 0.02 - (zn > 0 ? 0.2 * Math.pow(Math.max(0, (zn - 0.45) / 0.55), 1.6) : 0.12 * Math.pow(Math.max(0, (-zn - 0.6) / 0.4), 1.6));
+  };
+  // the bottom edge: the sill, cut up round each wheel
+  const bottom = (z) => {
+    let y = sill;
+    for (const wz of [wheelZ, -wheelZ]) { const d = Math.abs(z - wz), r = tyre * 1.18; if (d < r) y = Math.max(y, tyre + Math.sqrt(r * r - d * d) * 0.92); }
+    return y;
+  };
+  // ---- the body: rings of M points round a rounded box, from the tail to the nose
+  const N = hi ? 44 : lo ? 10 : 18, M = hi ? 28 : lo ? 10 : 14, ring = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, z = zr + (zf - zr) * (0.5 - 0.5 * Math.cos(Math.PI * t)); // (closer together at the ends, where it curves)
+    const w = halfW(z), top = deck(z), bot = Math.min(bottom(z), top - 0.05), mid = (top + bot) / 2, hh = (top - bot) / 2, pts = [];
+    for (let j = 0; j < M; j++) {
+      const a = (j / M) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), n = 4.2;
+      const x = Math.sign(c) * Math.pow(Math.abs(c), 2 / n) * w * (s < 0 ? 0.94 + 0.06 * (1 + s) : 1); // (tucked in below)
+      const y = mid + Math.sign(s) * Math.pow(Math.abs(s), 2 / n) * hh;
+      pts.push([x, y, z]);
+    }
+    ring.push(pts);
+  }
+  parts.push(loft(ring, true, false, (i, j, [x, y, z]) => (y < sill + 0.13 || y < bottom(z) + 0.06 ? [TRIM, 4] : [PAINT, 0])));
+  // ---- the glasshouse: from the foot of the back window to the foot of the windscreen, leaning in to the roof
+  const c0 = zr + z0 * L, c1 = zr + z1 * L, back = Math.max(0.25, rake * 0.6);
+  const roofAt = (z) => belt + (roof - belt) * Math.max(0, Math.min(1, (c1 - z) / rake, (z - c0) / back));
+  const G = hi ? 20 : lo ? 4 : 8, gring = [], K = hi ? 9 : lo ? 3 : 5;
+  for (let i = 0; i <= G; i++) {
+    const z = c0 + (c1 - c0) * (i / G), yt = Math.max(belt + 0.01, roofAt(z)), wb = halfW(z) * 0.93, wt = wb * 0.8, pts = [];
+    // up one side, over the top (rounded), down the other
+    for (let j = 0; j <= K; j++) { const f = j / K; pts.push([-(wb + (wt - wb) * Math.pow(f, 0.8)), belt - 0.01 + (yt - belt) * f, z]); }
+    for (let j = 1; j < K; j++) { const f = j / K; pts.push([-wt + 2 * wt * f, yt + 0.025 * Math.sin(Math.PI * f), z]); }
+    for (let j = K; j >= 0; j--) { const f = j / K; pts.push([wb + (wt - wb) * Math.pow(f, 0.8), belt - 0.01 + (yt - belt) * f, z]); }
+    gring.push(pts);
+  }
+  // the sides are glass, and so is the top over the windscreen and the back window; the flat of the roof is
+  // paint (rings run up one side, K - 1 points over the top, down the other: they turn the other way round from
+  // the body's, hence the flip); the pillars after
+  parts.push(loft(gring, false, true, (i, j, [x, y, z]) => (j >= K && j < 2 * K && roofAt(z) > roof - 0.03 ? [PAINT, 0] : [GLASS, 3])));
+  const pillar = (z, yTop, along = 0) => { for (const sx of [-1, 1]) parts.push(bar([sx * halfW(z) * 0.93, belt, z], [sx * halfW(z + along) * 0.93 * 0.8, yTop, z + along], 0.07, PAINT)); };
+  pillar(c1, roof, -rake);                                  // A: up the sides of the windscreen
+  pillar(c0, roof, back);                                   // C: up the sides of the back window
+  if (c1 - c0 > 2.2) pillar((c0 + c1) / 2 + 0.1, roof);     // B: between the doors
+  if (box) parts.push(part(W, box.h, box.len * L, 0, belt + box.h / 2, (box.z - 0.5) * L, [0.92, 0.92, 0.9])); // cargo body
+  if (!box && z0 >= 0.28 && L > 5.2) parts.push(part(W * 0.86, 0.04, c0 - zr - 0.25, 0, deck(c0 - 0.6) + 0.005, (zr + c0) / 2, TRIM, 4)); // a pickup's bed
+  // ---- the face and the tail: grille, lamps wrapping the corners, plates
+  const yl = deck(zf - 0.15) - 0.14, yt = deck(zr + 0.15) - 0.1;
+  parts.push(part(W * 0.42, 0.13, 0.05, 0, yl - 0.06, zf - 0.03, TRIM, 4));                                // grille
+  parts.push(part(W * 0.6, 0.1, 0.05, 0, sill + 0.12, zf - 0.02, TRIM, 4));                                // lower intake
+  for (const z of [zf - 0.005, zr + 0.005]) parts.push(part(0.34, 0.12, 0.02, 0, sill + 0.24, z, [0.9, 0.9, 0.86], 4)); // plates
   for (const sx of [-1, 1]) {
-    const far = L > 8 ? 0.34 : 0.31;
-    for (const wz of [far, -far]) parts.push(...wheel(tyre, sx * (W / 2 - 0.1), wz * L));
-    parts.push(part(0.38, 0.15, 0.07, sx * (W / 2 - 0.26), belt - 0.2, zf - 0.02, LAMP, 1));
-    parts.push(part(0.36, 0.13, 0.07, sx * (W / 2 - 0.24), belt - 0.18, zr + 0.02, LAMP, 2));
-    parts.push(part(0.1, 0.1, 0.16, sx * (W / 2 + 0.03), belt + 0.08, c1 - rake * 0.5, PAINT));           // mirrors
+    for (const wz of [wheelZ, -wheelZ]) parts.push(...wheel(tyre, sx * (W / 2 - 0.12), wz, hi, lo));
+    // headlamps: a slim lens round the front corner; tail lamps across the rear corners
+    parts.push(bar([sx * W * 0.18, yl, zf - 0.03], [sx * halfW(zf - 0.34) * 1.0, yl + 0.02, zf - 0.36], 0.12, LAMP, 1, 0.08));
+    parts.push(bar([sx * W * 0.16, yt, zr + 0.02], [sx * halfW(zr + 0.34) * 1.01, yt + 0.01, zr + 0.36], 0.15, LAMP, 2, 0.09));
+    // the mirror on its stalk
+    parts.push(part(0.13, 0.11, 0.2, sx * (halfW(c1) * 0.93 + 0.08), belt + 0.08, c1 - rake * 0.35, PAINT));
   }
   return mergeGeometries(parts);
+}
+// Quads between consecutive rings of points (closed round, or open), facing out: rings turning
+// anticlockwise seen from ahead (+z) as they run towards the front, or clockwise with `flip`. paint(i, j, mid)
+// gives the quad from ring i, point j its [colour, code]. Smooth normals across the parts of one colour.
+function loft(rings, closed, flip, paint) {
+  const pos = [], tag = [], M = rings[0].length;
+  for (let i = 0; i < rings.length - 1; i++) {
+    for (let j = 0; j < (closed ? M : M - 1); j++) {
+      const a = rings[i][j], b = rings[i][(j + 1) % M], c = rings[i + 1][(j + 1) % M], d = rings[i + 1][j];
+      if (flip) pos.push(...a, ...c, ...b, ...a, ...d, ...c); else pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+      const mid = [0, 1, 2].map((k) => (a[k] + b[k] + c[k] + d[k]) / 4), pt = paint(i, j, mid);
+      tag.push(pt, pt);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals(); // (flat, to start: smoothed below, across shared corners)
+  const n = pos.length / 3, nor = g.attributes.normal.array, sum = new Map(), key = (v) => `${Math.round(pos[v * 3] * 1e3)},${Math.round(pos[v * 3 + 1] * 1e3)},${Math.round(pos[v * 3 + 2] * 1e3)},${tag[Math.floor(v / 3)][1]}`;
+  for (let v = 0; v < n; v++) { const k = key(v), s = sum.get(k) ?? [0, 0, 0]; s[0] += nor[v * 3]; s[1] += nor[v * 3 + 1]; s[2] += nor[v * 3 + 2]; sum.set(k, s); }
+  for (let v = 0; v < n; v++) { const s = sum.get(key(v)), l = Math.hypot(...s) || 1; nor[v * 3] = s[0] / l; nor[v * 3 + 1] = s[1] / l; nor[v * 3 + 2] = s[2] / l; }
+  const col = new Float32Array(n * 3), code = new Float32Array(n);
+  for (let v = 0; v < n; v++) { const [rgb, k] = tag[Math.floor(v / 3)]; col.set(rgb, v * 3); code[v] = k; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('aGlow', new THREE.BufferAttribute(code, 1));
+  return g;
+}
+// a slim bar from a to b (a pillar, a lamp's lens): thickness t, depth d
+function bar(a, b, t, rgb, code = 0, d = t) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), len = A.distanceTo(B);
+  const g = new THREE.BoxGeometry(t, d, len);
+  g.lookAt(new THREE.Vector3().subVectors(B, A));
+  g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
+  return finish(g, rgb, code);
 }
 // What the lamps throw on the road: a long pool ahead of the car and a short red one behind it, as one
 // instanced mesh per vehicle type that shares the cars' own matrices. Like the street lamps' pools
@@ -138,15 +233,20 @@ export function dissolve(shader) {
   shader.fragmentShader = shader.fragmentShader.replace(e, f).replace(g, h);
 }
 
-export function carMaterial(lit = true) {
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.5 });
+// hero: the car driven, in a clear-coated paint (a lacquer over the colour that mirrors the sky)
+export function carMaterial(lit = true, { hero = false } = {}) {
+  const m = hero
+    ? new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.05 })
+    : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.5 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; // (no lamp light here; the sampler still needs its texture)
     shader.uniforms.uNight = shared.uNight;
     shader.vertexShader = shader.vertexShader
       // aBrake (per car, from simtraffic.js; 0 where a mesh has none): the tail lamps flare when it brakes
       .replace('#include <common>', '#include <common>\nattribute float aGlow;\nattribute float aBrake;\nvarying float vGlow;\nvarying float vBrake;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;\nvBrake = aBrake;');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;\nvBrake = aBrake;')
+      // the car's colour is its paint's: lamps, glass, tyres and wheels keep their own
+      .replace('#include <color_vertex>', '#include <color_vertex>\n#ifdef USE_COLOR\nif (aGlow > 0.5) vColor.rgb = color.rgb;\n#endif');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying float vGlow;\nvarying float vBrake;')
       // lamps keep their own colour instead of the body paint, and shine at night
@@ -163,7 +263,7 @@ export function carMaterial(lit = true) {
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif (vGlow > 2.5 && vGlow < 3.5) gl_FragColor.a = 0.1;');
     dissolve(shader);
   };
-  m.customProgramCacheKey = () => (lit ? 'car-v5' : 'car-parked-v5');
+  m.customProgramCacheKey = () => (hero ? 'car-hero-v2' : lit ? 'car-v7' : 'car-parked-v7');
   return m;
 }
 

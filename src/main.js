@@ -14,6 +14,7 @@ import { buildRailways } from './world/rails.js';
 import { buildFlyovers } from './world/flyovers.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { SimTraffic } from './world/simtraffic.js';
+import { Driver, placeOnRoad } from './world/drive.js';
 import { SimSignals } from './world/simsignals.js';
 import { Experience } from './experience.js';
 import { SpeedMap } from './world/speedmap.js';
@@ -375,7 +376,7 @@ function shareView() {
 
 // ---------------------------------------------------------------- input
 const keys = new Set();
-const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']); // (Space: the handbrake, not a focused button)
 addEventListener('keydown', (e) => {
   const el = document.activeElement, typing = el?.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number');
   if (typing) return; // a number being typed into the panel
@@ -432,7 +433,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
   raycaster.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
-  if (sim && simOn()) {
+  if (sim && simOn() && !driver.on) {
     const vid = sim.pick(raycaster.ray, clockTime.hour * 3600, Math.max(4, camera.position.distanceTo(controls.target) * 0.012));
     if (vid != null) { ride(vid); return; }
   }
@@ -445,10 +446,37 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 // drag of the view, lets it go.
 const chase = { on: false, target: new THREE.Vector3(), eye: new THREE.Vector3(), heading: 0, back: 13, up: 4.2, yaw: 0, tilt: 0.3, drag: null };
 function ride(vid) {
+  stopDriving();
   sim.followed = vid; chase.on = true; chase.fresh = true; chase.yaw = 0;
   controls.enabled = false;
 }
-function stopRiding() { if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; atmosphere.focus(null); }
+function stopRiding() { stopDriving(); if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; atmosphere.focus(null); }
+
+// ---------------------------------------------------------------- driving (drive.js)
+// E gets in (on the road nearest the point looked at, in its right-hand lane, facing the way the camera
+// looks) and out again; Esc too. The camera rides lower and closer, looking a little ahead at speed.
+const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles: () => scene.children.filter((o) => o.name.startsWith('tile ')) });
+function drive() {
+  if (driver.on) return true;
+  if (sim) sim.followed = null;
+  const look = Math.atan2(controls.target.x - camera.position.x, controls.target.z - camera.position.z);
+  const at = placeOnRoad(roads, controls.target.x, controls.target.z, look);
+  if (!at) return false;
+  driver.start(at.x, at.z, at.heading, at.raised ? at.y : null);
+  Object.assign(chase, { on: true, fresh: true, yaw: 0, back: 7.2, tilt: 0.17 });
+  controls.enabled = false; clockTime.live = false; clockTime.rate = 1;
+  return true;
+}
+function stopDriving() {
+  if (!driver.on) return;
+  driver.stop(); chase.on = false; controls.enabled = true; atmosphere.focus(null); atmosphere.blur(0);
+  Object.assign(chase, { back: 13, tilt: 0.3 });
+  if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
+}
+addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyE' || e.repeat || document.activeElement?.tagName === 'INPUT' || xp?.directing) return;
+  if (driver.on) stopDriving(); else drive();
+});
 function rideRandom() {
   const W = sim.windows.get(sim.windowStart(clockTime.hour * 3600));
   if (!W || W === 'loading') return;
@@ -477,8 +505,9 @@ renderer.domElement.addEventListener('wheel', (e) => {
   chase.back = THREE.MathUtils.clamp(chase.back * Math.exp(Math.sign(e.deltaY) * 0.12), 6, 80);
 }, { passive: true });
 function chaseCamera(dt) {
-  const v = sim?.view;
+  const v = driver.on ? driver.view : sim?.view;
   if (!chase.on) return;
+  if (driver.on && !v) return;
   // the car has arrived: ride on with another one near it (or let go, if there is none)
   if (!v) {
     if (chase.fresh) return;
@@ -487,21 +516,32 @@ function chaseCamera(dt) {
     if (next) { sim.followed = next.vid; chase.fresh = false; } else stopRiding();
     return;
   }
-  // ease the heading, so the camera swings round behind the car instead of snapping
+  // ease the heading, so the camera swings round behind the car instead of snapping (backing up, the camera
+  // stays behind as it was)
   let dh = v.heading - chase.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-  chase.heading += dh * (chase.fresh ? 1 : 1 - Math.exp(-dt * 2.2));
+  if (!v.reversing) chase.heading += dh * (chase.fresh ? 1 : 1 - Math.exp(-dt * (driver.on ? 3.2 : 2.2)));
   // (let go, the camera drifts back behind the car)
   if (!chase.drag) chase.yaw *= Math.exp(-dt * 0.35);
   const h = chase.heading + chase.yaw, flat = Math.cos(chase.tilt) * chase.back;
-  const want = new THREE.Vector3(v.x, v.y + 1.4, v.z);
+  // driving: the camera looks a little ahead of the car as it gathers speed, widens, and feels a knock
+  const ahead = driver.on ? Math.min(7, v.speed * 0.22) : 0;
+  const want = new THREE.Vector3(v.x + Math.sin(v.heading) * ahead, v.y + 1.4, v.z + Math.cos(v.heading) * ahead);
+  if (driver.on) {
+    const fov = 55 + Math.min(14, v.speed * 0.32);
+    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
+    if (v.bump > 0.02) want.y += (Math.random() - 0.5) * v.bump * 0.6;
+  }
   const eye = new THREE.Vector3(v.x - Math.sin(h) * flat, v.y + 1.4 + Math.sin(chase.tilt) * chase.back, v.z - Math.cos(h) * flat);
   if (chase.fresh) { chase.target.copy(want); chase.eye.copy(eye); chase.fresh = false; }
-  chase.target.lerp(want, 1 - Math.exp(-dt * 8));
-  chase.eye.lerp(eye, 1 - Math.exp(-dt * 3.5));
+  // (driving, the camera is held close: only its swing round the turns is eased, above)
+  chase.target.lerp(want, 1 - Math.exp(-dt * (driver.on ? 20 : 8)));
+  chase.eye.lerp(eye, 1 - Math.exp(-dt * (driver.on ? 14 : 3.5)));
   controls.target.copy(chase.target);
   camera.position.copy(chase.eye);
   camera.lookAt(chase.target);
-  atmosphere.focus(camera.position.distanceTo(chase.target)); // (the car sharp, the city behind it soft)
+  // riding along: the car sharp, the city behind it soft (driving: everything sharp, as a game is)
+  atmosphere.focus(driver.on ? null : camera.position.distanceTo(chase.target));
+  atmosphere.blur(driver.on ? Math.min(1.1, v.speed / 30) : 0); // (driving: the street rushes past)
 }
 
 addEventListener('resize', () => {
@@ -513,7 +553,7 @@ addEventListener('resize', () => {
 
 // ---------------------------------------------------------------- the experience (the simulated morning to watch)
 const xp = sim && params.get('xp') !== '0' ? new Experience({
-  scene, camera, controls, streamer, clockTime, atmosphere, roads, manifest, chase, ride, stopRiding, setScenario, speedMap,
+  scene, camera, controls, streamer, clockTime, atmosphere, roads, manifest, chase, ride, stopRiding, setScenario, speedMap, driver, drive, stopDriving,
   get sim() { return sim; },
 }) : null;
 if (xp) {
@@ -582,6 +622,7 @@ function frame(_, manual) {
   if (traffic.group.parent && !simulating) traffic.update(dt, controls.target);
   if (sim) { sim.rate = clockTime.rate; if (simulating) sim.update(clockTime.hour * 3600, camera, dt); else sim.hide(); }
   if (simSignals) { props.mats.lens.uniforms.uSigOn.value = simulating ? 1 : 0; if (simulating) simSignals.update(clockTime.hour * 3600); }
+  driver.update(dt, keys);
   chaseCamera(dt);
   xp?.update(dt, { night: env.night, uGrid: shared.uGrid.value });
   speedMap?.update(dt, clockTime.hour * 3600, camera.position.y - streamer.ground(camera.position.x, camera.position.z));
@@ -623,4 +664,4 @@ function frame(_, manual) {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, xp, governor, frame: (dt) => frame(0, dt) };
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, driver, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt) };

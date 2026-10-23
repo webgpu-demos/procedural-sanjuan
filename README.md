@@ -88,7 +88,9 @@ A weekday morning in San Juan, 4:30 to 10:15, simulated with [Eclipse SUMO](http
 city's own road graph and played back in the browser: some 360,000 car trips and the AMA's 520 bus trips. It
 opens with a title and four shots (the city before dawn, the headlights on PR-22, one commuter's ride, the sun
 coming up behind the Milla de Oro: it rises about 6:19 AST in late October); then the clock and its time line,
-the speed of time, the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
+the speed of time (the cars at their own speed by default), **driving** (`E` gets in a car on the road nearest the
+view: W A S D, Space the handbrake, Shift a push; the car rides the ground or the flyover it drove onto, stops
+against the buildings' walls and the simulated cars, and the camera follows close, with motion blur at speed), the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
 wave from the Monacillos transmission centre, and the rush is simulated without them, every dark signal an
 all-way stop as the law has it; it plays as a scene of
 its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two hours

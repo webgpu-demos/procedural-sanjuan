@@ -70,6 +70,62 @@ class TwilightSky extends Effect {
   }
 }
 
+// Motion blur, from the camera's own movement: each pixel's place in the world (from the depth) seen through the
+// last frame's camera says how far it moved across the picture; it is smeared along that. Up close (the car
+// being driven, which moves with the camera) nothing is: only the street rushing past. strength 0: off.
+class MotionBlur extends Effect {
+  constructor(camera) {
+    super('MotionBlur', `
+      uniform mat4 uInvViewProj; uniform mat4 uPrevViewProj; uniform vec3 uCam; uniform float uStrength;
+      void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
+        outputColor = inputColor;
+        if (uStrength <= 0.0) return;
+        vec4 w = uInvViewProj * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0); w /= w.w;
+        vec4 prev = uPrevViewProj * w;
+        if (prev.w <= 0.0) return;
+        vec2 vel = (uv - (prev.xy / prev.w * 0.5 + 0.5)) * uStrength * smoothstep(9.0, 22.0, distance(w.xyz, uCam));
+        float len = length(vel);
+        if (len < 0.0008) return;
+        vel *= min(1.0, 0.06 / len);
+        vec4 sum = vec4(0.0);
+        for (int i = 0; i < 9; i++) sum += texture2D(inputBuffer, uv - vel * (float(i) / 8.0 - 0.5));
+        outputColor = sum / 9.0;
+      }`, {
+      attributes: EffectAttribute.DEPTH,
+      uniforms: new Map([['uInvViewProj', new THREE.Uniform(new THREE.Matrix4())], ['uPrevViewProj', new THREE.Uniform(new THREE.Matrix4())],
+        ['uCam', new THREE.Uniform(new THREE.Vector3())], ['uStrength', new THREE.Uniform(0)]]),
+    });
+    this.camera = camera; this.viewProj = new THREE.Matrix4(); this.started = false;
+  }
+  update() {
+    const vp = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    this.uniforms.get('uPrevViewProj').value.copy(this.started ? this.viewProj : vp);
+    this.viewProj.copy(vp); this.started = true;
+    this.uniforms.get('uInvViewProj').value.copy(vp).invert();
+    this.uniforms.get('uCam').value.copy(this.camera.position);
+  }
+}
+
+// The grade, after the tone mapping: a gentle S of contrast, a touch more colour, the shadows a little cool and
+// the highlights a little warm (as film and a graded picture are, against the even look of a render)
+class Grade extends Effect {
+  constructor() {
+    super('Grade', `
+      uniform float uContrast, uSaturation; uniform vec3 uShadows, uHighlights;
+      void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+        vec3 c = clamp(inputColor.rgb, 0.0, 1.0);
+        vec3 s = pow(c, vec3(1.0 / 2.2));                       // (shaped where the eye sees it: gamma space)
+        s = mix(s, s * s * (3.0 - 2.0 * s), uContrast);
+        float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
+        s = mix(vec3(l), s, uSaturation) * mix(uShadows, uHighlights, smoothstep(0.1, 0.75, l));
+        outputColor = vec4(pow(clamp(s, 0.0, 1.0), vec3(2.2)), inputColor.a);
+      }`, {
+      uniforms: new Map([['uContrast', new THREE.Uniform(0.22)], ['uSaturation', new THREE.Uniform(1.08)],
+        ['uShadows', new THREE.Uniform(new THREE.Vector3(0.97, 1.0, 1.045))], ['uHighlights', new THREE.Uniform(new THREE.Vector3(1.035, 1.0, 0.955))]]),
+    });
+  }
+}
+
 export class Atmosphere {
   // origin: { lon, lat } of the world origin; the world is x east, y up, z south.
   // bounds: { minX, maxX, minZ, maxZ } of the area; the clouds can be kept to the sky above it.
@@ -195,11 +251,17 @@ export class Atmosphere {
     this.dofPass = new EffectPass(camera, this.dof);
     this.dofPass.enabled = false;
     this.composer.addPass(this.dofPass);
+    // motion blur (driving: blur(strength)), in the light as it is, before the bloom and the tone mapping
+    this.motion = new MotionBlur(camera);
+    this.motionPass = new EffectPass(camera, this.motion);
+    this.motionPass.enabled = false;
+    this.composer.addPass(this.motionPass);
     this.twilight = new TwilightSky(camera);
+    this.grade = new Grade();
     this.vignette = new VignetteEffect({ offset: 0.32, darkness: 0.38 });
     this.grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
     this.grain.blendMode.opacity.value = 0.05;
-    this.composer.addPass(new EffectPass(camera, this.twilight, this.bloom, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }), this.vignette, this.grain));
+    this.composer.addPass(new EffectPass(camera, this.twilight, this.bloom, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }), this.grade, this.vignette, this.grain));
     this.connect();
     this.sun = new THREE.Vector3(); this.moon = new THREE.Vector3();
     // what is asked for, and what the frame-rate governor (main.js) allows: clouds no finer than cap.clouds
@@ -252,6 +314,9 @@ export class Atmosphere {
     this.dofPass.enabled = distance != null && this.cap.dof;
     if (distance != null) { this.dof.cocMaterial.focusDistance = distance; this.dof.cocMaterial.focusRange = Math.max(6, distance * 0.6); }
   }
+
+  // motion blur by this much (0: off; about 1 at a fast drive)
+  blur(strength) { this.motionPass.enabled = strength > 0.01 && this.cap.dof; this.motion.uniforms.get('uStrength').value = strength; }
 
   render(dt) { this.composer.render(dt); }
 }

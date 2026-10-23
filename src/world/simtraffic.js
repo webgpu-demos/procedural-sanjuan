@@ -13,8 +13,9 @@ import { shared } from './materials.js';
 import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
 
 const NEAR = 700, MID = 2800, LIGHTS = 12000;           // metres from the camera (near: the default; sim.near)
-const BAND = 110;
-const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };                                       // a car hands over from its model to its box over this
+const BAND = 110;                                       // a car hands over from its model to its box over this
+const DETAIL = 250;                                     // within this, the full model; beyond, a lighter one
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const MAX_NEAR = 4500, MAX_MID = 40000, MAX_LIGHTS = 120000;
 
 const hash = (v) => { v = Math.imul(v ^ (v >>> 16), 0x45d9f3b); v = Math.imul(v ^ (v >>> 16), 0x45d9f3b); return ((v ^ (v >>> 16)) >>> 0) / 4294967296; };
@@ -80,9 +81,11 @@ export class SimTraffic {
     const material = carMaterial();
     this.beam = lampMaterial(beamTexture(), { vertexColors: true });
     const share = [0.27, 0.24, 0.29, 0.16, 0.04, 0.01];
-    this.fleets = TYPES.map((t, k) => {
-      const cap = Math.ceil(MAX_NEAR * share[k] * 1.6) + 16;
-      const geo = vehicle(t.spec);
+    // each type twice: the full model near the camera, a lighter one further off (they look alike where they
+    // hand over); the second of each pair is the far one
+    this.fleets = TYPES.flatMap((t, k) => [1, 0].map((detail) => {
+      const cap = Math.ceil(MAX_NEAR * share[k] * (detail ? 0.5 : 1.6)) + 16;
+      const geo = vehicle(t.spec, detail);
       const brake = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
       brake.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aBrake', brake);
@@ -91,14 +94,14 @@ export class SimTraffic {
       geo.setAttribute('aHide', hide);
       const mesh = new THREE.InstancedMesh(geo, material, cap);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.castShadow = true; mesh.frustumCulled = false; mesh.count = 0;
+      mesh.castShadow = !!detail; mesh.frustumCulled = false; mesh.count = 0; // (the far ones' shadows are not seen)
       mesh.setColorAt(0, new THREE.Color());
       const beams = new THREE.InstancedMesh(beamGeometry(t.L), this.beam, cap);
       beams.instanceMatrix = mesh.instanceMatrix;
       beams.frustumCulled = false; beams.count = 0; beams.layers.set(LAMP_LAYER);
       this.group.add(mesh, beams);
-      return { ...t, mesh, beams, brake, hide, cap };
-    });
+      return { ...t, mesh, beams, brake, hide, cap, detail };
+    }));
     // mid distance: one box per car, sized to its type
     const boxGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), boxMat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.3 });
     this.boxHide = new THREE.InstancedBufferAttribute(new Float32Array(MAX_MID), 1); this.boxHide.setUsage(THREE.DynamicDrawUsage);
@@ -127,6 +130,8 @@ export class SimTraffic {
     this.near = NEAR;      // within this, a car is drawn as its model (further for a directed shot)
     this.keep = null;      // [from, to] (s): windows a directed shot will play through, loaded ahead and kept
     this.trace = null;     // (testing: called with each seen car's placement, to find what would show as a glitch)
+    this.probe = null;     // [x, z] of the visitor's car, if driving; probeHits: the cars within 30 m of it,
+    this.probeHits = [];   // 7 numbers each (x, y, z, heading, length, width, speed)
     this.heights = new Map(); this.frameNo = 0; // (each seen car's eased height, and the frame it was set)
     this.rate = 1;         // the clock's speed: a car's arrival and departure fade over about half a second of it
     this.followed = null;  // vehicle id the camera rides with
@@ -229,7 +234,7 @@ export class SimTraffic {
     const counts = this.fleets.map(() => 0);
     let mid = 0, lights = 0, active = 0, nearSpeed = 0, nearStopped = 0, nearN = 0;
     const m = this.m.elements, night = shared.uNight.value;
-    this.view = null;
+    this.view = null; this.probeHits.length = 0;
     // A seen car's height is eased over a tenth of a second: the ground under some roads (the elevation model
     // round an overpass's fill) rises and falls a few metres in a few, and at the speed of the opening a car
     // would hop there. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
@@ -294,14 +299,20 @@ export class SimTraffic {
       if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], ground, deck, shown);
       if (followed) this.view = { x: p[0], y, z: p[2], heading, speed, vid, type: W.type[i], brake };
       const t = W.type[i], spec = TYPES[t];
+      // the visitor's car (this.probe: [x, z]): the simulated cars round it, to run into; one that would pass
+      // through it (they keep to their recorded way) fades out instead of driving through it
+      if (this.probe) {
+        const px = p[0] - this.probe[0], pz = p[2] - this.probe[1], pd = px * px + pz * pz;
+        if (pd < 900) { this.probeHits.push(p[0], y, p[2], heading, spec.L, spec.spec.W, speed); if (pd < 3.2 * 3.2) shown *= smooth(1.8, 3.2, Math.sqrt(pd)); }
+      }
       if (d2 < 250 * 250) { nearN++; nearSpeed += speed; if (speed < 0.5) nearStopped++; }
       // near: the model; across the band at its edge it dissolves into the box, which stands in from there out
       const d = Math.sqrt(d2), near = this.near, handover = followed ? 0 : smooth(near - BAND, near, d);
       let boxed = true, modelled = false;
       if (d < near || followed) {
-        const f = this.fleets[t];
-        if (counts[t] < f.cap) {
-          const k = counts[t]++;
+        const fi = t * 2 + (d < DETAIL || followed ? 0 : 1), f = this.fleets[fi];
+        if (counts[fi] < f.cap) {
+          const k = counts[fi]++;
           // nose up or down with the road
           const ahead = raised ? 0 : (this.surface(p[0] + sin * 2.5, p[2] + cos * 2.5, -2) - this.surface(p[0] - sin * 2.5, p[2] - cos * 2.5, -2)) / 5;
           const pitch = -Math.atan(ahead), cp = Math.cos(pitch), sp = Math.sin(pitch);
