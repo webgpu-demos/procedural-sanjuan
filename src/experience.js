@@ -189,10 +189,10 @@ export class Experience {
 
   // ---------------------------------------------------------------- the title, the opening
   showTitle(total) {
-    const n = total ? total.toLocaleString('es-PR') : '';
+    const n = total ? total.toLocaleString('es-PR') : '', end = clockLabel((this.app.sim?.end ?? 36000) / 3600).t;
     this.start = (() => { const d = document.createElement('div'); d.id = 'xp-start'; d.className = 'xp'; document.body.appendChild(d); return d; })();
     this.start.innerHTML = `<div class="k">Puerto Rico · simulación</div><h1>SAN JUAN</h1><div class="s">La mañana — un martes cualquiera</div>
-      <div class="d">${n ? n + ' viajes' : 'Cada viaje'} simulados con SUMO, de las 4:30 a las 10 de la mañana: quién sale de dónde, cuándo y hacia dónde,
+      <div class="d">${n ? n + ' viajes' : 'Cada viaje'} simulados con SUMO, de las 4:30 a las ${end} de la mañana: quién sale de dónde, cuándo y hacia dónde,
       según el Censo (ACS), con los conteos de la FHWA y las calles de OpenStreetMap.<br>Every car you will see is a simulated trip.</div>
       <div class="row"><button class="go">▶ Comenzar · with sound</button><button class="free">Explorar libremente</button></div>`;
     this.start.querySelector('.go').addEventListener('click', () => { this.sound.start(); this.setSoundButton(); this.hideTitle(); this.beginIntro(); });
@@ -362,9 +362,9 @@ export class Experience {
   async toggleTruth() {
     if (!this.truth.hidden) { this.truth.hidden = true; return; }
     const sim = this.app.sim, v = await fetch(`${sim.base}/validation.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    const n = (sim.index.tripinfo?.count ?? 0).toLocaleString('es-PR'), a = v?.all;
+    const n = (sim.index.tripinfo?.count ?? 0).toLocaleString('es-PR'), a = v?.all, end = clockLabel(sim.end / 3600).t;
     this.truth.innerHTML = `<h3>¿Qué tan real es esto?</h3><div class="sub">How real is this</div>
-      <div>${n} viajes simulados con SUMO, de las 4:30 a las 10:00, a partir de los flujos de viaje al trabajo del Censo (ACS),
+      <div>${n} viajes simulados con SUMO, de las 4:30 a las ${end}, a partir de los flujos de viaje al trabajo del Censo (ACS),
       las horas de salida de cada municipio y los edificios de la ciudad. Se comparan con los conteos de tránsito de la FHWA (HPMS 2024).</div>
       ${sim.index.share ? `<div class="not">Se simula el ${Math.round(sim.index.share * 100)}% de la demanda estimada: con más, las
       intersecciones de la red simulada (trazadas de OpenStreetMap, con semáforos supuestos) se trancan por completo antes de las 8. Es
