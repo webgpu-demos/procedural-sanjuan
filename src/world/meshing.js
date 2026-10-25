@@ -101,7 +101,7 @@ const ROAD_STYLE = {
 // variants selected by the area's code
 const UNPAVED_PATH = { lift: 0.035, color: lin([0.62, 0.55, 0.42]), layer: GROUND.CONCRETE };
 const SEA = { lift: 0.08, color: lin([0.07, 0.33, 0.44]), layer: GROUND.WATER };                 // the Atlantic and the bay
-const ADOQUINES = { lift: 0.06, color: lin([0.42, 0.5, 0.58]), layer: GROUND.COBBLE };           // Old San Juan's blue cobbles
+const ADOQUINES = { lift: 0.06, color: lin([0.4, 0.45, 0.5]), layer: GROUND.COBBLE };            // Old San Juan's blue cobbles (a grey-blue: slag glazed in the furnace)
 const COURTS = {
   [SPORT.TENNIS]: { lift: 0.03, color: lin([0.22, 0.42, 0.36]), layer: GROUND.CONCRETE },
   [SPORT.TURF]: { lift: 0.03, color: lin([0.3, 0.5, 0.25]), layer: GROUND.GRASS },

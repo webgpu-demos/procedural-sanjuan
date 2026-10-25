@@ -241,6 +241,23 @@ const FACADE_MAIN = /* glsl */ `
     gRough = mix(gRough, 0.05, pane);
     gMetal = mix(gMetal, 0.92, pane);
     gNm = mix(gNm, normalize(vec3((hash12(room + 5.1) - 0.5) * 0.03, (hash12(room + 9.4) - 0.5) * 0.03, 1.0)), inWin);
+    // The colonial city's plasterwork, picked out in white against the colour of the walls: a moulded cornice
+    // under the roofline with its shadow beneath, a band at the foot of each upper storey, and a surround round
+    // each opening (a wider lintel over it). From afar only the cornice and the bands remain.
+    if (cat > 1.5 && cat < 2.5) {
+      vec3 trimCol = mix(vec3(0.86, 0.84, 0.79), vec3(0.95, 0.93, 0.88), fract(seed * 7.3));
+      float wv = max(fwidth(v), 1e-4);
+      float cornice = box(v, height - 0.7, height + 1.2, wv);
+      float under = box(v, height - 0.82, height - 0.7, wv) * (1.0 - far);
+      float band = row > 0.5 ? box(fy * floorH, -0.02, 0.17, wv) * (1.0 - 0.6 * far) : 0.0;
+      float surround = 0.0;
+      if (colonial) {
+        float e2 = min(min(pm.x - wmin.x + 0.13, wmax.x + 0.13 - pm.x), min(pm.y - wmin.y + 0.1, wmax.y + 0.22 - pm.y));
+        surround = (1.0 - inWin) * smoothstep(-0.5, 0.5, e2 / max(fwidth(e2), 1e-4)) * valid * (1.0 - far);
+      }
+      float trim = max(max(cornice, band), surround) * step(0.0, v);
+      diffuseColor.rgb = mix(diffuseColor.rgb, trimCol, trim) * (1.0 - 0.3 * under);
+    }
     if (colonial) {
       float k = fract(seed * 13.1), leafW = (r.y - r.x) * 0.5;
       vec3 shutterCol = k < 0.3 ? vec3(0.1, 0.3, 0.18) : k < 0.55 ? vec3(0.34, 0.21, 0.11) : k < 0.8 ? vec3(0.86, 0.86, 0.82) : vec3(0.08, 0.28, 0.4);
@@ -356,7 +373,7 @@ function facadeMaterial(tex) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gPane;');
   };
-  m.customProgramCacheKey = () => 'facade-v24';
+  m.customProgramCacheKey = () => 'facade-v25';
   return m;
 }
 
