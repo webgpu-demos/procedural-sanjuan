@@ -21,7 +21,6 @@ export function buildNightRoads(roads, extent) {
   g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
   g.lineCap = 'round'; g.lineJoin = 'round';
   g.globalCompositeOperation = 'lighter'; // (crossings shine brighter, as they do)
-  g.filter = 'blur(0.6px)';
   for (const e of roads.edges) {
     if (e.tunnel) continue;
     const light = LIGHT[(e.highway ?? '').replace('_link', '')];
@@ -37,7 +36,13 @@ export function buildNightRoads(roads, extent) {
     }
     g.stroke();
   }
-  const rgba = g.getImageData(0, 0, W, H).data, r = new Uint8Array(W * H);
+  // one soft blur over the whole map (a filter on each stroke instead made the 36,000 roads take minutes)
+  const soft = document.createElement('canvas');
+  soft.width = W; soft.height = H;
+  const sg = soft.getContext('2d', { willReadFrequently: true });
+  sg.filter = 'blur(0.7px)';
+  sg.drawImage(canvas, 0, 0);
+  const rgba = sg.getImageData(0, 0, W, H).data, r = new Uint8Array(W * H);
   for (let i = 0; i < r.length; i++) r[i] = rgba[i * 4];
   const t = new THREE.DataTexture(r, W, H, THREE.RedFormat);
   t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;

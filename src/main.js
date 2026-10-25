@@ -152,7 +152,7 @@ scene.add(await buildFlyovers(`tiles/${AREA}/${manifest.roads}`, (x, z) => strea
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z)));
 const roads = await (await fetch(`tiles/${AREA}/${manifest.roads}`)).json();
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js)
-if (LARGE) buildNightRoads(roads, manifest.extent ?? manifest.bounds); // (the streets' lights from afar, on the distant ground)
+if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
 const traffic = new Traffic(roads, streamer.surface);
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
