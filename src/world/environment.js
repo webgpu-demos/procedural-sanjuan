@@ -24,6 +24,7 @@ export class Environment {
     this.dark = 0;   // how dark it is: this follows the sun all the way down through twilight
     this.daylight = 1; this.moonlight = 0; this.warmth = 0; this.elevation = 40;
     this.time = 0;
+    this.cloudCover = 0; // the sky's cloud cover as the atmosphere draws it (setClouds)
     this.sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - 40), THREE.MathUtils.degToRad(205));
 
     this.sky = createSky();
@@ -55,9 +56,16 @@ export class Environment {
   }
 
   // Renders the environment map for the sky as dark as it now is (again whenever that has changed a little).
+  // The map's sky follows the real one: its sun where the sun is, the colours of a sunset when it is low, clouds
+  // only when the atmosphere draws clouds (else the water and the glass mirrored clouds the sky did not have).
   bakeEnvironment() {
     this.baked = this.dark;
-    this.envSky.material.uniforms.uNight.value = this.baked;
+    const u = this.envSky.material.uniforms;
+    u.uNight.value = this.baked;
+    u.uSunDir.value.copy(shared.uSunDir.value);
+    u.uWarm.value = this.warmth * this.daylight;
+    u.uCloudCover.value = this.cloudCover;
+    this.bakedSun = u.uSunDir.value.clone(); this.bakedWarm = u.uWarm.value; this.bakedCover = this.cloudCover;
     const old = this.scene.environment;
     this.scene.environment = this.pmrem.fromScene(this.envScene, 0, 0.1, 10).texture;
     old?.dispose();
@@ -82,7 +90,14 @@ export class Environment {
     shared.uSunDir.value.copy(sun);
     shared.uSunGlint.value.copy(DAY.sunColor).lerp(SUNSET, this.warmth).multiplyScalar(this.daylight * 3);
     this.apply();
-    if (Math.abs(this.dark - this.baked) > 0.04 || (this.dark !== this.baked && (this.dark === 0 || this.dark === 1))) this.bakeEnvironment();
+    const moved = this.bakedSun && shared.uSunDir.value.angleTo(this.bakedSun) > 0.035, warmer = Math.abs(this.warmth * this.daylight - this.bakedWarm) > 0.04;
+    if (moved || warmer || Math.abs(this.dark - this.baked) > 0.04 || (this.dark !== this.baked && (this.dark === 0 || this.dark === 1))) this.bakeEnvironment();
+  }
+
+  // The atmosphere's clouds (cover 0 when it draws none), for the sky of the environment map.
+  setClouds(cover) {
+    this.cloudCover = cover;
+    if (Math.abs(cover - (this.bakedCover ?? 0)) > 0.05 || (cover === 0) !== ((this.bakedCover ?? 0) === 0)) this.bakeEnvironment();
   }
 
   // The sky follows the camera; the shadow frustum follows the focus, snapped to texels so shadows do not shimmer.

@@ -788,6 +788,7 @@ function frame(_, manual) {
   speedMap?.update(dt, clockTime.hour * 3600, camera.position.y - streamer.ground(camera.position.x, camera.position.z));
   ferries?.update(clockTime.hour * 3600, manifest.sea ?? 0);
   env.setSky(...Object.values(atmosphere.setDate(clockTime.date())));
+  env.setClouds(atmosphere.cloudsOn ? Math.min(1, atmosphere.coverage * 1.6) : 0);
   clockText.textContent = clockTime.label();
   env.update(dt);
   env.follow(controls.target, camera);

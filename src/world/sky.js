@@ -20,7 +20,7 @@ void main() {
 
 const FRAG = /* glsl */ `
 uniform vec3 uSunDir, uZenith, uHorizon, uGround, uNightZenith, uNightHorizon;
-uniform float uNight, uTime, uSunDisc, uCloudCover;
+uniform float uNight, uTime, uSunDisc, uCloudCover, uWarm;
 varying vec3 vDir;
 
 float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -39,8 +39,10 @@ void main() {
   float h = max(d.y, 0.0);
   float sd = max(dot(d, uSunDir), 0.0);
 
-  // day
-  vec3 day = mix(uHorizon, uZenith, pow(h, 0.5));
+  // day; with the sun low (uWarm) the horizon round it turns to the colours of a sunset and the sky above deepens
+  float toSun = max(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-5), normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + 1e-5)), 0.0);
+  vec3 horizon = mix(uHorizon, mix(vec3(0.62, 0.55, 0.62), vec3(1.0, 0.56, 0.3), pow(toSun, 3.0)), uWarm);
+  vec3 day = mix(horizon, uZenith * mix(1.0, 0.75, uWarm), pow(h, mix(0.5, 0.3, uWarm)));
   day += vec3(1.0, 0.82, 0.6) * (pow(sd, 12.0) * 0.18 + pow(sd, 180.0) * 0.5);
   day += vec3(1.0, 0.95, 0.85) * smoothstep(0.9994, 0.9998, sd) * 30.0 * uSunDisc;
 
@@ -74,7 +76,7 @@ export function createSky({ sunDisc = 1, ground = SKY.horizon } = {}) {
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
     uZenith: { value: SKY.zenith }, uHorizon: { value: SKY.horizon }, uGround: { value: ground },
     uNightZenith: { value: SKY.nightZenith }, uNightHorizon: { value: SKY.nightHorizon },
-    uNight: { value: 0 }, uTime: { value: 0 }, uSunDisc: { value: sunDisc }, uCloudCover: { value: 0.52 },
+    uNight: { value: 0 }, uTime: { value: 0 }, uSunDisc: { value: sunDisc }, uCloudCover: { value: 0.52 }, uWarm: { value: 0 },
   };
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(1, 48, 24),
