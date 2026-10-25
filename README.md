@@ -87,8 +87,12 @@ levels lagoons and ponds at their lowest shore, and keeps dry land above the sea
 "Explorar libremente", or the end of the opening, leaves you in the city with a game's heads-up display, after
 mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
 
-- **Ways round** (`1`–`5`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump);
-  Bici (W pedal, S brake, A D steer, Shift sprint: it leans into the turns, the rider's legs on the pedals);
+- **Ways round** (`1`–`5`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump: the
+  walker is a man of Microsoft's [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) avatars, MIT, with
+  his own idle, walk and run, each played at the pace that keeps his planted foot still; see
+  `public/models/people/README.md`);
+  Bici (W pedal, S brake, A D steer, Shift sprint: it leans into the turns; the same man rides it, seated, his
+  feet and hands put on the pedals and the bars by inverse kinematics);
   Manejar (W A S D, Space the handbrake, Shift a push); Volar, a helicopter (W S, A D, Space up, C down, Shift a
   push; it cannot fly through the towers, and by night it lights the street with its searchlight). `E` gets out
   of the car on foot, by the driver's door (the car stays parked where it stopped), and back in; `Esc` goes back

@@ -791,4 +791,4 @@ function frame(_, manual) {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt) };
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt) };

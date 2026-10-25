@@ -68,6 +68,11 @@ export const SOURCES = [
         license: 'MIT, Daniel Greenheck',
       },
       {
+        name: 'Microsoft Rocketbox', url: 'https://github.com/microsoft/Microsoft-Rocketbox',
+        what: 'The one who walks and cycles: Male_Adult_01, with his idle, walk and run and a seated pose (converted to glTF).',
+        license: 'MIT, Microsoft',
+      },
+      {
         name: 'Takram three-geospatial', url: 'https://github.com/takram-design-engineering/three-geospatial',
         what: 'The sky, the haze of distance and the volumetric clouds, with their noise textures.',
         license: 'MIT',

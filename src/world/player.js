@@ -8,6 +8,8 @@
 //              push; it banks into its turns, leans into its speed, its rotors turn; it does not go under the ground
 // (the motion after the controllers of mrdoob's Slop New York, MIT: github.com/mrdoob/slop-newyork)
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneRig } from 'three/addons/utils/SkeletonUtils.js';
 import { Walls, Roofs } from './drive.js';
 import { heroLit, lampMaterial, LAMP_LAYER } from './lamplight.js';
 import { shared } from './materials.js';
@@ -15,7 +17,79 @@ import { shared } from './materials.js';
 const keyOf = (keys) => (...c) => c.some((x) => keys.has(x));
 const mat = (color, roughness = 0.7, metalness = 0) => heroLit(new THREE.MeshStandardMaterial({ color, roughness, metalness }));
 
-// ---------------------------------------------------------------- a person
+// ---------------------------------------------------------------- a person of the Rocketbox library
+// Male_Adult_01 of Microsoft's Rocketbox avatars (MIT: public/models/people/README.md), a man in a striped polo,
+// shorts and sneakers, with his own idle, walk and run (in place) and a seated pose. Loaded once; the walker and the
+// rider each get a copy. Till he has come (or if he cannot), the figure of shapes below stands in.
+const V = () => new THREE.Vector3();
+let PERSON = null;
+function loadPerson() {
+  return (PERSON ??= new GLTFLoader().loadAsync('models/people/m01.glb').then((g) => {
+    g.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.frustumCulled = false; // (skinned: its bounds are the bind pose's)
+      const m = o.material;
+      if (m.name.includes('opacity')) Object.assign(m, { transparent: false, alphaTest: 0.45, depthWrite: true, side: THREE.DoubleSide }); // (hair, lashes)
+      heroLit(m);
+    });
+    g.speeds = { walk: strideSpeed(g, 'walk'), run: strideSpeed(g, 'run') };
+    return g;
+  }).catch((e) => { console.warn('the walker stays a figure of shapes:', e); return null; }));
+}
+// How fast a clip walks, and the clip put in place: the walk and the run carry him forward (the pelvis travels
+// through the cycle, the planted foot stays put); that travel over the cycle is the clip's speed, and taken out of
+// the pelvis's track, step by step, the clip loops on the spot for the walker to carry along at the speed it goes
+function strideSpeed(g, name) {
+  const clip = g.animations.find((c) => c.name === name), track = clip?.tracks.find((t) => t.name === 'Bip01_Pelvis.position');
+  if (!track) return 1.4;
+  const root = cloneRig(g.scene), mixer = new THREE.AnimationMixer(root), pelvis = root.getObjectByName('Bip01_Pelvis');
+  mixer.clipAction(clip).play();
+  const at = (t) => { mixer.setTime(t); root.updateMatrixWorld(true); return pelvis.getWorldPosition(V()); };
+  const T = clip.duration, a = at(0), b = at(T - 1e-4), speed = Math.hypot(b.x - a.x, b.z - a.z) / T;
+  const n = track.times.length, v = track.values, t0 = track.times[0], span = track.times[n - 1] - t0;
+  const d = [0, 1, 2].map((c) => v[(n - 1) * 3 + c] - v[c]);
+  for (let k = 0; k < n; k++) { const f = (track.times[k] - t0) / span; for (let c = 0; c < 3; c++) v[k * 3 + c] -= d[c] * f; }
+  return speed;
+}
+// A copy of him: his skeleton, his clips; turned to face +z (the way the walker goes)
+class Rig {
+  constructor(g) {
+    this.root = cloneRig(g.scene); this.speeds = g.speeds;
+    this.mixer = new THREE.AnimationMixer(this.root);
+    this.clip = Object.fromEntries(g.animations.map((c) => [c.name, this.mixer.clipAction(c)]));
+    this.bone = (n) => this.root.getObjectByName(n);
+    this.root.updateMatrixWorld(true);
+    // (the way the feet point, the two of them: each turns out a little)
+    const ahead = V();
+    for (const s of ['L', 'R']) ahead.add(this.bone(`Bip01_${s}_Toe0`).getWorldPosition(V()).sub(this.bone(`Bip01_${s}_Foot`).getWorldPosition(V())));
+    this.turn = new THREE.Group(); this.turn.rotation.y = -Math.atan2(ahead.x, ahead.z); this.turn.add(this.root);
+  }
+  play(weights) { for (const [n, w] of Object.entries(weights)) { const a = this.clip[n]; if (!a || (!w && !a.isRunning())) continue; if (!a.isRunning()) a.play(); a.setEffectiveWeight(w); } }
+}
+// Bones turned in the world: so that the bone points from itself through its child at `target` (aim), or about an axis
+const _q = new THREE.Quaternion(), _p = new THREE.Quaternion(), _a = V(), _b = V(), _c = V();
+function aim(bone, child, target) {
+  bone.getWorldPosition(_a); child.getWorldPosition(_b);
+  _q.setFromUnitVectors(_b.sub(_a).normalize(), _c.copy(target).sub(_a).normalize());
+  turnWorld(bone, _q);
+}
+function turnWorld(bone, q) {
+  bone.parent.getWorldQuaternion(_p);
+  bone.quaternion.premultiply(_p.clone().invert().multiply(q).multiply(_p));
+  bone.updateMatrixWorld(true);
+}
+// Two bones (thigh and calf, upper arm and forearm) reaching `target`, the joint between them bent towards `pole`
+function reach(upper, lower, end, target, pole) {
+  const H = upper.getWorldPosition(V()), a = H.distanceTo(lower.getWorldPosition(V())), b = lower.getWorldPosition(V()).distanceTo(end.getWorldPosition(V()));
+  const to = target.clone().sub(H), d = THREE.MathUtils.clamp(to.length(), Math.abs(a - b) + 0.01, a + b - 0.005), dir = to.normalize();
+  const x = (a * a - b * b + d * d) / (2 * d), h = Math.sqrt(Math.max(0, a * a - x * x));
+  const side = pole.clone().sub(H); side.sub(dir.clone().multiplyScalar(side.dot(dir))).normalize();
+  const joint = H.clone().addScaledVector(dir, x).addScaledVector(side, h);
+  aim(upper, lower, joint);
+  aim(lower, end, H.clone().addScaledVector(dir, d));
+}
+
+// ---------------------------------------------------------------- a person of shapes (till he has come)
 // A walker of a few rounded shapes: legs and arms that swing from the hip and the shoulder (elbows and knees bend
 // with the stride), a guayabera, jeans, sneakers, a cap
 function person() {
@@ -51,7 +125,8 @@ export class Walker {
   constructor({ scene, surface, sim, tiles }) {
     this.surface = surface; this.sim = sim; this.walls = new Walls(tiles);
     this.on = false; this.label = 'A pie'; this.unit = 'km/h';
-    this.model = person(); this.model.visible = false; scene.add(this.model);
+    this.model = new THREE.Group(); this.figure = person(); this.model.add(this.figure); this.model.visible = false; scene.add(this.model);
+    loadPerson().then((g) => { if (!g) return; this.rig = new Rig(g); this.model.remove(this.figure); this.model.add(this.rig.turn); });
     this.view = null;
   }
   start(x, z, heading, y = null) {
@@ -67,7 +142,7 @@ export class Walker {
   update(dt, keys) {
     if (!this.on) return;
     dt = Math.min(dt, 0.05);
-    const k = keyOf(keys), run = k('ShiftLeft', 'ShiftRight'), top = run ? 7.5 : 1.8;
+    const k = keyOf(keys), run = k('ShiftLeft', 'ShiftRight'), top = run ? 4.2 : 1.4;
     const fwd = (k('KeyW', 'ArrowUp') ? 1 : 0) - (k('KeyS', 'ArrowDown') ? 0.65 : 0), turn = (k('KeyA', 'ArrowLeft') ? 1 : 0) - (k('KeyD', 'ArrowRight') ? 1 : 0);
     this.heading += turn * 2.6 * dt;
     this.speed += (fwd * top - this.speed) * Math.min(1, dt * 10);
@@ -84,18 +159,28 @@ export class Walker {
     this.y += this.vy * dt;
     if (this.y < floor) { this.y = floor; this.vy = 0; }
     if (grounded && this.y > floor + 0.5 && this.vy <= 0) this.y = floor; // (stepping down a kerb, not falling)
-    // the stride: legs and arms swing with the speed, the body bobs
     const v = Math.abs(this.speed);
+    this.model.rotation.y = this.heading;
+    this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: v, kmh: v * 3.6, bump: 0, reversing: this.speed < -0.1, height: 1.7 };
+    if (this.rig) {
+      // his own steps: standing, walking, running by the speed, each clip played at the pace that keeps the
+      // planted foot where it is (backing up, the walk played backwards)
+      const r = this.rig, W = r.speeds.walk, R = r.speeds.run, still = 1 - THREE.MathUtils.smoothstep(v, 0.05, 0.45), ran = THREE.MathUtils.smoothstep(v, W * 1.3, R * 0.85);
+      r.play({ idle: still, walk: (1 - still) * (1 - ran), run: (1 - still) * ran });
+      r.clip.walk.timeScale = (this.speed < -0.05 ? -1 : 1) * Math.max(0.5, v / W); r.clip.run.timeScale = Math.max(0.7, v / R);
+      r.mixer.update(dt);
+      this.model.position.set(this.x, this.y, this.z);
+      return;
+    }
+    // the figure of shapes: legs and arms swing with the speed, the body bobs
     this.phase += v * dt * (run ? 1.9 : 3.4);
-    const swing = Math.min(0.8, v * 0.35) * Math.sin(this.phase), u = this.model.userData;
+    const swing = Math.min(0.8, v * 0.35) * Math.sin(this.phase), u = this.figure.userData;
     u.legL.rotation.x = swing; u.legR.rotation.x = -swing; u.armL.rotation.x = -swing * 0.8; u.armR.rotation.x = swing * 0.8;
     // the knee bends as the leg comes through, the elbows a little more running
     const bend = Math.min(1, v * 0.4);
     u.legL.lower.rotation.x = bend * Math.max(0, -Math.cos(this.phase)) * 0.9; u.legR.lower.rotation.x = bend * Math.max(0, Math.cos(this.phase)) * 0.9; // (+: the foot back)
     u.armL.lower.rotation.x = u.armR.lower.rotation.x = -0.25 - bend * (run ? 0.9 : 0.25);
     this.model.position.set(this.x, this.y + Math.abs(Math.sin(this.phase)) * Math.min(0.06, v * 0.02), this.z);
-    this.model.rotation.y = this.heading;
-    this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: v, kmh: v * 3.6, bump: 0, reversing: this.speed < -0.1, height: 1.7 };
   }
 }
 
@@ -123,8 +208,8 @@ function bicycle() {
     bar(head, [0, hub, front], 0.014, frame), bar([0, 0.84, 0.36], [0, 1.0, 0.33], 0.014, black),                 // fork, stem
     bar([-0.27, 1.0, 0.3], [0.27, 1.0, 0.3], 0.012, black), bar(seat, [0, 0.93, -0.22], 0.012, steel));            // bars, seat post
   const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.04, 0.26), black); saddle.position.set(0, 0.95, -0.2); g.add(saddle);
-  const crank = new THREE.Group(); crank.position.set(0, ...bb.slice(1));
-  for (const sx of [-1, 1]) { const arm = bar([sx * 0.07, 0, 0], [sx * 0.07, -0.17, 0], 0.01, steel); const pedal = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.02, 0.06), black); pedal.position.set(sx * 0.11, -0.17, 0); const p = new THREE.Group(); p.rotation.x = sx > 0 ? 0 : Math.PI; p.add(arm, pedal); crank.add(p); }
+  const crank = new THREE.Group(), pedals = []; crank.position.set(0, ...bb.slice(1));
+  for (const sx of [1, -1]) { const arm = bar([sx * 0.07, 0, 0], [sx * 0.07, -0.17, 0], 0.01, steel); const pedal = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.02, 0.06), black); pedal.position.set(sx * 0.11, -0.17, 0); const p = new THREE.Group(); p.rotation.x = sx > 0 ? 0 : Math.PI; p.add(arm, pedal); crank.add(p); pedals.push(pedal); }
   g.add(crank);
   // the rider: the walker, seated (hips on the saddle), leaning to the bars
   const rider = person(), seatAt = new THREE.Group();
@@ -133,7 +218,7 @@ function bicycle() {
   const u = rider.userData;
   u.armL.rotation.x = u.armR.rotation.x = -1.05; u.armL.lower.rotation.x = u.armR.lower.rotation.x = -0.25;
   u.armL.rotation.z = -0.12; u.armR.rotation.z = 0.12;
-  g.userData = { wheels: [wr, wf], crank, rider: u };
+  g.userData = { wheels: [wr, wf], crank, rider: u, seatAt, pedals }; // (pedals: the left one (+x), the right)
   return g;
 }
 
@@ -142,7 +227,34 @@ export class Cyclist {
     this.surface = surface; this.sim = sim; this.walls = new Walls(tiles);
     this.on = false; this.label = 'Bicicleta'; this.unit = 'km/h';
     this.model = bicycle(); this.model.visible = false; scene.add(this.model);
+    // the Rocketbox man in the saddle, when he has come (seated, his feet and hands put on the pedals and the bars)
+    loadPerson().then((g) => {
+      if (!g) return;
+      this.rig = new Rig(g); this.model.remove(this.model.userData.seatAt); this.model.add(this.rig.turn);
+      // the seated pose, kept: put back each frame before the reaching (a mixer leaves a pose that does not change
+      // alone, so what was done to it the frame before would pile up)
+      this.rig.play({ sit: 1 }); this.rig.mixer.update(0);
+      this.seated = []; this.rig.root.traverse((o) => { if (o.isBone) this.seated.push([o, o.quaternion.clone(), o.position.clone()]); });
+    });
     this.view = null;
+  }
+  // The rider: the seated pose, the pelvis on the saddle, leaning over the bars; the legs reach for the pedals
+  // (knees forward), the arms for the grips (elbows out)
+  pose() {
+    const r = this.rig, B = r.bone, m = this.model, u = m.userData;
+    for (const [bone, q, p] of this.seated) { bone.quaternion.copy(q); bone.position.copy(p); }
+    m.updateMatrixWorld(true);
+    const want = m.localToWorld(V().set(0, 1.0, -0.26)), at = B('Bip01_Pelvis').getWorldPosition(V());
+    r.turn.position.add(m.worldToLocal(want).sub(m.worldToLocal(at)));
+    r.turn.updateMatrixWorld(true);
+    const fwd = V().set(0, 0, 1).transformDirection(m.matrixWorld), up = V().set(0, 1, 0).transformDirection(m.matrixWorld), left = V().set(1, 0, 0).transformDirection(m.matrixWorld);
+    turnWorld(B('Bip01_Spine'), _q.setFromAxisAngle(left, 0.18));
+    for (const [s, side, pedal] of [['L', 1, u.pedals[0]], ['R', -1, u.pedals[1]]]) {
+      const foot = pedal.getWorldPosition(V()).addScaledVector(up, 0.07).addScaledVector(fwd, -0.04), hip = B(`Bip01_${s}_Thigh`).getWorldPosition(V());
+      reach(B(`Bip01_${s}_Thigh`), B(`Bip01_${s}_Calf`), B(`Bip01_${s}_Foot`), foot, hip.addScaledVector(fwd, 1).addScaledVector(up, 0.4));
+      const grip = m.localToWorld(V().set(side * 0.24, 1.0, 0.3)), shoulder = B(`Bip01_${s}_UpperArm`).getWorldPosition(V());
+      reach(B(`Bip01_${s}_UpperArm`), B(`Bip01_${s}_Forearm`), B(`Bip01_${s}_Hand`), grip, shoulder.addScaledVector(fwd, -0.4).addScaledVector(left, side * 0.6).addScaledVector(up, -0.4));
+    }
   }
   start(x, z, heading, y = null) {
     Object.assign(this, { x, z, heading, speed: 0, lean: 0, crank: 0, roll: 0, y: y ?? this.surface(x, z, -2), on: true });
@@ -180,6 +292,9 @@ export class Cyclist {
     const u = this.model.userData;
     for (const w of u.wheels) w.rotation.x += (v / 0.34) * dt;
     this.crank += (v / 0.34) * dt * 0.42; u.crank.rotation.x = this.crank;
+    this.model.position.set(this.x, this.y, this.z);
+    this.model.rotation.set(0, this.heading, 0); this.model.rotateZ(this.lean);
+    if (this.rig) this.pose();
     const r = u.rider, c = this.crank;
     r.legL.rotation.x = -1.25 + 0.42 * Math.sin(c); r.legL.lower.rotation.x = 1.05 + 0.5 * Math.cos(c);
     r.legR.rotation.x = -1.25 - 0.42 * Math.sin(c); r.legR.lower.rotation.x = 1.05 - 0.5 * Math.cos(c);
