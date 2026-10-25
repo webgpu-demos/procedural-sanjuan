@@ -133,15 +133,30 @@ export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31
   parts.push(part(W * 0.42, 0.13, 0.05, 0, yl - 0.06, zf - 0.03, TRIM, 4));                                // grille
   parts.push(part(W * 0.6, 0.1, 0.05, 0, sill + 0.12, zf - 0.02, TRIM, 4));                                // lower intake
   for (const z of [zf - 0.005, zr + 0.005]) parts.push(part(0.34, 0.12, 0.02, 0, sill + 0.24, z, [0.9, 0.9, 0.86], 4)); // plates
-  parts.push(part(W * 0.34, 0.09, 0.03, 0, yt, zr + 0.04, TRIM, 4));                                         // the band between the tail lamps
-  parts.push(part(W * 0.82, 0.06, 0.04, 0, sill + 0.08, zr + 0.06, TRIM, 4));                                // the bumper's lower edge
+  // Lamps and trim that hug the rounded nose and tail: strips of short bars laid along the body's own outline at
+  // their height, from near the middle round the corner onto the flank (flat boxes stood out at the corners).
+  // (at the lamps' height and down at the bumper the rounded section is some 6 per cent narrower than its widest)
+  const outline = (x, tail) => {
+    for (let k = 0; k <= 160; k++) { const z = tail ? zr + k * 0.005 : zf - k * 0.005; if (halfW(z) * 0.94 >= Math.abs(x) + 0.004) return z; }
+    return tail ? zr + 0.8 : zf - 0.8;
+  };
+  const strips = hi ? 6 : lo ? 2 : 4; // (bars per strip: a car far off has thousands of others round it)
+  const hug = (xa, xb, y, h, rgb, code, tail, out = 0.012) => {
+    let prev = null;
+    for (let k = 0; k <= strips; k++) {
+      const x = xa + (xb - xa) * (k / strips), p = [x, y, outline(x, tail) + (tail ? -out : out)];
+      if (prev) parts.push(bar(prev, p, 0.04, rgb, code, h));
+      prev = p;
+    }
+  };
+  if (!lo) {
+    hug(-W * 0.2, W * 0.2, yt, 0.08, TRIM, 4, true);               // the band between the tail lamps
+    hug(-W * 0.42, W * 0.42, sill + 0.09, 0.07, TRIM, 4, true);    // the bumper's lower edge
+  }
   for (const sx of [-1, 1]) {
     for (const wz of [wheelZ, -wheelZ]) parts.push(...wheel(tyre, sx * (W / 2 - 0.12), wz, hi, lo));
-    // headlamps: a slim lens round the front corner; tail lamps across the rear corners
-    parts.push(bar([sx * W * 0.18, yl, zf - 0.03], [sx * halfW(zf - 0.34) * 1.0, yl + 0.02, zf - 0.36], 0.12, LAMP, 1, 0.08));
-    // tail lamps: a broad lens across each side of the tail, wrapping round onto the flank
-    parts.push(part(W * 0.27, 0.15, 0.04, sx * W * 0.3, yt, zr + 0.05, LAMP, 2));
-    parts.push(bar([sx * W * 0.42, yt, zr + 0.06], [sx * halfW(zr + 0.3) * 1.0, yt + 0.01, zr + 0.3], 0.14, LAMP, 2, 0.06));
+    hug(sx * W * 0.19, sx * W * 0.45, yl, 0.1, LAMP, 1, false);     // headlamps, round the front corners
+    hug(sx * W * 0.2, sx * W * 0.455, yt, 0.15, LAMP, 2, true);     // tail lamps, across the tail and round onto the flank
     // the mirror on its stalk
     parts.push(part(0.13, 0.11, 0.2, sx * (halfW(c1) * 0.93 + 0.08), belt + 0.08, c1 - rake * 0.35, PAINT));
   }
