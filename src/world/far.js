@@ -94,18 +94,19 @@ export async function buildSurroundings(base, orthoBase, manifest, proj) {
         float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.12, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vFarPos.xz, uGrid.xy)));
         vec2 ruv = (vFarPos.xz - uRoadsRect.xy) / max(uRoadsRect.zw, vec2(1.0));
         float inArea = step(0.0, ruv.x) * step(ruv.x, 1.0) * step(0.0, ruv.y) * step(ruv.y, 1.0);
-        float streets = inArea * texture2D(uRoads, ruv).r;
-        // seen nearer, the light gathers into the pools under the lamps, one every 30 m or so (a scatter of them
-        // along the street's band); far off they merge into lines
-        vec2 lc = vFarPos.xz / 30.0, lcell = floor(lc);
-        vec2 lat = vec2(fract(sin(dot(lcell, vec2(127.1, 311.7))) * 43758.5453), fract(sin(dot(lcell, vec2(269.5, 183.3))) * 43758.5453));
-        float pools = smoothstep(0.42, 0.0, length(fract(lc) - 0.2 - 0.6 * lat)) * 2.2;
-        float lpx = max(fwidth(vFarPos.x), fwidth(vFarPos.z));
-        streets *= mix(pools, 0.4, smoothstep(3.0, 14.0, lpx)); // (0.4: what the pools average to)
-        vec3 lamp = mix(vec3(1.0, 0.85, 0.68), vec3(1.0, 0.6, 0.28), smoothstep(0.3, 0.75, texture2D(uRoads, ruv).r));
+        float road = inArea * texture2D(uRoads, ruv).r;
+        // Seen nearer, the light gathers under the lamps: a pool wherever a lamp's place (one to each 24 m cell, at
+        // a spot of its own) falls on a street, a faint glow along the rest of it; far off it all merges into lines.
+        vec2 lcell = floor(vFarPos.xz / 24.0);
+        vec2 at = (lcell + 0.25 + 0.5 * vec2(fract(sin(dot(lcell, vec2(127.1, 311.7))) * 43758.5453), fract(sin(dot(lcell, vec2(269.5, 183.3))) * 43758.5453))) * 24.0;
+        float onRoad = smoothstep(0.3, 0.65, inArea * textureLod(uRoads, (at - uRoadsRect.xy) / max(uRoadsRect.zw, vec2(1.0)), 0.0).r);
+        float pool = onRoad * smoothstep(7.5, 0.0, distance(vFarPos.xz, at)) * 2.6;
+        float near = 1.0 - smoothstep(3.0, 14.0, max(fwidth(vFarPos.x), fwidth(vFarPos.z)));
+        float streets = mix(road * 0.4, pool + road * 0.12, near);
+        vec3 lamp = mix(vec3(1.0, 0.85, 0.68), vec3(1.0, 0.6, 0.28), smoothstep(0.3, 0.75, road));
         totalEmissiveRadiance += (streets * 0.55 * lamp + built * mix(0.22, 0.05, inArea) * vec3(1.0, 0.72, 0.42)) * uNight * power;`);
   };
-  material.customProgramCacheKey = () => 'surroundings-v5';
+  material.customProgramCacheKey = () => 'surroundings-v6';
   const mesh = new THREE.Mesh(g, material);
   mesh.name = 'surroundings';
   mesh.receiveShadow = false;
