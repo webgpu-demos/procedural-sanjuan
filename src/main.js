@@ -13,6 +13,8 @@ import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
 import { buildFlyovers } from './world/flyovers.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
+import { laneDepth } from './shared/roadway.js';
+import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad } from './world/drive.js';
 import { Walker, Cyclist, Flyer } from './world/player.js';
@@ -145,6 +147,7 @@ scene.add(railways);
 scene.add(await buildFlyovers(`tiles/${AREA}/${manifest.roads}`, (x, z) => streamer.ground(x, z)));
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z)));
 const roads = await (await fetch(`tiles/${AREA}/${manifest.roads}`)).json();
+streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js)
 const traffic = new Traffic(roads, streamer.surface);
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
@@ -464,6 +467,33 @@ const tiles = () => scene.children.filter((o) => o.name.startsWith('tile '));
 const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles });
 const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
+// What you run into (collide.js): the street's things come with the tiles; the vehicles round you are gathered
+// each frame (the simulated cars near you, the traffic, the car you left). And what you are, to them: the
+// simulated cars fade rather than drive through you or the car parked, the traffic stops for you.
+const collider = new Collider(tiles);
+for (const p of Object.values(players)) p.collider = collider;
+function aroundYou(player, simulating) {
+  const v = player && mode !== 'fly' ? player.view : null, list = collider.dynamic, solids = [];
+  list.length = 0;
+  if (v) {
+    if (simulating) {
+      const H = sim.probeHits;
+      for (let i = 0; i < H.length; i += 7) list.push({ c: vehicleCapsule(H[i], H[i + 2], H[i + 3], H[i + 4], H[i + 5]), y: H[i + 1], heading: H[i + 3], speed: H[i + 6] });
+    } else if (traffic.group.parent) {
+      for (const o of traffic.near(v.x, v.z, 40)) list.push({ c: vehicleCapsule(o.x, o.z, o.heading, o.L, o.W), y: o.y, heading: o.heading, speed: o.speed });
+    }
+    const L = mode === 'car' ? driver.spec.L : mode === 'bike' ? 1.7 : 0.7, W = mode === 'car' ? driver.spec.spec.W : 0.6;
+    solids.push(vehicleCapsule(v.x, v.z, v.heading, L, W));
+  }
+  const pk = mode !== 'car' ? driver.parked : null;
+  if (pk) {
+    const c = vehicleCapsule(pk.x, pk.z, pk.heading, driver.spec.L, driver.spec.spec.W);
+    list.push({ c, y: pk.y, heading: pk.heading, speed: 0 });
+    solids.push(c);
+  }
+  if (sim) { sim.probe = v ? [v.x, v.z] : null; sim.solids = solids; }
+  traffic.blockers = solids;
+}
 const active = () => players[mode] ?? null;
 const CAMERAS = [['chase', 'Persecución'], ['close', 'Cerca'], ['pov', 'Primera persona'], ['orbit', 'Cinemática']];
 // [distance behind, elevation] of each rig, and the height of the eyes in first person
@@ -740,9 +770,8 @@ function frame(_, manual) {
   if (simSignals) { props.mats.lens.uniforms.uSigOn.value = simulating ? 1 : 0; if (simulating) simSignals.update(clockTime.hour * 3600); }
   // the one being played: on foot, in the car, in the air (the simulated cars round it fade rather than pass through)
   const player = active();
+  aroundYou(player, simulating);
   player?.update(dt, keys);
-  // (the simulated cars run into you, or fade away rather than drive through you, or through the car parked)
-  if (sim) { const v = player && mode !== 'fly' ? player.view : null, pk = mode === 'walk' ? driver.parked : null; sim.probe = v ? (pk ? [v.x, v.z, pk.x, pk.z] : [v.x, v.z]) : null; }
   chaseCamera(dt);
   if (hud) {
     hud.visible = !xp?.directing && !xp?.titleUp && !loading;

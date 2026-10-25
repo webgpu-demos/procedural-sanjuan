@@ -4,6 +4,8 @@
 // (meshing.js blockMesh), a chunk of tiles at a time (k_<x>_<z>.bin); shared.uLoaded, a map of the tiles that
 // are in in full, hides the blocks (and the distant ground, far.js) under them.
 import * as THREE from 'three';
+import { clearLanes } from '../shared/roadway.js';
+import { solidsOf } from './collide.js';
 import { tileKey } from '../shared/geo.js';
 import { sampleGrid } from '../shared/terrain.js';
 import { makeSurface, makeCover } from '../shared/decks.js';
@@ -167,9 +169,14 @@ export class Streamer {
     // a tile that cannot be read stays marked as failed: asking for it again every frame would only repeat the error
     if (msg.type === 'error') { console.warn(`tile ${msg.key}: ${msg.message}`); if (t) t.state = 'failed'; return; }
     if (!t) return; // unloaded while in flight
-    const { terrain, roads, paint, decals, buildings, info, props, wires, signs: signList, models } = msg.mesh;
+    const { terrain, roads, paint, decals, buildings, info, signs: signList, models } = msg.mesh;
+    let { props, wires } = msg.mesh;
+    // nothing standing within reach of a car in a lane (src/shared/roadway.js: the worker has left out what stands
+    // on the paved carriageway; this is the lanes the traffic keeps to, wherever they run)
+    if (this.laneDepth && props.length) ({ props, wires } = clearLanes(props, wires, this.laneDepth));
     const group = new THREE.Group();
     group.name = `tile ${msg.key}`;
+    group.userData.solids = solidsOf(props); // (what a car or a walker runs into: collide.js)
     const atlases = [];
 
     const ground = new THREE.Mesh(geometry(terrain, [['position', 3], ['normal', 3]]), this.materials.terrain);

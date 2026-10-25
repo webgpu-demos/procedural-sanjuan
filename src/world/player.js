@@ -147,10 +147,11 @@ export class Walker {
     this.heading += turn * 2.6 * dt;
     this.speed += (fwd * top - this.speed) * Math.min(1, dt * 10);
     const nx = this.x + Math.sin(this.heading) * this.speed * dt, nz = this.z + Math.cos(this.heading) * this.speed * dt;
-    // a wall in the way: slide along it (one axis at a time), or stop
-    if (!this.walls.blocked(nx, nz)) { this.x = nx; this.z = nz; }
-    else if (!this.walls.blocked(nx, this.z)) this.x = nx;
-    else if (!this.walls.blocked(this.x, nz)) this.z = nz;
+    // a wall, a pole, a tree, a car (collide.js) in the way: slide along it (one axis at a time), or stop
+    const free = (x, z) => !this.walls.blocked(x, z) && !this.collider?.blocked([this.x, this.z, this.x, this.z], [x, z, x, z], 0.28, this.y);
+    if (free(nx, nz)) { this.x = nx; this.z = nz; }
+    else if (free(nx, this.z)) this.x = nx;
+    else if (free(this.x, nz)) this.z = nz;
     else this.speed = 0;
     // up and down: a jump, and gravity
     const floor = this.floor(this.x, this.z), grounded = this.y <= floor + 0.03;
@@ -279,9 +280,12 @@ export class Cyclist {
     const yaw = steer * (1.9 / (1 + Math.abs(v) / 4)) * Math.min(1, Math.abs(v) / 0.8 + 0.25) * Math.sign(v || 1);
     this.heading += yaw * dt;
     const nx = this.x + Math.sin(this.heading) * v * dt, nz = this.z + Math.cos(this.heading) * v * dt;
-    if (!this.walls.blocked(nx, nz)) { this.x = nx; this.z = nz; }
-    else if (!this.walls.blocked(nx, this.z)) this.x = nx;
-    else if (!this.walls.blocked(this.x, nz)) this.z = nz;
+    // the walls, and the street's things and the vehicles (collide.js: the bike a capsule its length): slide or stop
+    const hs = Math.sin(this.heading) * 0.55, hc = Math.cos(this.heading) * 0.55, from = [this.x - hs, this.z - hc, this.x + hs, this.z + hc];
+    const free = (x, z) => !this.walls.blocked(x + hs, z + hc) && !this.collider?.blocked(from, [x - hs, z - hc, x + hs, z + hc], 0.3, this.y);
+    if (free(nx, nz)) { this.x = nx; this.z = nz; }
+    else if (free(nx, this.z)) this.x = nx;
+    else if (free(this.x, nz)) this.z = nz;
     else v *= -0.2;
     this.speed = v;
     const floor = this.floor(this.x, this.z);

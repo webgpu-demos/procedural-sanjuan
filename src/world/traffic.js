@@ -10,6 +10,7 @@
 //   - where lanes merge, vehicles queue instead of entering side by side
 //   - never enter a junction without room on the far side
 import * as THREE from 'three';
+import { segDist } from './collide.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { shared } from './materials.js';
 import { LAMP_LAYER, lampMaterial, lampUniforms, HERO_RIM } from './lamplight.js';
@@ -385,12 +386,26 @@ export class Traffic {
     this.count = CARS;   // how many cars there are (the panel changes it)
     this.highway = 5;    // how much busier the expressway is than its class alone would make it
     this.headlights = 5; // strength of the light the lamps throw on the road at night
+    // what is not traffic but stands in its way: you (on foot, on a bike, in your car) and the car you left,
+    // as capsules [ax, az, bx, bz, r] (collide.js), given each frame; met in the lane ahead, a car stops for it
+    this.blockers = [];
     this.dummy = new THREE.Object3D();
     this.dummy.rotation.order = 'YXZ'; // heading first, then pitch about the car's own axle
     this.color = new THREE.Color();
   }
 
   rnd() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
+
+  // The cars within `r` of (x, z), as drawn last: [{ x, y, z, heading, L, W, speed }]
+  near(x, z, r) {
+    const out = [];
+    for (const car of this.cars) {
+      if (!car.lane || car.lane.hidden || car.px == null || (car.px - x) ** 2 + (car.pz - z) ** 2 > r * r) continue;
+      const t = TYPES[car.type];
+      out.push({ x: car.px, y: car.py, z: car.pz, heading: Math.atan2(car.hx, car.hz), L: t.L, W: t.spec.W, speed: car.v });
+    }
+    return out;
+  }
 
   // A lane with some part within `radius` of the focus, picked by weight; null if the area has none.
   pick(focus, radius, filter) {
@@ -415,6 +430,8 @@ export class Traffic {
       // a clear stretch, away from the ends of the road
       const s = 8 + this.rnd() * (lane.length - 16);
       if (lane.cars.some((o) => o !== car && Math.abs(o.s - s) < 16)) continue;
+      along(lane, s, tmp, tmp2); // (nor on you, nor on the car you left)
+      if (this.blockers.some((b) => Math.hypot((b[0] + b[2]) / 2 - tmp.x, (b[1] + b[3]) / 2 - tmp.z) < 14)) continue;
       if (car.lane) car.lane.cars.splice(car.lane.cars.indexOf(car), 1);
       Object.assign(car, { lane, s, k: Math.floor(this.rnd() * lane.n), v: lane.speed * 0.5, next: undefined, waited: 0 });
       lane.cars.push(car);
@@ -496,6 +513,15 @@ export class Traffic {
         const g = o.s - car.s - (TYPES[o.type].L + L) / 2;
         if (g < gap) { gap = Math.max(g, 0); lead = o.v; }
       }
+      // (and you, or your car, in the lane ahead: from where the car was drawn last)
+      if (this.blockers.length && car.px != null) {
+        const W = TYPES[car.type].spec.W;
+        for (const b of this.blockers) for (let q = 0; q <= 2; q++) {
+          const qx = b[0] + ((b[2] - b[0]) * q) / 2, qz = b[1] + ((b[3] - b[1]) * q) / 2, rx = qx - car.px, rz = qz - car.pz;
+          const ahead = rx * car.hx + rz * car.hz, aside = Math.abs(rx * car.hz - rz * car.hx);
+          if (ahead > 0 && ahead < 45 && aside < W / 2 + b[4] + 0.35 && ahead - L / 2 - b[4] < gap) { gap = Math.max(0, ahead - L / 2 - b[4]); lead = 0; }
+        }
+      }
       let roomAhead = true;
       if (next) {
         for (const o of next.cars) {
@@ -523,7 +549,7 @@ export class Traffic {
       car.s += car.v * dt;
       // stuck for a long time (a jam that cannot clear): start again somewhere else
       car.waited = car.v < 0.2 ? (car.waited ?? 0) + dt : 0;
-      if (car.waited > 45 && !this.stopLight(lane)) { if (!this.spawnCar(car, focus)) continue; }
+      if ((car.waited > 45 && !this.stopLight(lane)) || car.elsewhere) { car.elsewhere = false; if (!this.spawnCar(car, focus)) continue; }
 
       if (car.lane === lane && car.s >= lane.length) {
         lane.cars.splice(lane.cars.indexOf(car), 1);
@@ -549,6 +575,12 @@ export class Traffic {
       const slope = car.lane.raised || onRamp ? tmp2.y : (this.surface(px + tmp2.x * 5, pz + tmp2.z * 5) - this.surface(px - tmp2.x * 5, pz - tmp2.z * 5)) / 10;
       d.rotation.set(-Math.atan(slope), Math.atan2(tmp2.x, tmp2.z), 0);
       d.updateMatrix();
+      Object.assign(car, { px, pz, py: d.position.y, hx: tmp2.x, hz: tmp2.z }); // (where it is: for what it stops for, and what runs into it)
+      // on top of you (you were set down where it was): it starts again somewhere else, next frame
+      if (this.blockers.length) {
+        const h = Math.max(0, TYPES[car.type].L / 2 - TYPES[car.type].spec.W / 2), sx = tmp2.x * h, sz = tmp2.z * h, r = TYPES[car.type].spec.W / 2;
+        if (this.blockers.some((b) => segDist(px - sx, pz - sz, px + sx, pz + sz, b[0], b[1], b[2], b[3]) < r + b[4] - 0.05)) { counts[car.type]--; car.elsewhere = true; continue; }
+      }
       fleet.mesh.setMatrixAt(i, d.matrix);
       fleet.mesh.setColorAt(i, this.color.setHex(car.color));
     }

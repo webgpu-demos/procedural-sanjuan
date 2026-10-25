@@ -270,7 +270,7 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
         const R = reach(qx, qz, nx, nz, 1);
         if (R == null) continue;
         const x = qx + nx * (R + 0.4), z = qz + nz * (R + 0.4), key = Math.floor(x / 6) + ',' + Math.floor(z / 6);
-        if (!inBounds(x, z) || idx.building.has(x, z) || taken.has(key)) continue;
+        if (!inBounds(x, z) || idx.building.has(x, z) || idx.carriageway.has(x, z) || taken.has(key)) continue; // (not in the crossing road)
         taken.add(key);
         // faces the approaching traffic; the arm length (scale) reaches towards the middle of the road
         props.push({ kind: PROP.SIGNAL, variant: 0, rot: Math.atan2(-dx, -dz), x, z, scale: Math.min(1.6, Math.max(0.7, R / 4)) });

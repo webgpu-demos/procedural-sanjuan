@@ -8,6 +8,7 @@
 // and against the simulated cars, which cannot swerve (they keep to their recorded way): one that would drive
 // through it fades out instead (simtraffic.js, probe).
 import * as THREE from 'three';
+import { vehicleCapsule } from './collide.js';
 import { TYPES, vehicle, carMaterial, beamGeometry, beamTexture } from './traffic.js';
 import { LAMP_LAYER, lampMaterial } from './lamplight.js';
 
@@ -177,25 +178,19 @@ export class Driver {
     // walls: the nose (or the tail, backing up) and its corners
     const half = this.spec.L * 0.5, side = this.spec.spec.W * 0.5, s = Math.sin(this.heading), c = Math.cos(this.heading), dir = v >= 0 ? 1 : -1;
     const probes = [[0, half * dir], [side, half * dir * 0.85], [-side, half * dir * 0.85]];
-    const hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => this.walls.blocked(nx + c * a + s * b, nz - s * a + c * b));
-    // the simulated cars round about (two circles each, front and back)
-    // A car already deep inside this one is driving through it (it keeps to its recorded way and fades out,
-    // simtraffic.js): no obstacle. One met from outside is.
+    let hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => this.walls.blocked(nx + c * a + s * b, nz - s * a + c * b));
+    // the street's things and the vehicles round about (collide.js: the simulated cars, the traffic, the car
+    // parked): one met from outside stops it; one it is already inside of it drives out of (set down in a queue,
+    // the first seconds it may drive through the cars at all: ghost)
     let hitCar = null;
-    const sim = this.sim();
     this.ghost = Math.max(0, this.ghost - dt);
-    if (sim) {
-      sim.probe = [this.x, this.z];
-      const H = sim.probeHits;
-      for (let i = 0; i < H.length && !this.ghost; i += 7) {
-        const ox = H[i], oy = H[i + 1], oz = H[i + 2], oh = H[i + 3], ol = H[i + 4];
-        if (Math.abs(oy - this.y) > 3) continue; // (on another level)
-        if ((ox - this.x) ** 2 + (oz - this.z) ** 2 < 2.0 * 2.0) continue; // (passing through)
-        for (const f of [-0.28, 0.28]) for (const g of [-0.28, 0.28]) {
-          const ax = nx + s * this.spec.L * f, az = nz + c * this.spec.L * f, bx = ox + Math.sin(oh) * ol * g, bz = oz + Math.cos(oh) * ol * g;
-          if ((ax - bx) ** 2 + (az - bz) ** 2 < 1.9 * 1.9) hitCar = { speed: H[i + 6], heading: oh };
-        }
-      }
+    const sim = this.sim();
+    if (sim) sim.probe = [this.x, this.z];
+    if (this.collider && Math.abs(v) > 0.05) {
+      const W = this.spec.spec.W, from = vehicleCapsule(this.x, this.z, this.heading, this.spec.L, W).slice(0, 4), to = vehicleCapsule(nx, nz, this.heading, this.spec.L, W).slice(0, 4);
+      const hit = this.collider.blocked(from, to, W / 2, this.y);
+      if (hit && !hit.vehicle) hitWall = true;
+      else if (hit && !this.ghost) hitCar = hit.vehicle;
     }
     if (hitWall || hitCar) {
       this.bump = Math.min(1, Math.abs(v) / 15); // (the camera feels it)

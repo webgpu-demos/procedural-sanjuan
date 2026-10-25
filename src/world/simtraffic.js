@@ -8,6 +8,7 @@
 //   lights every car out to the horizon as its lamps: white ahead, red behind (they show from dusk to dawn)
 // Tracks come in windows of the morning (w_<t>.bin, WINDOW s each), fetched ahead of the clock.
 import * as THREE from 'three';
+import { segDist, vehicleCapsule } from './collide.js';
 import { TYPES, vehicle, carMaterial, dissolve, beamGeometry, beamTexture, CAR_COLORS, BUS_COLORS } from './traffic.js';
 import { shared } from './materials.js';
 import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
@@ -130,8 +131,11 @@ export class SimTraffic {
     this.near = NEAR;      // within this, a car is drawn as its model (further for a directed shot)
     this.keep = null;      // [from, to] (s): windows a directed shot will play through, loaded ahead and kept
     this.trace = null;     // (testing: called with each seen car's placement, to find what would show as a glitch)
-    this.probe = null;     // [x, z] of the visitor's car, if driving; probeHits: the cars within 30 m of it,
-    this.probeHits = [];   // 7 numbers each (x, y, z, heading, length, width, speed)
+    this.probe = null;     // [x, z] of the visitor (in a car, on a bike, on foot); probeHits: the cars within 30 m
+    this.probeHits = [];   // of it, 7 numbers each (x, y, z, heading, length, width, speed)
+    this.capsule = [];
+    this.solids = [];      // what the cars must not drive through: the visitor and the car parked, as capsules
+                           // [ax, az, bx, bz, r] (collide.js); a car that would, fades out instead
     this.nearby = [];      // [x, z] of the cars within 320 m of the camera (the minimap's dots)
     this.heights = new Map(); this.frameNo = 0; // (each seen car's eased height, and the frame it was set)
     this.rate = 1;         // the clock's speed: a car's arrival and departure fade over about half a second of it
@@ -301,19 +305,20 @@ export class SimTraffic {
       if (W.K[s0] >= W.t0) shown = Math.min(shown, (T - W.K[s0]) / fade);
       if (W.K[s1] < W.t1 - 0.5) shown = Math.min(shown, (W.K[s1] - T) / fade);
       shown = smooth(0, 1, shown);
-      if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], ground, deck, shown);
       if (followed) this.view = { x: p[0], y, z: p[2], heading, speed, vid, type: W.type[i], brake };
       const t = W.type[i], spec = TYPES[t];
-      // the visitor's car (this.probe: [x, z]): the simulated cars round it, to run into; one that would pass
-      // through it (they keep to their recorded way) fades out instead of driving through it
+      // the visitor (this.probe: [x, z]): the simulated cars round about, to run into; one that would pass through
+      // the visitor or the car parked (they keep to their recorded way) fades out before it touches, its whole
+      // length (a bus's too) measured, not its middle
       if (this.probe) {
         const px = p[0] - this.probe[0], pz = p[2] - this.probe[1], pd = px * px + pz * pz;
-        if (pd < 900) this.probeHits.push(p[0], y, p[2], heading, spec.L, spec.spec.W, speed);
-        for (let j = 0; j < this.probe.length; j += 2) { // (and after it, the car parked: [x, z, x2, z2])
-          const qx = p[0] - this.probe[j], qz = p[2] - this.probe[j + 1], qd = qx * qx + qz * qz;
-          if (qd < 3.2 * 3.2) shown *= smooth(1.8, 3.2, Math.sqrt(qd));
+        if (pd < 900) {
+          this.probeHits.push(p[0], y, p[2], heading, spec.L, spec.spec.W, speed);
+          const c = vehicleCapsule(p[0], p[2], heading, spec.L, spec.spec.W, this.capsule);
+          for (const s of this.solids) shown *= smooth(0.05, 0.7, segDist(c[0], c[1], c[2], c[3], s[0], s[1], s[2], s[3]) - c[4] - s[4]);
         }
       }
+      if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], ground, deck, shown, heading, spec);
       if (d2 < 320 * 320) this.nearby.push([p[0], p[2]]); // (for the minimap)
       if (d2 < 250 * 250) { nearN++; nearSpeed += speed; if (speed < 0.5) nearStopped++; }
       // near: the model; across the band at its edge it dissolves into the box, which stands in from there out

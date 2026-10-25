@@ -238,7 +238,7 @@ export function placeProps({ land, trees, treeRows, vending, edges, idx, inBound
         if (edge == null) return;
         const off = kerb != null ? kerb + 0.45 : edge - 0.5;
         const lx = x + nx * off * side, lz = z + nz * off * side;
-        if (inBounds(lx, lz) && !idx.building.has(lx, lz) && free(lx, lz, 6))
+        if (inBounds(lx, lz) && !idx.building.has(lx, lz) && !idx.carriageway.has(lx, lz) && free(lx, lz, 6)) // (not out in a crossing road)
           props.push({ kind: PROP.LIGHT, variant: 0, rot: Math.atan2(-nx * side, -nz * side), x: lx, z: lz, scale: 1 });
       }, 5 + (ei % 7));
       forEachAlong(pts, 11, (x, z, dx, dz, n) => {
@@ -258,7 +258,7 @@ export function placeProps({ land, trees, treeRows, vending, edges, idx, inBound
         const nx = -dz, nz = dx, edge = reach(idx.road, x, z, nx, nz, side, 12);
         if (edge == null) { prevPole = null; return; }
         const px = x + nx * (edge - 0.35) * side, pz = z + nz * (edge - 0.35) * side;
-        if (!inBounds(px, pz) || idx.building.has(px, pz) || !free(px, pz, 4)) { prevPole = null; return; }
+        if (!inBounds(px, pz) || idx.building.has(px, pz) || idx.carriageway.has(px, pz) || !free(px, pz, 4)) { prevPole = null; return; }
         props.push({ kind: PROP.POLE, variant: hash(px, pz, 4) < 0.35 ? 1 : 0, rot: Math.atan2(dx, dz), x: px, z: pz, scale: 1 });
         if (prevPole && Math.hypot(px - prevPole[0], pz - prevPole[1]) < 55) wires.push([prevPole[0], prevPole[1], px, pz]);
         prevPole = [px, pz];

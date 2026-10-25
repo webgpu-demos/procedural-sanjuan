@@ -1,6 +1,7 @@
 // Tile meshing: decoded tile + terrain grid -> typed arrays for three.js BufferGeometry.
 // Pure functions with no three.js dependency, so they run in the tile worker (and in Node tests).
 import earcut from 'earcut';
+import { clearRoadway } from '../shared/roadway.js';
 import { AREA, SPORT, BARRIER, MATERIAL, BFLAG } from '../shared/tileformat.js';
 import { sampleGrid } from '../shared/terrain.js';
 import { KIND, CAT, WALL, GROUND } from './constants.js';
@@ -577,6 +578,7 @@ export function buildingMesh(buildings, tx, tz) {
 export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z)) {
   // (the default surface ignores decks: fine for tests, the worker passes makeSurface())
   const drape = createDraper(grid, surface, tileSize);
+  tile = { ...tile, ...clearRoadway(tile) }; // (nothing standing out in the lanes: src/shared/roadway.js)
   return {
     terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize),
     roads: roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape),

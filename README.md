@@ -97,6 +97,16 @@ mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
   push; it cannot fly through the towers, and by night it lights the street with its searchlight). `E` gets out
   of the car on foot, by the driver's door (the car stays parked where it stopped), and back in; `Esc` goes back
   to exploring. The one you are is lit by the street lamps it passes under.
+- **Running into things** (`src/world/collide.js`): every solid thing is a capsule, a segment on the ground and a
+  radius round it (a pole or a trunk a point; a car, a parked car, a bench, a bus shelter along its axis). The
+  walker, the bike and the car stop against the buildings' walls, the street's things and every vehicle (the
+  simulated cars near you, the procedural traffic, the car you left), sliding along them on foot. The procedural
+  traffic stops behind you and behind your parked car; the simulated cars, which keep to their recorded way,
+  fade out before they would touch either.
+- **Nothing in the lanes** (`src/shared/roadway.js`): as a tile loads, a street light, pole, tree or piece of
+  furniture on the paved carriageway, or within reach of a car in a road's outer lane, is left out (a signal
+  mast steps back along its approach instead); `node tools/audit/roadway.mjs` counts them (about 2,100 of
+  460,000 props across San Juan).
 - **Cameras** (`V`): chase, close, first person, cinematic.
 - **The time of day**: dawn, rush hour, noon, dusk, night (the simulated cars from 4:30 to 10:15; outside the
   run, the procedural traffic).
