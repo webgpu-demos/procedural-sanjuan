@@ -50,13 +50,16 @@ class TwilightSky extends Effect {
           outputColor.rgb = mix(inputColor.rgb, vec3(0.03, 0.05, 0.11) * 0.6, far);
           return;
         }
-        // navy overhead, a paler blue at the horizon, warmer towards where the sun will rise
+        // navy overhead, a paler blue at the horizon, warmer towards where the sun will rise; in the blue hour (the
+        // sun a few degrees down) the whole sky a brighter, deeper blue before it settles into the navy of night
+        float blue = smoothstep(0.3, 0.6, uDark) * (1.0 - smoothstep(0.72, 0.94, uDark));
         vec3 sky = mix(vec3(0.035, 0.06, 0.13), vec3(0.008, 0.014, 0.04), smoothstep(0.0, 0.5, up));
+        sky = mix(sky, mix(vec3(0.05, 0.1, 0.24), vec3(0.018, 0.04, 0.12), smoothstep(0.0, 0.6, up)), blue);
         float east = max(0.0, dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(uSunDir.x, 0.0, uSunDir.z))));
         sky += vec3(0.09, 0.045, 0.03) * pow(east, 3.0) * (1.0 - smoothstep(0.0, 0.25, up)) * smoothstep(-0.35, -0.02, uSunDir.y);
-        // stars: the brightest, fading in as it darkens
+        // stars: the brightest, coming out once the blue hour is over
         vec3 cell = floor(dir * 420.0);
-        float star = step(0.9975, hash(cell)) * smoothstep(0.05, 0.3, up) * smoothstep(0.55, 0.95, uDark);
+        float star = step(0.9975, hash(cell)) * smoothstep(0.05, 0.3, up) * smoothstep(0.74, 0.97, uDark);
         sky += vec3(star * (0.4 + 0.6 * hash(cell + 7.0)));
         outputColor.rgb = inputColor.rgb + sky * uDark * 0.6;
       }`, {
