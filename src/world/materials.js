@@ -503,7 +503,8 @@ const GROUND_MAIN = /* glsl */ `
       gSheen += fw * uDark * (vec3(0.02, 0.034, 0.075) + vec3(0.05, 0.032, 0.018) * low * low) * (1.0 - foam);
     }
     // the reflection pass (reflections.js) mirrors the city in it, by water's Fresnel
-    gMirror = fresnel * (1.0 - foam) * (1.0 - 0.6 * pool);
+    // (looked down on, water mirrors next to nothing: those pixels are left out of the pass, which saves it the work)
+    gMirror = fresnel * smoothstep(0.03, 0.06, fresnel) * (1.0 - foam) * (1.0 - 0.6 * pool);
   }
 }
 `;
@@ -531,7 +532,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v5';
+  m.customProgramCacheKey = () => 'ground-v6';
   return m;
 }
 
