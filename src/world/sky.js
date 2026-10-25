@@ -2,8 +2,11 @@
 // city glow. The same shader (sun disc off) is rendered into the environment map for reflections.
 import * as THREE from 'three';
 
+// (The picture's sky is the atmosphere's (atmosphere.js); this one is the environment map's, what lights the shade
+// and what water and glass mirror. Its blue is the light of a sky, as bright as the deep blue it was but nearer to
+// white: the shade under it had turned a saturated blue, pavements the colour of a swimming pool.)
 export const SKY = {
-  zenith: new THREE.Color().setRGB(0.17, 0.33, 0.62),
+  zenith: new THREE.Color().setRGB(0.24, 0.33, 0.5),
   horizon: new THREE.Color().setRGB(0.68, 0.76, 0.85),
   ground: new THREE.Color().setRGB(0.3, 0.28, 0.25),
   nightZenith: new THREE.Color().setRGB(0.004, 0.006, 0.016),
