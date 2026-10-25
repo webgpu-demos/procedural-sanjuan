@@ -34,6 +34,13 @@ export const shared = {
   // afar (far.js ground, distant blocks) is not drawn over it. uLoadedRect: the area's extent (minX, minZ, sizeX, sizeZ).
   uLoaded: { value: (() => { const t = new THREE.DataTexture(new Uint8Array(1), 1, 1, THREE.RedFormat); t.needsUpdate = true; return t; })() },
   uLoadedRect: { value: new THREE.Vector4(0, 0, 1, 1) },
+  // the shore (water.js): metres from the sea to the nearest land, and how open it lies to the ocean, in a
+  // texture over (minX, minZ, sizeX, sizeZ)
+  uShore: { value: (() => { const t = new THREE.DataTexture(new Uint8Array([255, 255]), 1, 1, THREE.RGFormat); t.unpackAlignment = 1; t.needsUpdate = true; return t; })() },
+  uShoreRect: { value: new THREE.Vector4(0, 0, 0, 0) },
+  // the streets' lights seen from afar (nightroads.js): a map of the roads over (minX, minZ, sizeX, sizeZ)
+  uNightRoads: { value: (() => { const t = new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat); t.needsUpdate = true; return t; })() },
+  uNightRoadsRect: { value: new THREE.Vector4(0, 0, 0, 0) },
 };
 
 
@@ -363,11 +370,18 @@ uniform float uFixedLayer;
 uniform sampler2D uOrtho;
 uniform vec4 uOrthoRect;
 uniform float uOrthoOn;
+uniform float uTime;
+uniform sampler2D uShore;
+uniform vec4 uShoreRect;
+uniform vec3 uSunDir;
+uniform vec3 uSunGlint;
 varying float vLayer;
 varying vec3 vWPos;
 varying vec3 vWNrm;
 vec3 gT, gB, gN, gNm;
 float gRough;
+float gMirror = 0.0; // how much of a mirror this fragment is: water (written to alpha for the reflection pass)
+vec3 gGlint = vec3(0.0), gSheen = vec3(0.0); // the sun in the water, where it reaches; the sky round a low sun in it
 ${NOISE}
 `;
 const GROUND_MAIN = /* glsl */ `
@@ -399,9 +413,73 @@ const GROUND_MAIN = /* glsl */ `
     }
   }
   if (water) {
-    diffuseColor.rgb = tint * (0.9 + 0.2 * blotch);
-    gNm = normalize(vec3((vnoise(st * 0.9) - 0.5) * 0.08, (vnoise(st * 0.9 + 31.7) - 0.5) * 0.08, 1.0));
-    gRough = 0.06;
+    // Which water, told by its colour (meshing.js): the open sea and the bay, a lagoon or a river, or a pool
+    float pool = step(0.3, tint.b), sea = (1.0 - pool) * step(0.12, tint.b);
+    vec2 p = vWPos.xz;
+    float px = max(max(fwidth(p.x), fwidth(p.y)), 1e-3);         // metres one pixel spans here
+    // metres to the nearest land, and how open to the ocean (water.js); open water where the map does not reach
+    vec2 suv = (p - uShoreRect.xy) / max(uShoreRect.zw, vec2(1.0));
+    bool mapped = suv.x > 0.0 && suv.x < 1.0 && suv.y > 0.0 && suv.y < 1.0;
+    vec2 sh = mapped ? texture2D(uShore, suv).rg : vec2(1.0);
+    float shore = sh.r * 510.0, open = sea * smoothstep(0.2, 0.75, sh.g);
+    float calm = mix(mix(0.3, 1.0, open), 0.07, pool);           // how big its waves are
+    // The waves: the trade-wind sea from the east-northeast running west-southwest, as a sum of crests from 40 m
+    // down to a hand's breadth, each one left out before it is too fine for its pixel (no shimmer far off). The
+    // crests bend and the swell rises and falls from place to place, so no stretch of sea repeats the next.
+    // Their slopes give the normal; the sun is mirrored in them.
+    vec2 slope = vec2(0.0);
+    vec2 warp = (vec2(vnoise(p * 0.004), vnoise(p * 0.004 + 17.3)) - 0.5) * 140.0;
+    float swell = 0.5 + vnoise(p * 0.011 + vec2(uTime * 0.012, 0.0));
+    for (int i = 0; i < 9; i++) {
+      float fi = float(i), len = 40.0 * pow(0.62, fi);
+      float ang = 2.76 + 1.25 * (fract(sin(fi * 12.9898 + 4.1) * 43758.5453) - 0.5); // direction of travel (x east, z south)
+      vec2 dir = vec2(cos(ang), sin(ang));
+      float k = 6.2832 / len, w = sqrt(9.81 * k);
+      float steep = mix(0.03, 0.085, fi / 8.0) * (1.0 - smoothstep(len * 0.12, len * 0.4, px)) * (i < 4 ? swell : 1.0);
+      slope += dir * steep * cos(k * dot(dir, p + warp * (1.0 - fi / 9.0)) - w * uTime + fi * 1.7);
+    }
+    {
+      // and a cross-chop that breaks the crests up
+      vec2 q = p * 0.7 + vec2(uTime * 0.31, -uTime * 0.17);
+      float n0 = vnoise(q), nx = vnoise(q + vec2(0.15, 0.0)), nz = vnoise(q + vec2(0.0, 0.15));
+      slope += vec2(nx - n0, nz - n0) * 0.5 * (1.0 - smoothstep(0.06, 0.25, px));
+    }
+    slope *= calm;
+    // The colour of the water itself: a deep Atlantic blue offshore, turquoise over the sand of the shallows;
+    // lagoons and rivers darker and greener, pools their own blue
+    float shallow = sea * (1.0 - smoothstep(4.0, 120.0, shore + 30.0 * (vnoise(p * 0.02) - 0.5)));
+    vec3 body = mix(vec3(0.0035, 0.026, 0.07), vec3(0.02, 0.16, 0.18), shallow * shallow);
+    body = mix(body, mix(tint * vec3(0.5, 0.6, 0.55), tint, pool), 1.0 - sea);
+    // The surf, where the ocean reaches the shore (the north coast takes the Atlantic swell; the bay and the
+    // lagoons lie still): broken lines of white water rolling in, and the wash at the edge
+    float foam = 0.0;
+    if (open > 0.0 && shore < 60.0) {
+      float n = vnoise(p * 0.035 + vec2(uTime * 0.02, 0.0)), fine = vnoise(p * 0.55 + vec2(-uTime * 0.25, uTime * 0.1));
+      float band = fract(shore / 24.0 + uTime * 0.055 + n * 1.6);
+      float crest = smoothstep(0.0, 0.03, band) * (1.0 - smoothstep(0.03, 0.3, band));
+      foam = crest * (1.0 - smoothstep(8.0, 42.0, shore)) * smoothstep(0.4, 0.85, 0.65 * fine + 0.6 * n);
+      foam = max(foam, (1.0 - smoothstep(2.0, 10.0, shore)) * smoothstep(0.3, 0.7, fine));
+      foam *= open * (1.0 - smoothstep(0.6, 4.0, px) * 0.5);
+    }
+    diffuseColor.rgb = mix(body, vec3(0.78, 0.82, 0.82), foam);
+    gNm = normalize(mix(vec3(-slope, 1.0), vec3(0.0, 0.0, 1.0), foam));
+    // smooth up close; far off the waves are finer than a pixel and the sun's glitter spreads into a broad path
+    gRough = mix(mix(0.07, 0.22, smoothstep(0.3, 6.0, px)), 0.65, foam);
+    vec3 V = normalize(cameraPosition - vWPos);
+    float c = clamp(V.y, 0.0, 1.0), fresnel = 0.02 + 0.98 * pow(1.0 - c, 5.0);
+    {
+      // The sun in the waves: a facet here and there turned just so throws it back, sparks up close that merge
+      // into the glitter path towards the horizon. And with the sun low, the sea takes the colour of the sky
+      // around it (the environment map's sky does not have the sunset in it).
+      vec3 n = normalize(gT * gNm.x + gB * gNm.y + gN * gNm.z);
+      float s = max(dot(reflect(-V, n), uSunDir), 0.0), sharp = mix(1600.0, 40.0, smoothstep(0.3, 25.0, px));
+      gGlint = uSunGlint * pow(s, sharp) * (sharp + 1.0) * 0.006 * mix(0.25, 1.0, fresnel) * (1.0 - foam) * step(0.0, uSunDir.y);
+      vec3 R = reflect(-V, n);
+      float toward = pow(max(dot(normalize(R.xz + 1e-5), normalize(uSunDir.xz + 1e-5)), 0.0), 5.0);
+      gSheen = uSunGlint * 0.05 * toward * fresnel * (1.0 - smoothstep(0.02, 0.4, uSunDir.y)) * (1.0 - foam);
+    }
+    // the reflection pass (reflections.js) mirrors the city in it, by water's Fresnel
+    gMirror = fresnel * (1.0 - foam) * (1.0 - 0.6 * pool);
   }
 }
 `;
@@ -414,6 +492,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       uGroundScale: { value: tex.ground.scales }, uFixedLayer: { value: fixedLayer },
       uOrtho: shared.uOrtho, uOrthoRect: shared.uOrthoRect, uOrthoOn: shared.uOrthoOn,
       uLampOn: shared.uLampOn, uLampMap: shared.uLampMap, uLampRect: shared.uLampRect,
+      uTime: shared.uTime, uShore: shared.uShore, uShoreRect: shared.uShoreRect, uSunDir: shared.uSunDir, uSunGlint: shared.uSunGlint,
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nattribute float aLayer;\nvarying float vLayer;\n${WORLD_VARYINGS_VERT}`)
@@ -422,9 +501,13 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       .replace('#include <common>', '#include <common>\n' + GROUND_PARS)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + GROUND_MAIN)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
-      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + APPLY_NORMAL);
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + APPLY_NORMAL)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gSheen;')
+      // (the direct diffuse light is zero in shadow: it tells whether the sun reaches the water there)
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v3';
+  m.customProgramCacheKey = () => 'ground-v4';
   return m;
 }
 
@@ -451,15 +534,23 @@ function blocksMaterial() {
           vec2 g = vec2(dot(vWPos.xz, t) / 3.2, vWPos.y / 3.3), cell = floor(g), f = fract(g);
           float blur = smoothstep(0.25, 0.7, max(fwidth(g.x), fwidth(g.y)));
           float win = mix(step(0.25, f.x) * step(f.x, 0.75) * step(0.3, f.y) * step(f.y, 0.8), 0.25, blur);
-          float lit = mix(step(0.74, hash12(cell + floor(vWPos.xz / 97.0) * 7.0)), 0.26, blur);
+          // At night no two buildings alike (one asleep, the next busy), a storey here and there lit right
+          // across, warm bulbs or cool tubes; from afar each is the share of its rooms that are lit, not an
+          // even glow over every wall.
+          vec2 bld = floor(vWPos.xz / 41.0);
+          float busy = hash12(bld * 1.7 + 3.0), rate = mix(0.05, 0.5, busy * busy);
+          float storey = step(0.62, hash12(vec2(cell.y * 1.3, bld.x * 7.0 + bld.y)));
+          rate = mix(rate, 0.85, storey * step(0.5, busy));
+          float lit = mix(step(1.0 - rate, hash12(cell + bld * 7.0)), rate, blur);
+          vec3 tube = mix(vec3(1.0, 0.72, 0.42), vec3(0.82, 0.9, 1.0), step(0.6, hash12(bld + 11.0)));
           diffuseColor.rgb *= 0.9 - 0.5 * win; // (as dark as a detailed facade is with its glass, from afar)
           // (an apagón: dark inside the spreading edge, but for the odd generator)
           float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, step(0.88, hash12(floor(vWPos.xz / 37.0))) * 0.5,
             1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
-          totalEmissiveRadiance += win * lit * uNight * vec3(1.0, 0.78, 0.5) * 1.1 * power;
+          totalEmissiveRadiance += win * lit * uNight * tube * 1.3 * power;
         }`);
   };
-  m.customProgramCacheKey = () => 'blocks-v4';
+  m.customProgramCacheKey = () => 'blocks-v5';
   return m;
 }
 

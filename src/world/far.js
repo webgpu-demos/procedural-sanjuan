@@ -69,7 +69,7 @@ export async function buildSurroundings(base, orthoBase, manifest, proj) {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, {
       uNight: shared.uNight, uGrid: shared.uGrid, uOrtho: shared.uOrtho, uOrthoRect: shared.uOrthoRect, uOrthoOn: shared.uOrthoOn,
-      uLoaded: shared.uLoaded, uExtent: shared.uLoadedRect,
+      uLoaded: shared.uLoaded, uExtent: shared.uLoadedRect, uRoads: shared.uNightRoads, uRoadsRect: shared.uNightRoadsRect,
       uLampOn: { value: 0 }, uLampMap: shared.uLampMap, // (no lamp light here; the sampler still needs its texture)
     });
     shader.vertexShader = shader.vertexShader
@@ -77,22 +77,28 @@ export async function buildSurroundings(base, orthoBase, manifest, proj) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFarPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform float uNight, uOrthoOn; uniform sampler2D uOrtho, uLoaded; uniform vec4 uOrthoRect, uExtent, uGrid; varying vec3 vFarPos;`)
+        uniform float uNight, uOrthoOn; uniform sampler2D uOrtho, uLoaded, uRoads; uniform vec4 uOrthoRect, uExtent, uGrid, uRoadsRect; varying vec3 vFarPos;`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
         vec2 ext = (vFarPos.xz - uExtent.xy) / uExtent.zw;
         if (ext.x > 0.0 && ext.x < 1.0 && ext.y > 0.0 && ext.y < 1.0 && texture2D(uLoaded, ext).r > 0.5) discard; // a loaded tile`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         vec2 ouv = (vFarPos.xz - uOrthoRect.xy) / uOrthoRect.zw;
         if (uOrthoOn > 0.5 && ouv.x > 0.0 && ouv.x < 1.0 && ouv.y > 0.0 && ouv.y < 1.0) diffuseColor.rgb = texture2D(uOrtho, vec2(ouv.x, 1.0 - ouv.y)).rgb;`)
-      // at night the built-up land glows: the brighter the photo (roofs and pavement, not woods), the more lights
+      // At night the area's streets are lines of light (nightroads.js), sodium-orange on the avenues fading to
+      // the white of the LED back streets, with the glow of the built-up land between them; beyond the area,
+      // the glow alone: the brighter the photo (roofs and pavement, not woods), the more lights.
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float built = smoothstep(0.42, 0.72, dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)));
         diffuseColor.rgb *= 1.0 - 0.6 * uNight;
         // (an apagón: the island goes dark as the failure spreads, but for a few generators)
         float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.12, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vFarPos.xz, uGrid.xy)));
-        totalEmissiveRadiance += built * uNight * vec3(1.0, 0.72, 0.42) * 0.22 * power;`);
+        vec2 ruv = (vFarPos.xz - uRoadsRect.xy) / max(uRoadsRect.zw, vec2(1.0));
+        float inArea = step(0.0, ruv.x) * step(ruv.x, 1.0) * step(0.0, ruv.y) * step(ruv.y, 1.0);
+        float streets = inArea * texture2D(uRoads, ruv).r;
+        vec3 lamp = mix(vec3(1.0, 0.82, 0.62), vec3(1.0, 0.6, 0.28), smoothstep(0.35, 0.8, streets));
+        totalEmissiveRadiance += (streets * 0.75 * lamp + built * mix(0.22, 0.07, inArea) * vec3(1.0, 0.72, 0.42)) * uNight * power;`);
   };
-  material.customProgramCacheKey = () => 'surroundings-v3';
+  material.customProgramCacheKey = () => 'surroundings-v4';
   const mesh = new THREE.Mesh(g, material);
   mesh.name = 'surroundings';
   mesh.receiveShadow = false;

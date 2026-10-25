@@ -1,21 +1,30 @@
-// Window glass that reflects the city: screen-space reflections, for the window panes only.
-// The facade shader marks its panes in the alpha channel of the colour buffer (1 everywhere else). For each
-// marked pixel the mirrored view ray is marched through the depth buffer; where it meets something that
-// is on screen, the pane shows it. A ray that leaves the screen or finds nothing keeps what the pane had:
-// the reflection of the sky from the environment map.
+// Window glass and water that reflect the city: screen-space reflections, for the window panes and the water only.
+// The facade and water shaders mark their mirrors in the alpha channel of the colour buffer (1 everywhere else).
+// For each marked pixel the mirrored view ray is marched through the depth buffer; where it meets something that
+// is on screen, the mirror shows it. A ray that leaves the screen or finds nothing keeps what the mirror had: the
+// reflection of the sky from the environment map. Glass adds its own Fresnel here; water (a level surface) has
+// put its Fresnel in the mark already, and its reflection trembles with the waves.
 import * as THREE from 'three';
 import { Effect, EffectAttribute } from 'postprocessing';
+import { shared } from './materials.js';
 
 const STEPS = 28;
 
 const fragment = /* glsl */ `
 uniform mat4 uProjection;
 uniform mat4 uInverseProjection;
+uniform mat4 uCameraWorld;
 uniform float uStrength;
+uniform float uTime;
 
 vec3 viewPosition(const vec2 uv, const float depth) {
   vec4 p = uInverseProjection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
   return p.xyz / p.w;
+}
+float rhash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float rnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(rhash(i), rhash(i + vec2(1.0, 0.0)), f.x), mix(rhash(i + vec2(0.0, 1.0)), rhash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
 void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
@@ -24,10 +33,12 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   if (pane < 0.02 || depth >= 1.0) return;
 
   vec3 P = viewPosition(uv, depth);
-  // the pane's normal from the depth buffer: walls are flat, so neighbouring pixels give it
+  // the mirror's normal from the depth buffer: walls and water are flat, so neighbouring pixels give it
   vec3 N = normalize(cross(dFdx(P), dFdy(P)));
   vec3 V = normalize(P);
   if (dot(N, V) > 0.0) N = -N;
+  bool level = (mat3(uCameraWorld) * N).y > 0.85;  // water
+  if (level) N = normalize(transpose(mat3(uCameraWorld)) * vec3(0.0, 1.0, 0.0)); // (exactly level: no stair-steps from the depth)
   vec3 R = reflect(V, N);
   if (R.z > -0.02 && dot(R, V) < 0.0) return; // heading back at the camera: what it would show is not on screen
 
@@ -65,11 +76,36 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   }
   if (hit.x < 0.0) return;
 
-  // glass reflects more at a glancing angle; reflections fade out towards the edge of the screen
-  float fresnel = 0.3 + 0.7 * pow(1.0 - max(dot(-V, N), 0.0), 3.0);
+  float k;
+  vec3 seen;
+  if (level) {
+    // Water: the waves break the image up and draw it out towards the viewer (a lit window over the sea at
+    // night is a column of light), less far off where the ripples are too fine to see
+    vec3 W = (uCameraWorld * vec4(P, 1.0)).xyz;
+    vec2 wob = vec2(rnoise(W.xz * 0.21 + vec2(uTime * 0.5, 0.0)) - 0.5, rnoise(W.xz * 0.17 + vec2(3.1, uTime * 0.4)) - 0.5)
+             + 0.6 * vec2(rnoise(W.xz * 0.9 - uTime * 0.9) - 0.5, rnoise(W.xz * 0.8 + 7.0 + uTime * 0.8) - 0.5);
+    float near = clamp(40.0 / -P.z, 0.15, 1.0);
+    vec2 base = hit + wob * vec2(0.007, 0.03) * near;
+    vec3 sum = vec3(0.0);
+    float weight = 0.0;
+    for (int s = -3; s <= 3; s++) {
+      vec2 o = base + vec2(0.0, float(s) * 0.007 * near);
+      if (o.y <= 0.0 || o.y >= 1.0 || readDepth(o) >= 1.0) continue; // (the sky there: the environment's own reflection stays)
+      float wgt = 1.0 - abs(float(s)) * 0.22;
+      sum += texture2D(inputBuffer, o).rgb * wgt; weight += wgt;
+    }
+    if (weight <= 0.0) return;
+    seen = sum / weight;
+    k = pane * weight / 4.36; // (its Fresnel is in the mark already; less where much of the column is sky)
+  } else {
+    // glass reflects more at a glancing angle
+    seen = texture2D(inputBuffer, hit).rgb;
+    k = pane * (0.3 + 0.7 * pow(1.0 - max(dot(-V, N), 0.0), 3.0));
+  }
+  // reflections fade out towards the edge of the screen
   vec2 edge = smoothstep(vec2(0.0), vec2(0.08), hit) * (1.0 - smoothstep(vec2(0.92), vec2(1.0), hit));
-  float k = pane * fresnel * edge.x * edge.y * uStrength;
-  outputColor.rgb = mix(inputColor.rgb, texture2D(inputBuffer, hit).rgb, clamp(k, 0.0, 1.0));
+  k *= edge.x * edge.y * uStrength;
+  outputColor.rgb = mix(inputColor.rgb, seen, clamp(k, 0.0, 1.0));
 }
 `;
 
@@ -80,7 +116,9 @@ export class WindowReflections extends Effect {
       uniforms: new Map([
         ['uProjection', new THREE.Uniform(camera.projectionMatrix)],
         ['uInverseProjection', new THREE.Uniform(camera.projectionMatrixInverse)],
+        ['uCameraWorld', new THREE.Uniform(camera.matrixWorld)],
         ['uStrength', new THREE.Uniform(1)],
+        ['uTime', shared.uTime],
       ]),
     });
   }

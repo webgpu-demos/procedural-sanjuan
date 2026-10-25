@@ -326,6 +326,27 @@ function lensMaterial() {
   });
 }
 
+// Overhead wires: lines a pixel wide, so a wire is as dark as the share of its pixel it covers. A bundle of cables
+// some 3 cm thick is solid up close, a faint thread across the street and gone a few hundred metres off (drawn
+// at full strength, the wires of a whole neighbourhood seen from above were black scribbles over the roofs).
+// uPx: pixels a metre spans one metre in front of the camera (main.js sets it from the view).
+function wireMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uPx: { value: 500 } },
+    vertexShader: /* glsl */ `
+      varying float vDepth;
+      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vDepth = -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: /* glsl */ `
+      uniform float uPx; varying float vDepth;
+      void main() {
+        float cover = clamp(0.03 * uPx / max(vDepth, 0.5), 0.0, 0.9);
+        if (cover < 0.02) discard;
+        gl_FragColor = vec4(vec3(0.006, 0.007, 0.009), cover);
+      }`,
+    transparent: true, depthWrite: false,
+  });
+}
+
 // ---------------------------------------------------------------- trees
 // Variants 0-1 are street trees, 2-3 park trees. `height` is the model height in metres at scale 1.
 const TREES = [
@@ -593,7 +614,7 @@ export class Props {
         map: decalTexture(), transparent: true, depthWrite: false, roughness: 0.8,
         polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -10,
       }),
-      wire: new THREE.LineBasicMaterial({ color: 0x14161a }),
+      wire: wireMaterial(),
     };
     this.mats.poolCool = lampMaterial(this.mats.pool.map, {}, { grid: true }); // white LED lamps on the back streets
     this.time = 0;

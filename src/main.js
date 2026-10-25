@@ -26,6 +26,8 @@ import { Ferries } from './world/ferries.js';
 import { buildStructures } from './world/structures.js';
 import { loadOrtho } from './world/ortho.js';
 import { buildSurroundings } from './world/far.js';
+import { buildShore } from './world/water.js';
+import { buildNightRoads } from './world/nightroads.js';
 import { renderSources } from './sources.js';
 import { Environment } from './world/environment.js';
 import { Atmosphere } from './world/atmosphere.js';
@@ -130,6 +132,8 @@ const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
 }
 // the ground of the tiles not loaded, and of the island around the area (far.js)
 buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj).then((far) => far && scene.add(far));
+// how far the sea lies from the land, for its shallows and its surf (water.js)
+buildShore(streamer.grid, manifest, `tiles/${AREA}`).catch((e) => console.warn('shore:', e.message));
 const birds = createBirds(manifest.bounds, streamer.ground(0, 0));
 if (params.get('birds') != null) birds.geometry.instanceCount = Math.min(MAX_BIRDS, Number(params.get('birds')) || 0);
 scene.add(birds);
@@ -148,6 +152,7 @@ scene.add(await buildFlyovers(`tiles/${AREA}/${manifest.roads}`, (x, z) => strea
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z)));
 const roads = await (await fetch(`tiles/${AREA}/${manifest.roads}`)).json();
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js)
+if (LARGE) buildNightRoads(roads, manifest.extent ?? manifest.bounds); // (the streets' lights from afar, on the distant ground)
 const traffic = new Traffic(roads, streamer.surface);
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
@@ -760,6 +765,7 @@ function frame(_, manual) {
     if (got >= 1) { loading = false; loader.hide(); xp?.showTitle(Number(sim?.index.stats?.vehicles?.inserted) || sim?.index.tripinfo?.count); }
   }
   props.update(dt);
+  props.mats.wire.uniforms.uPx.value = renderer.domElement.height * 0.5 * camera.projectionMatrix.elements[5];
   signs.update();
   railways.userData.trains.update(dt, env.night);
   // the simulated morning while it lasts; the cars around the camera otherwise
