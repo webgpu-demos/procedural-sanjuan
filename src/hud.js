@@ -4,7 +4,7 @@
 //                 clean view (H)
 //   bottom left   where you are, as Puerto Rico's green street-name signs, over a minimap (north up: the roads,
 //                 you, and the simulated cars round you)
-//   bottom centre the ways round the city (Explorar, Caminar, Manejar, Volar: 1 to 4) and the keys of the one in use
+//   bottom centre the ways round the city (Explorar, Caminar, Bici, Manejar, Volar: 1 to 5) and the keys of the one in use
 //   bottom right  speed, and the camera (V cycles)
 // The full map (M) pans and zooms; a click on it teleports there. After the HUD of mrdoob's Slop New York (MIT:
 // github.com/mrdoob/slop-newyork).
@@ -106,6 +106,7 @@ const CSS = `
 
 const ICON = {
   explore: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+  bike: '<circle cx="5.5" cy="15.5" r="3.6"/><circle cx="18.5" cy="15.5" r="3.6"/><path d="M5.5 15.5 9.6 8.6h6.2M18.5 15.5l-3.6-8.8M9.6 8.6l3.3 6.9h-7.4M12.9 15.5l2-6.9M14 6.7h2.6"/>',
   walk: '<circle cx="13" cy="4.4" r="2"/><path d="M12.3 8.2 10.8 13.8M10.8 13.8 9.2 17.2 7.2 20.5M10.8 13.8l2.4 3 1.6 3.8M12.3 8.6 9.6 10.2l-.8 2.6M12.3 8.6l2.1 2.4 2.4.8"/>',
   car: '<path d="m5.2 10.5 1.4-4.1A2.2 2.2 0 0 1 8.7 4.8h6.6a2.2 2.2 0 0 1 2.1 1.6l1.4 4.1"/><rect x="3" y="10.5" width="18" height="6.5" rx="2"/><path d="M6 17v2.6M18 17v2.6M6.6 13.8h1.6M15.8 13.8h1.6"/>',
   fly: '<path d="M3.5 4h15M11 4v3.2"/><path d="M6 12.2a5 5 0 0 1 5-5h1.6a4.4 4.4 0 0 1 4.4 4.4V15H8.8A2.8 2.8 0 0 1 6 12.2z"/><path d="M17 11h4.2M21.2 8.8v4.4M7 19h10.5M9.5 15v4M15 15v4"/>',
@@ -127,8 +128,9 @@ const icon = (k) => `<svg class="icon" viewBox="0 0 24 24">${ICON[k]}</svg>`;
 export const MODES = [
   { id: 'explore', label: 'Explorar', key: '1', icon: 'explore', hints: [['Arrastra', 'Mover'], ['Clic der.', 'Girar'], ['Rueda', 'Acercar'], ['W A S D', 'Desplazar']] },
   { id: 'walk', label: 'Caminar', key: '2', icon: 'walk', hints: [['W S', 'Caminar'], ['A D', 'Girar'], ['Shift', 'Correr'], ['Espacio', 'Saltar'], ['E', 'Al carro']] },
-  { id: 'car', label: 'Manejar', key: '3', icon: 'car', hints: [['W S', 'Acelerar / Frenar'], ['A D', 'Dobla'], ['Espacio', 'Freno de mano'], ['Shift', 'Turbo'], ['E', 'Bajarse']] },
-  { id: 'fly', label: 'Volar', key: '4', icon: 'fly', hints: [['W S', 'Avanzar'], ['A D', 'Girar'], ['Espacio', 'Subir'], ['C', 'Bajar'], ['Shift', 'Turbo']] },
+  { id: 'bike', label: 'Bici', key: '3', icon: 'bike', hints: [['W', 'Pedalear'], ['S', 'Frenar'], ['A D', 'Dobla'], ['Shift', 'Rápido'], ['E', 'Al carro']] },
+  { id: 'car', label: 'Manejar', key: '4', icon: 'car', hints: [['W S', 'Acelerar / Frenar'], ['A D', 'Dobla'], ['Espacio', 'Freno de mano'], ['Shift', 'Turbo'], ['E', 'Bajarse']] },
+  { id: 'fly', label: 'Volar', key: '5', icon: 'fly', hints: [['W S', 'Avanzar'], ['A D', 'Girar'], ['Espacio', 'Subir'], ['C', 'Bajar'], ['Shift', 'Turbo']] },
 ];
 const TIMES = [
   { id: 'sunrise', label: 'Amanecer', hour: 6.33, icon: 'sunrise' },
@@ -285,7 +287,7 @@ export class Hud {
     this.padButtons(this.app.mode);
   }
   padButtons(mode) {
-    const B = { car: [['Freno', 'Space'], ['Turbo', 'ShiftLeft'], ['Bajarse', 'KeyE', true]], walk: [['Saltar', 'Space'], ['Correr', 'ShiftLeft'], ['Carro', 'KeyE', true]],
+    const B = { car: [['Freno', 'Space'], ['Turbo', 'ShiftLeft'], ['Bajarse', 'KeyE', true]], walk: [['Saltar', 'Space'], ['Correr', 'ShiftLeft'], ['Carro', 'KeyE', true]], bike: [['Freno', 'Space'], ['Rápido', 'ShiftLeft'], ['Carro', 'KeyE', true]],
       fly: [['Subir', 'Space'], ['Bajar', 'KeyC'], ['Turbo', 'ShiftLeft']] }[mode] ?? [];
     const box = this.pad.querySelector('.btns');
     box.innerHTML = B.map(([l, c, tap]) => `<button data-code="${c}" data-tap="${tap ? 1 : ''}">${l}</button>`).join('');
@@ -334,7 +336,7 @@ export class Hud {
     // the speed and the camera
     this.br.querySelector('.lbl').textContent = app.vehicleLabel();
     this.br.querySelector('.speed b').textContent = String(Math.round(v?.kmh ?? 0));
-    this.br.querySelector('.meter i').style.transform = `scaleX(${Math.min(1, (v?.kmh ?? 0) / (app.mode === 'fly' ? 220 : app.mode === 'walk' ? 30 : 170))})`;
+    this.br.querySelector('.meter i').style.transform = `scaleX(${Math.min(1, (v?.kmh ?? 0) / (app.mode === 'fly' ? 220 : app.mode === 'walk' ? 30 : app.mode === 'bike' ? 45 : 170))})`;
     this.br.querySelector('.alt').textContent = v?.altitude != null ? `alt ${Math.round(v.altitude)} m` : '';
     this.br.querySelector('.cur span').textContent = app.cameraName();
     // where

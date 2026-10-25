@@ -15,7 +15,7 @@ import { buildFlyovers } from './world/flyovers.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad } from './world/drive.js';
-import { Walker, Flyer } from './world/player.js';
+import { Walker, Cyclist, Flyer } from './world/player.js';
 import { Hud } from './hud.js';
 import { SimSignals } from './world/simsignals.js';
 import { Experience } from './experience.js';
@@ -457,12 +457,12 @@ function ride(vid) {
 function stopRiding() { setMode('explore'); if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; atmosphere.focus(null); }
 
 // ---------------------------------------------------------------- the ways round the city (drive.js, player.js)
-// Explorar (the map's camera), Caminar, Manejar, Volar: 1 to 4 (hud.js); E gets in a car (on foot or exploring)
+// Explorar (the map's camera), Caminar, Bici, Manejar, Volar: 1 to 5 (hud.js); E gets in a car (on foot or exploring)
 // and out of it again, Esc back to exploring. Each way has its camera rigs (V cycles: chase, close, first person,
 // cinematic). Where you were, and how, is kept for the next visit.
 const tiles = () => scene.children.filter((o) => o.name.startsWith('tile '));
 const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles });
-const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
+const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
 const active = () => players[mode] ?? null;
 const CAMERAS = [['chase', 'Persecución'], ['close', 'Cerca'], ['pov', 'Primera persona'], ['orbit', 'Cinemática']];
@@ -470,6 +470,7 @@ const CAMERAS = [['chase', 'Persecución'], ['close', 'Cerca'], ['pov', 'Primera
 const RIG = {
   car: { chase: [7.2, 0.17], close: [4.6, 0.09], orbit: [12, 0.3], eye: 1.15 },
   walk: { chase: [4.4, 0.24], close: [2.4, 0.1], orbit: [7, 0.32], eye: 1.62 },
+  bike: { chase: [5.2, 0.2], close: [3, 0.1], orbit: [8, 0.3], eye: 1.55 },
   fly: { chase: [24, 0.3], close: [13, 0.16], orbit: [42, 0.38], eye: 1.7 },
 };
 const cameraId = () => CAMERAS[cameraIndex][0];
@@ -504,8 +505,8 @@ function setMode(next, at = null) {
     const road = placeOnRoad(roads, from.x, from.z, heading);
     if (!road) return false;
     place = { x: road.x, z: road.z, heading: road.heading, y: road.raised ? road.y : null };
-    if (next === 'walk') { // on foot: off the lane, towards the pavement on its right (unless a wall is there)
-      const rx = -Math.cos(road.heading), rz = Math.sin(road.heading), wx = road.x + rx * 3.5, wz = road.z + rz * 3.5;
+    if (next === 'walk' || next === 'bike') { // on foot: off the lane, towards the pavement on its right; a bike by the kerb (unless a wall is there)
+      const off = next === 'walk' ? 3.5 : 1.4, rx = -Math.cos(road.heading), rz = Math.sin(road.heading), wx = road.x + rx * off, wz = road.z + rz * off;
       if (!players.walk.walls.blocked(wx, wz)) Object.assign(place, { x: wx, z: wz });
     }
   }
@@ -619,6 +620,15 @@ function chaseCamera(dt) {
     chase.eye.lerp(eye, 1 - Math.exp(-dt * (player ? 14 : 3.5)));
     controls.target.copy(chase.target);
     camera.position.copy(chase.eye);
+    // (not inside the buildings: the eye comes in along its line to the one you are, short of the first wall it
+    // would look through; the first couple of metres are left free, the kerb's cells straddle the street)
+    if (player) {
+      const d = chase.eye.clone().sub(chase.target), len = d.length(), roofs = players.fly.roofs;
+      for (let m = 2.5; m < len; m += 0.75) {
+        const f = m / len;
+        if (roofs.at(chase.target.x + d.x * f, chase.target.z + d.z * f) > chase.target.y + d.y * f - 0.6) { camera.position.copy(chase.target).addScaledVector(d, (m - 0.75) / len); break; }
+      }
+    }
     camera.lookAt(chase.target);
   }
   const fov = fast ? 55 + Math.min(14, v.speed * 0.32) : 55;

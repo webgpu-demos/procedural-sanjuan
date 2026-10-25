@@ -2,6 +2,8 @@
 // rest of the page: start(x, z, heading, y), stop(), update(dt, keys), view { x, y, z, heading, speed, kmh }.
 //   walking    W / S walk on and back, A / D turn, Shift run, Space jump; stopped by the buildings' walls, on the
 //              ground or the deck walked onto (a person on a flyover stays on it)
+//   cycling    a bicycle: W pedal, S brake (and back a little), A / D steer, Shift a sprint, Space the brakes; it
+//              leans into its turns; stopped by the walls like the walker
 //   flying     a helicopter: W / S pitch forward and back, A / D yaw, Space / E climb, C / Q come down, Shift a
 //              push; it banks into its turns, leans into its speed, its rotors turn; it does not go under the ground
 // (the motion after the controllers of mrdoob's Slop New York, MIT: github.com/mrdoob/slop-newyork)
@@ -94,6 +96,96 @@ export class Walker {
     this.model.position.set(this.x, this.y + Math.abs(Math.sin(this.phase)) * Math.min(0.06, v * 0.02), this.z);
     this.model.rotation.y = this.heading;
     this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: v, kmh: v * 3.6, bump: 0, reversing: this.speed < -0.1, height: 1.7 };
+  }
+}
+
+// ---------------------------------------------------------------- a bicycle
+// A city bike (wheels 0.34 m, a diamond frame in red, black bars and saddle) and its rider, the walker seated:
+// leaning over the bars, the legs on the pedals going round
+function bicycle() {
+  const g = new THREE.Group(), frame = mat(0xb3121d, 0.35, 0.4), black = mat(0x15161a, 0.6, 0.3), steel = mat(0xb9bcc2, 0.3, 0.8), rubber = mat(0x0e0e10, 0.9);
+  const R = 0.34, rear = -0.52, front = 0.54, hub = R;
+  const bar = (a, b, r, m) => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, A.distanceTo(B), 8), m);
+    mesh.position.copy(A).add(B).multiplyScalar(0.5); mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.sub(A).normalize()); mesh.castShadow = true; return mesh; };
+  const wheel = (z) => {
+    const w = new THREE.Group(); w.position.set(0, hub, z);
+    const tyre = new THREE.Mesh(new THREE.TorusGeometry(R - 0.02, 0.022, 8, 32), rubber); tyre.rotation.y = Math.PI / 2; tyre.castShadow = true;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(R - 0.05, 0.008, 4, 32), steel); rim.rotation.y = Math.PI / 2;
+    w.add(tyre, rim);
+    for (let k = 0; k < 8; k++) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.004, (R - 0.05) * 2, 0.004), steel); s.rotation.x = (k / 8) * Math.PI; w.add(s); }
+    return w;
+  };
+  const wr = wheel(rear), wf = wheel(front);
+  const bb = [0, 0.3, -0.06], seat = [0, 0.86, -0.2], head = [0, 0.84, 0.36];
+  g.add(wr, wf,
+    bar(bb, seat, 0.018, frame), bar(seat, head, 0.017, frame), bar(bb, head, 0.02, frame),                       // the diamond
+    bar(bb, [0, hub, rear], 0.012, frame), bar(seat, [0, hub, rear], 0.011, frame),                              // the stays
+    bar(head, [0, hub, front], 0.014, frame), bar([0, 0.84, 0.36], [0, 1.0, 0.33], 0.014, black),                 // fork, stem
+    bar([-0.27, 1.0, 0.3], [0.27, 1.0, 0.3], 0.012, black), bar(seat, [0, 0.93, -0.22], 0.012, steel));            // bars, seat post
+  const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.04, 0.26), black); saddle.position.set(0, 0.95, -0.2); g.add(saddle);
+  const crank = new THREE.Group(); crank.position.set(0, ...bb.slice(1));
+  for (const sx of [-1, 1]) { const arm = bar([sx * 0.07, 0, 0], [sx * 0.07, -0.17, 0], 0.01, steel); const pedal = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.02, 0.06), black); pedal.position.set(sx * 0.11, -0.17, 0); const p = new THREE.Group(); p.rotation.x = sx > 0 ? 0 : Math.PI; p.add(arm, pedal); crank.add(p); }
+  g.add(crank);
+  // the rider: the walker, seated (hips on the saddle), leaning to the bars
+  const rider = person(), seatAt = new THREE.Group();
+  seatAt.position.set(0, 0.97, -0.2); rider.position.y = -0.9; seatAt.add(rider); g.add(seatAt);
+  seatAt.rotation.x = 0.42;
+  const u = rider.userData;
+  u.armL.rotation.x = u.armR.rotation.x = -1.05; u.armL.lower.rotation.x = u.armR.lower.rotation.x = -0.25;
+  u.armL.rotation.z = -0.12; u.armR.rotation.z = 0.12;
+  g.userData = { wheels: [wr, wf], crank, rider: u };
+  return g;
+}
+
+export class Cyclist {
+  constructor({ scene, surface, sim, tiles }) {
+    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles);
+    this.on = false; this.label = 'Bicicleta'; this.unit = 'km/h';
+    this.model = bicycle(); this.model.visible = false; scene.add(this.model);
+    this.view = null;
+  }
+  start(x, z, heading, y = null) {
+    Object.assign(this, { x, z, heading, speed: 0, lean: 0, crank: 0, roll: 0, y: y ?? this.surface(x, z, -2), on: true });
+    this.model.visible = true;
+  }
+  stop() { this.on = false; this.model.visible = false; this.view = null; }
+  floor(x, z) {
+    const ground = this.surface(x, z, -2), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null;
+    return deck != null && Math.abs(deck - this.y) < 1.2 ? deck : ground;
+  }
+  update(dt, keys) {
+    if (!this.on) return;
+    dt = Math.min(dt, 0.05);
+    const k = keyOf(keys), sprint = k('ShiftLeft', 'ShiftRight'), top = sprint ? 11 : 7;
+    const pedal = k('KeyW', 'ArrowUp'), brake = k('KeyS', 'ArrowDown') || k('Space'), steer = (k('KeyA', 'ArrowLeft') ? 1 : 0) - (k('KeyD', 'ArrowRight') ? 1 : 0);
+    let v = this.speed;
+    if (pedal) v += (sprint ? 3.2 : 2.2) * (1 - Math.max(0, v) / top) * dt;
+    if (brake) v -= (v > 0.2 ? 6 : k('KeyS', 'ArrowDown') ? 1 : 0) * dt;
+    if (!pedal && !brake) v -= Math.sign(v) * Math.min(Math.abs(v), (0.25 + 0.02 * v * v) * dt);
+    v = THREE.MathUtils.clamp(v, -1.2, top);
+    // it turns tighter slowly; it leans into the turn
+    const yaw = steer * (1.9 / (1 + Math.abs(v) / 4)) * Math.min(1, Math.abs(v) / 0.8 + 0.25) * Math.sign(v || 1);
+    this.heading += yaw * dt;
+    const nx = this.x + Math.sin(this.heading) * v * dt, nz = this.z + Math.cos(this.heading) * v * dt;
+    if (!this.walls.blocked(nx, nz)) { this.x = nx; this.z = nz; }
+    else if (!this.walls.blocked(nx, this.z)) this.x = nx;
+    else if (!this.walls.blocked(this.x, nz)) this.z = nz;
+    else v *= -0.2;
+    this.speed = v;
+    const floor = this.floor(this.x, this.z);
+    this.y += THREE.MathUtils.clamp(floor - this.y, -0.4, 0.4) * Math.min(1, dt * 14);
+    this.lean += (-yaw * v * 0.05 - this.lean) * Math.min(1, dt * 6);
+    this.lean = THREE.MathUtils.clamp(this.lean, -0.35, 0.35);
+    // the wheels and the crank go round; the legs go with the pedals
+    const u = this.model.userData;
+    for (const w of u.wheels) w.rotation.x += (v / 0.34) * dt;
+    this.crank += (v / 0.34) * dt * 0.42; u.crank.rotation.x = this.crank;
+    const r = u.rider, c = this.crank;
+    r.legL.rotation.x = -1.25 + 0.42 * Math.sin(c); r.legL.lower.rotation.x = 1.05 + 0.5 * Math.cos(c);
+    r.legR.rotation.x = -1.25 - 0.42 * Math.sin(c); r.legR.lower.rotation.x = 1.05 - 0.5 * Math.cos(c);
+    this.model.position.set(this.x, this.y, this.z);
+    this.model.rotation.set(0, this.heading, 0); this.model.rotateZ(this.lean);
+    this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: Math.abs(v), kmh: Math.abs(v) * 3.6, bump: 0, reversing: v < -0.1, height: 1.6 };
   }
 }
 

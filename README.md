@@ -87,7 +87,8 @@ levels lagoons and ponds at their lowest shore, and keeps dry land above the sea
 "Explorar libremente", or the end of the opening, leaves you in the city with a game's heads-up display, after
 mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
 
-- **Four ways round** (`1`–`4`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump);
+- **Ways round** (`1`–`5`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump);
+  Bici (W pedal, S brake, A D steer, Shift sprint: it leans into the turns, the rider's legs on the pedals);
   Manejar (W A S D, Space the handbrake, Shift a push); Volar, a helicopter (W S, A D, Space up, C down, Shift a
   push; it cannot fly through the towers, and by night it lights the street with its searchlight). `E` gets out
   of the car on foot, by the driver's door (the car stays parked where it stopped), and back in; `Esc` goes back
@@ -107,7 +108,7 @@ A weekday morning in San Juan, 4:30 to 10:15, simulated with [Eclipse SUMO](http
 city's own road graph and played back in the browser: some 360,000 car trips and the AMA's 520 bus trips. It
 opens with a title and four shots (the city before dawn, the headlights on PR-22, one commuter's ride, the sun
 coming up behind the Milla de Oro: it rises about 6:19 AST in late October); then the clock and its time line,
-the speed of time (the cars at their own speed by default), **free roaming** on foot, by car and by helicopter
+the speed of time (the cars at their own speed by default), **free roaming** on foot, by bike, by car and by helicopter
 (below: the car rides the ground or the flyover it drove onto and stops against the buildings' walls and the
 simulated cars, which fade rather than drive through you), the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
 wave from the Monacillos transmission centre, and the rush is simulated without them, every dark signal an

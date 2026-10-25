@@ -336,7 +336,7 @@ export class Experience {
     app.controls.enabled = true;
     this.dock.classList.remove('hidden');
     // what can be done now: the ways round the city (a keyboard's)
-    if (this.canDrive && !fromTitle) { this.caption(['Recorre San Juan: 2 caminar · 3 manejar · 4 volar', 'walk, drive or fly · M for the map · V for the camera']); setTimeout(() => !this.directing && this.caption(null), 7000); }
+    if (this.canDrive && !fromTitle) { this.caption(['Recorre San Juan: 2 caminar · 3 bici · 4 manejar · 5 volar', 'walk, cycle, drive or fly · M for the map · V for the camera']); setTimeout(() => !this.directing && this.caption(null), 7000); }
   }
 
   // the moments of the morning, under the time line

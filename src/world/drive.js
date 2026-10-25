@@ -86,6 +86,16 @@ export class Roofs {
     if (this.cells.size > 40) this.cells.delete(this.cells.keys().next().value); // (the oldest)
     return cells;
   }
+  // the roof over (x, z) itself, or -Infinity
+  at(x, z) {
+    const key = Math.floor(x / ROOF) + ',' + Math.floor(z / ROOF);
+    for (const tile of this.tiles()) {
+      const b = tile.userData.box ??= new THREE.Box3().setFromObject(tile);
+      if (x < b.min.x || x > b.max.x || z < b.min.z || z > b.max.z) continue;
+      const h = this.of(tile).get(key); if (h != null) return h;
+    }
+    return -Infinity;
+  }
   // the highest roof within a cell of (x, z), or -Infinity
   top(x, z) {
     const i = Math.floor(x / ROOF), j = Math.floor(z / ROOF);

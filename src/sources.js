@@ -94,7 +94,7 @@ export const SOURCES = [
       },
       {
         name: 'Slop New York', url: 'https://github.com/mrdoob/slop-newyork',
-        what: 'mrdoob\'s game shell, after which the free roaming is laid out: its HUD, the ways round (walking, driving, flying), the cameras, the map.',
+        what: 'mrdoob\'s game shell, after which the free roaming is laid out: its HUD, the ways round (walking, cycling, driving, flying), the cameras, the map.',
         license: 'MIT',
       },
       {
