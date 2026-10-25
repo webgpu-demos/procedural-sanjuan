@@ -227,6 +227,16 @@ const PALETTE = {
 };
 // Zinc and painted metal roofs, on the few houses that have a pitched roof at all (most are flat concrete).
 const PITCHED_ROOFS = [[0.55, 0.56, 0.57], [0.42, 0.44, 0.46], [0.62, 0.24, 0.2], [0.24, 0.42, 0.32], [0.66, 0.64, 0.6], [0.3, 0.36, 0.5]];
+// Flat roofs as San Juan's are from the air: most coated against the sun and the rain in white or a pale grey
+// elastomeric, others bare grey concrete, some painted the red of tile, a few green or a weathered blue.
+function flatRoofColour(r) {
+  const k = r();
+  if (k < 0.42) { const g = 0.74 + 0.14 * r(); return [g, g, g * 0.98]; }       // coated: white, off-white
+  if (k < 0.78) { const g = 0.5 + 0.18 * r(); return [g, g, g * 0.97]; }        // bare concrete
+  if (k < 0.88) return [0.6 + 0.08 * r(), 0.33 + 0.05 * r(), 0.27];             // painted the red of tile
+  if (k < 0.95) return [0.4, 0.5, 0.42];                                         // green
+  return [0.44, 0.51, 0.58];                                                     // a weathered blue
+}
 // Window bay width (m) per category; a whole number of bays is fitted to each wall.
 const BAY = { [CAT.HOUSE]: 3.4, [CAT.APARTMENT]: 3.3, [CAT.MIXED]: 3.2, [CAT.COMMERCIAL]: 3.0, [CAT.PUBLIC]: 3.4, [CAT.GLASS]: 1.5 };
 const HINT_LAYER = { [MATERIAL.TILE]: WALL.TILE, [MATERIAL.CONCRETE]: WALL.CONCRETE, [MATERIAL.PLASTER]: WALL.PLASTER, [MATERIAL.BRICK]: WALL.BRICK, [MATERIAL.METAL]: WALL.SIDING };
@@ -384,7 +394,7 @@ export function buildingMesh(buildings, tx, tz) {
     // ---- LOD2: a surveyed shell's own walls and roof planes replace everything generated below
     if (b.surfaces?.length) {
       const roofCol = lin(cat === CAT.HOUSE ? PITCHED_ROOFS[Math.floor(rnd() * PITCHED_ROOFS.length)] : [0.5, 0.5, 0.49]);
-      const flatCol = lin((() => { const g = 0.5 + 0.2 * rnd(); return [g, g, g * 0.97]; })());
+      const flatCol = lin(flatRoofColour(rnd));
       // A steel lattice tower is built member by member (tower.js) where the shell stands: on its axis, as
       // wide as its foot, as high as its top, and turned as its foot is turned.
       if (b.flags & BFLAG.LATTICE) {
@@ -452,7 +462,7 @@ export function buildingMesh(buildings, tx, tz) {
     // ---- walls, parapet, flat roof
     const inner = wallCol.map((c) => c * 0.8);
     // (a fortress's top is its own stonework, a little darker than the walls)
-    const flatRoof = masonry ? wallCol.map((c) => c * 0.82) : lin(rnd() < 0.1 ? [0.4, 0.47, 0.42] : (() => { const g = 0.5 + 0.2 * rnd(); return [g, g, g * 0.97]; })());
+    const flatRoof = masonry ? wallCol.map((c) => c * 0.82) : lin(flatRoofColour(rnd));
     let longest = { len: 0, dx: 1, dz: 0 };
     const fronts = []; // candidate balcony edges
     for (const rings of b.polygons) {
