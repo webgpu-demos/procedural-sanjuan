@@ -27,26 +27,11 @@ float rnoise(vec2 p) {
   return mix(mix(rhash(i), rhash(i + vec2(1.0, 0.0)), f.x), mix(rhash(i + vec2(0.0, 1.0)), rhash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
-void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
-  outputColor = vec4(inputColor.rgb, 1.0);
-  float pane = 1.0 - inputColor.a;
-  if (pane < 0.02 || depth >= 1.0) return;
-
-  vec3 P = viewPosition(uv, depth);
-  // the mirror's normal from the depth buffer: walls and water are flat, so neighbouring pixels give it
-  vec3 N = normalize(cross(dFdx(P), dFdy(P)));
-  vec3 V = normalize(P);
-  if (dot(N, V) > 0.0) N = -N;
-  bool level = (mat3(uCameraWorld) * N).y > 0.85;  // water
-  if (level) N = normalize(transpose(mat3(uCameraWorld)) * vec3(0.0, 1.0, 0.0)); // (exactly level: no stair-steps from the depth)
-  vec3 R = reflect(V, N);
-  if (R.z > -0.02 && dot(R, V) < 0.0) return; // heading back at the camera: what it would show is not on screen
-
-  // steps grow with distance: the next building is tens of metres away, the skyline a kilometre
-  float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
-  float t = 1.5 + jitter, growth = 1.24;
-  vec2 hit = vec2(-1.0);
-  float last = 0.0;
+// Marches the mirrored ray from P along R through the depth buffer: the point of the screen it meets, or -1.
+// Steps grow with distance (the next building is tens of metres away, the skyline a kilometre); jitter in [0, 1)
+// staggers where they fall.
+vec2 traceMirror(vec3 P, vec3 R, float jitter) {
+  float t = 1.5 + jitter, growth = 1.24, last = 0.0;
   for (int i = 0; i < ${STEPS}; i++) {
     vec3 Q = P + R * t;
     if (Q.z > -1.0) break;                               // behind the camera
@@ -67,13 +52,35 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
           if (viewPosition(mq, readDepth(mq)).z - M.z > 0.0) hi = mid; else lo = mid;
           q = mq;
         }
-        hit = q;
-        break;
+        return q;
       }
     }
     last = t;
     t = t * growth + 0.5;
   }
+  return vec2(-1.0);
+}
+
+void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
+  outputColor = vec4(inputColor.rgb, 1.0);
+  float pane = 1.0 - inputColor.a;
+  if (pane < 0.02 || depth >= 1.0) return;
+
+  vec3 P = viewPosition(uv, depth);
+  // the mirror's normal from the depth buffer: walls and water are flat, so neighbouring pixels give it
+  vec3 N = normalize(cross(dFdx(P), dFdy(P)));
+  vec3 V = normalize(P);
+  if (dot(N, V) > 0.0) N = -N;
+  bool level = (mat3(uCameraWorld) * N).y > 0.85;  // water
+  if (level) N = normalize(transpose(mat3(uCameraWorld)) * vec3(0.0, 1.0, 0.0)); // (exactly level: no stair-steps from the depth)
+  vec3 R = reflect(V, N);
+  if (R.z > -0.02 && dot(R, V) < 0.0) return; // heading back at the camera: what it would show is not on screen
+
+  // Two rays, half a step apart, for glass (one alone left a pane speckled where neighbouring pixels found and
+  // missed what it mirrors); one does for water, whose own blur hides the speckle.
+  float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  vec2 hit = traceMirror(P, R, jitter), hit2 = level ? vec2(-1.0) : traceMirror(P, R, fract(jitter + 0.5));
+  if (hit.x < 0.0) { hit = hit2; hit2 = vec2(-1.0); }
   if (hit.x < 0.0) return;
 
   float k;
@@ -98,9 +105,9 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
     seen = sum / weight;
     k = pane * weight / 4.36; // (its Fresnel is in the mark already; less where much of the column is sky)
   } else {
-    // glass reflects more at a glancing angle
-    seen = texture2D(inputBuffer, hit).rgb;
-    k = pane * (0.3 + 0.7 * pow(1.0 - max(dot(-V, N), 0.0), 3.0));
+    // glass reflects more at a glancing angle (and as much as both rays found something to mirror)
+    seen = hit2.x < 0.0 ? texture2D(inputBuffer, hit).rgb : 0.5 * (texture2D(inputBuffer, hit).rgb + texture2D(inputBuffer, hit2).rgb);
+    k = pane * (0.3 + 0.7 * pow(1.0 - max(dot(-V, N), 0.0), 3.0)) * (hit2.x < 0.0 ? 0.75 : 1.0);
   }
   // reflections fade out towards the edge of the screen
   vec2 edge = smoothstep(vec2(0.0), vec2(0.08), hit) * (1.0 - smoothstep(vec2(0.92), vec2(1.0), hit));
