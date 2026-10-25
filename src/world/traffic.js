@@ -115,11 +115,17 @@ export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31
   // the sides are glass, and so is the top over the windscreen and the back window; the flat of the roof is
   // paint (rings run up one side, K - 1 points over the top, down the other: they turn the other way round from
   // the body's, hence the flip); the pillars after
-  parts.push(loft(gring, false, true, (i, j, [x, y, z]) => (j >= K && j < 2 * K && roofAt(z) > roof - 0.03 ? [PAINT, 0] : [GLASS, 3])));
-  const pillar = (z, yTop, along = 0) => { for (const sx of [-1, 1]) parts.push(bar([sx * halfW(z) * 0.93, belt, z], [sx * halfW(z + along) * 0.93 * 0.8, yTop, z + along], 0.07, PAINT)); };
-  pillar(c1, roof, -rake);                                  // A: up the sides of the windscreen
-  pillar(c0, roof, back);                                   // C: up the sides of the back window
-  if (c1 - c0 > 2.2) pillar((c0 + c1) / 2 + 0.1, roof);     // B: between the doors
+  // The pillars are part of that surface, in paint: the A pillars a strip down each side of the windscreen,
+  // the C pillars the broad panels behind the rear side windows (as separate bars they stood off the glass like
+  // the rails of a cage); the B pillar between the doors is a dark strip in the glass.
+  const side = (j) => j < K || j >= 2 * K, top = (j) => j >= K && j < 2 * K;
+  const cPillar = Math.min(back + 0.12, (c1 - c0) * 0.3), aPillar = rake * 0.12;
+  parts.push(loft(gring, false, true, (i, j, [x, y, z]) => (
+    (top(j) && roofAt(z) > roof - 0.03) || (side(j) && (z < c0 + cPillar || z > c1 - aPillar)) ? [PAINT, 0] : [GLASS, 3])));
+  if (c1 - c0 > 2.2) {
+    const z = (c0 + c1) / 2 + 0.1;
+    for (const sx of [-1, 1]) parts.push(bar([sx * halfW(z) * 0.925, belt, z], [sx * halfW(z) * 0.93 * 0.81, roof - 0.02, z], 0.06, TRIM, 4, 0.03));
+  }
   if (box) parts.push(part(W, box.h, box.len * L, 0, belt + box.h / 2, (box.z - 0.5) * L, [0.92, 0.92, 0.9])); // cargo body
   if (!box && z0 >= 0.28 && L > 5.2) parts.push(part(W * 0.86, 0.04, c0 - zr - 0.25, 0, deck(c0 - 0.6) + 0.005, (zr + c0) / 2, TRIM, 4)); // a pickup's bed
   // ---- the face and the tail: grille, lamps wrapping the corners, plates
@@ -127,11 +133,15 @@ export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31
   parts.push(part(W * 0.42, 0.13, 0.05, 0, yl - 0.06, zf - 0.03, TRIM, 4));                                // grille
   parts.push(part(W * 0.6, 0.1, 0.05, 0, sill + 0.12, zf - 0.02, TRIM, 4));                                // lower intake
   for (const z of [zf - 0.005, zr + 0.005]) parts.push(part(0.34, 0.12, 0.02, 0, sill + 0.24, z, [0.9, 0.9, 0.86], 4)); // plates
+  parts.push(part(W * 0.34, 0.09, 0.03, 0, yt, zr + 0.04, TRIM, 4));                                         // the band between the tail lamps
+  parts.push(part(W * 0.82, 0.06, 0.04, 0, sill + 0.08, zr + 0.06, TRIM, 4));                                // the bumper's lower edge
   for (const sx of [-1, 1]) {
     for (const wz of [wheelZ, -wheelZ]) parts.push(...wheel(tyre, sx * (W / 2 - 0.12), wz, hi, lo));
     // headlamps: a slim lens round the front corner; tail lamps across the rear corners
     parts.push(bar([sx * W * 0.18, yl, zf - 0.03], [sx * halfW(zf - 0.34) * 1.0, yl + 0.02, zf - 0.36], 0.12, LAMP, 1, 0.08));
-    parts.push(bar([sx * W * 0.16, yt, zr + 0.02], [sx * halfW(zr + 0.34) * 1.01, yt + 0.01, zr + 0.36], 0.15, LAMP, 2, 0.09));
+    // tail lamps: a broad lens across each side of the tail, wrapping round onto the flank
+    parts.push(part(W * 0.27, 0.15, 0.04, sx * W * 0.3, yt, zr + 0.05, LAMP, 2));
+    parts.push(bar([sx * W * 0.42, yt, zr + 0.06], [sx * halfW(zr + 0.3) * 1.0, yt + 0.01, zr + 0.3], 0.14, LAMP, 2, 0.06));
     // the mirror on its stalk
     parts.push(part(0.13, 0.11, 0.2, sx * (halfW(c1) * 0.93 + 0.08), belt + 0.08, c1 - rake * 0.35, PAINT));
   }
