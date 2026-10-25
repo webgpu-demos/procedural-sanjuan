@@ -245,11 +245,11 @@ const FACADE_MAIN = /* glsl */ `
     // under the roofline with its shadow beneath, a band at the foot of each upper storey, and a surround round
     // each opening (a wider lintel over it). From afar only the cornice and the bands remain.
     if (cat > 1.5 && cat < 2.5) {
-      vec3 trimCol = mix(vec3(0.86, 0.84, 0.79), vec3(0.95, 0.93, 0.88), fract(seed * 7.3));
+      vec3 trimCol = mix(vec3(0.84, 0.81, 0.74), vec3(0.93, 0.9, 0.84), fract(seed * 7.3));
       float wv = max(fwidth(v), 1e-4);
-      float cornice = box(v, height - 0.7, height + 1.2, wv);
-      float under = box(v, height - 0.82, height - 0.7, wv) * (1.0 - far);
-      float band = row > 0.5 ? box(fy * floorH, -0.02, 0.17, wv) * (1.0 - 0.6 * far) : 0.0;
+      float cornice = box(v, height - 0.5, height + 0.12, wv);           // (the parapet above it keeps the wall's colour)
+      float under = box(v, height - 0.6, height - 0.5, wv) * (1.0 - far);
+      float band = row > 0.5 ? box(fy * floorH, -0.02, 0.14, wv) * (1.0 - 0.7 * far) : 0.0;
       float surround = 0.0;
       if (colonial) {
         float e2 = min(min(pm.x - wmin.x + 0.13, wmax.x + 0.13 - pm.x), min(pm.y - wmin.y + 0.1, wmax.y + 0.22 - pm.y));
