@@ -95,10 +95,17 @@ export async function buildSurroundings(base, orthoBase, manifest, proj) {
         vec2 ruv = (vFarPos.xz - uRoadsRect.xy) / max(uRoadsRect.zw, vec2(1.0));
         float inArea = step(0.0, ruv.x) * step(ruv.x, 1.0) * step(0.0, ruv.y) * step(ruv.y, 1.0);
         float streets = inArea * texture2D(uRoads, ruv).r;
-        vec3 lamp = mix(vec3(1.0, 0.82, 0.62), vec3(1.0, 0.6, 0.28), smoothstep(0.35, 0.8, streets));
-        totalEmissiveRadiance += (streets * 0.75 * lamp + built * mix(0.22, 0.07, inArea) * vec3(1.0, 0.72, 0.42)) * uNight * power;`);
+        // seen nearer, the light gathers into the pools under the lamps, one every 30 m or so (a scatter of them
+        // along the street's band); far off they merge into lines
+        vec2 lc = vFarPos.xz / 30.0, lcell = floor(lc);
+        vec2 lat = vec2(fract(sin(dot(lcell, vec2(127.1, 311.7))) * 43758.5453), fract(sin(dot(lcell, vec2(269.5, 183.3))) * 43758.5453));
+        float pools = smoothstep(0.42, 0.0, length(fract(lc) - 0.2 - 0.6 * lat)) * 2.2;
+        float lpx = max(fwidth(vFarPos.x), fwidth(vFarPos.z));
+        streets *= mix(pools, 0.4, smoothstep(3.0, 14.0, lpx)); // (0.4: what the pools average to)
+        vec3 lamp = mix(vec3(1.0, 0.85, 0.68), vec3(1.0, 0.6, 0.28), smoothstep(0.3, 0.75, texture2D(uRoads, ruv).r));
+        totalEmissiveRadiance += (streets * 0.55 * lamp + built * mix(0.22, 0.05, inArea) * vec3(1.0, 0.72, 0.42)) * uNight * power;`);
   };
-  material.customProgramCacheKey = () => 'surroundings-v4';
+  material.customProgramCacheKey = () => 'surroundings-v5';
   const mesh = new THREE.Mesh(g, material);
   mesh.name = 'surroundings';
   mesh.receiveShadow = false;
