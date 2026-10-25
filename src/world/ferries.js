@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { shared } from './materials.js';
+import { lampUniforms } from './lamplight.js';
 
 function boatGeometry() {
   const tint = (g, rgb, glow = 0) => {
@@ -41,6 +42,7 @@ export class Ferries {
     }).sort((a, b) => a.depart - b.depart);
     const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.1 });
     m.onBeforeCompile = (shader) => {
+      lampUniforms(shader); // (its own hook: the lamp map's sampler must still be given, lamplight.js)
       shader.uniforms.uNight = shared.uNight;
       shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');

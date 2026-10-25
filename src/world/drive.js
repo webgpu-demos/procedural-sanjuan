@@ -15,42 +15,12 @@ const CELL = 1.5;              // wall grid (m)
 const WHEELBASE = 2.8, TOP = 44, BOOST = 58, REVERSE = 9;
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-export class Driver {
-  // scene; surface(x, z, -2): the terrain; sim(): the simulated traffic (decks, the cars round about), or null;
-  // tiles(): the scene's tile groups (for the walls)
-  constructor({ scene, surface, sim, tiles }) {
-    this.surface = surface; this.sim = sim; this.tiles = tiles;
-    this.on = false;
-    this.spec = TYPES[1]; // a sedan
-    const geo = vehicle(this.spec.spec, 2);
-    this.brake = new THREE.InstancedBufferAttribute(new Float32Array(1), 1);
-    geo.setAttribute('aBrake', this.brake);
-    geo.setAttribute('aHide', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
-    this.mesh = new THREE.InstancedMesh(geo, carMaterial(true, { hero: true }), 1);
-    this.mesh.setColorAt(0, new THREE.Color(0x8c1c1c)); // (a red that reads against the asphalt by day and by night)
-    this.mesh.castShadow = true; this.mesh.frustumCulled = false; this.mesh.visible = false;
-    this.beams = new THREE.InstancedMesh(beamGeometry(this.spec.L), lampMaterial(beamTexture(), { vertexColors: true }), 1);
-    this.beams.instanceMatrix = this.mesh.instanceMatrix; this.beams.layers.set(LAMP_LAYER); this.beams.frustumCulled = false; this.beams.visible = false;
-    scene.add(this.mesh, this.beams);
-    this.m = new THREE.Matrix4();
-    this.walls = new Map(); // tile key -> Set of wall cells
-    this.view = null;
-  }
-
-  // Into a car at (x, z), facing `heading` (radians, 0 = +z): on the ground there, or at height y if given (a
-  // car set down on a bridge starts on its deck).
-  start(x, z, heading, y = null) {
-    this.x = x; this.z = z; this.heading = heading; this.course = heading;
-    this.speed = 0; this.steer = 0; this.y = y ?? this.surface(x, z, -2); this.pitch = 0; this.roll = 0;
-    this.bump = 0; this.on = true; this.mesh.visible = this.beams.visible = true;
-    this.ghost = 2; // (seconds: set down in a queue of traffic, it drives out of it before anything stops it)
-  }
-  stop() { this.on = false; this.mesh.visible = this.beams.visible = false; this.view = null; if (this.sim()) this.sim().probe = null; }
-
-  // ---------------------------------------------------------------- the walls round the car
-  // The faces of the buildings of a tile that stand up (walls), each laid down as the cells it runs through.
-  wallsOf(tile) {
-    let cells = this.walls.get(tile.name);
+// The walls of the buildings near a point: their faces that stand up, each laid down as the cells of a grid
+// it runs through, built per tile as the tiles come near (tiles(): the scene's tile groups).
+export class Walls {
+  constructor(tiles) { this.tiles = tiles; this.cells = new Map(); }
+  of(tile) {
+    let cells = this.cells.get(tile.name);
     if (cells) return cells;
     cells = new Set();
     tile.traverse((o) => {
@@ -71,8 +41,8 @@ export class Driver {
         }
       }
     });
-    this.walls.set(tile.name, cells);
-    if (this.walls.size > 60) this.walls.delete(this.walls.keys().next().value); // (the oldest)
+    this.cells.set(tile.name, cells);
+    if (this.cells.size > 60) this.cells.delete(this.cells.keys().next().value); // (the oldest)
     return cells;
   }
   blocked(x, z) {
@@ -80,10 +50,94 @@ export class Driver {
     for (const tile of this.tiles()) {
       const b = tile.userData.box ??= new THREE.Box3().setFromObject(tile);
       if (x < b.min.x - 2 || x > b.max.x + 2 || z < b.min.z - 2 || z > b.max.z + 2) continue;
-      if (this.wallsOf(tile).has(key)) return true;
+      if (this.of(tile).has(key)) return true;
     }
     return false;
   }
+}
+
+// The tops of the buildings, for the helicopter: in each 4 m cell, the height of the roof over it (sampled over
+// the roofs' triangles), worked out for a tile the first time something flies over it.
+const ROOF = 4;
+export class Roofs {
+  constructor(tiles) { this.tiles = tiles; this.cells = new Map(); }
+  of(tile) {
+    let cells = this.cells.get(tile.name);
+    if (cells) return cells;
+    cells = new Map();
+    const put = (x, z, y) => { const k = Math.floor(x / ROOF) + ',' + Math.floor(z / ROOF); if (!(cells.get(k) >= y)) cells.set(k, y); };
+    tile.traverse((o) => {
+      if (!o.isMesh || !o.userData.facade) return;
+      const pos = o.geometry.attributes.position.array, nor = o.geometry.attributes.normal.array, idx = o.geometry.index?.array;
+      const n = idx ? idx.length : pos.length / 3;
+      for (let t = 0; t < n; t += 3) {
+        const a = idx ? idx[t] : t, b = idx ? idx[t + 1] : t + 1, c = idx ? idx[t + 2] : t + 2;
+        if (nor[a * 3 + 1] < 0.3) continue; // (a wall: the roofs cover the footprint)
+        const ax = pos[a * 3], ay = pos[a * 3 + 1], az = pos[a * 3 + 2];
+        const ux = pos[b * 3] - ax, uy = pos[b * 3 + 1] - ay, uz = pos[b * 3 + 2] - az, vx = pos[c * 3] - ax, vy = pos[c * 3 + 1] - ay, vz = pos[c * 3 + 2] - az;
+        const nu = Math.max(1, Math.ceil(Math.hypot(ux, uz) / (ROOF * 0.7))), nv = Math.max(1, Math.ceil(Math.hypot(vx, vz) / (ROOF * 0.7)));
+        for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) {
+          const f = i / nu, g = j / nv;
+          if (f + g <= 1) put(ax + ux * f + vx * g, az + uz * f + vz * g, ay + uy * f + vy * g);
+        }
+      }
+    });
+    this.cells.set(tile.name, cells);
+    if (this.cells.size > 40) this.cells.delete(this.cells.keys().next().value); // (the oldest)
+    return cells;
+  }
+  // the highest roof within a cell of (x, z), or -Infinity
+  top(x, z) {
+    const i = Math.floor(x / ROOF), j = Math.floor(z / ROOF);
+    let y = -Infinity;
+    for (const tile of this.tiles()) {
+      const b = tile.userData.box ??= new THREE.Box3().setFromObject(tile);
+      if (x < b.min.x - ROOF || x > b.max.x + ROOF || z < b.min.z - ROOF || z > b.max.z + ROOF) continue;
+      const cells = this.of(tile);
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) { const h = cells.get(i + di + ',' + (j + dj)); if (h > y) y = h; }
+    }
+    return y;
+  }
+}
+
+export class Driver {
+  // scene; surface(x, z, -2): the terrain; sim(): the simulated traffic (decks, the cars round about), or null;
+  // tiles(): the scene's tile groups (for the walls)
+  constructor({ scene, surface, sim, tiles }) {
+    this.surface = surface; this.sim = sim; this.tiles = tiles;
+    this.on = false; this.label = 'Sedán';
+    this.spec = TYPES[1]; // a sedan
+    const geo = vehicle(this.spec.spec, 2);
+    this.brake = new THREE.InstancedBufferAttribute(new Float32Array(1), 1);
+    geo.setAttribute('aBrake', this.brake);
+    geo.setAttribute('aHide', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
+    this.mesh = new THREE.InstancedMesh(geo, carMaterial(true, { hero: true }), 1);
+    this.mesh.setColorAt(0, new THREE.Color(0x8c1c1c)); // (a red that reads against the asphalt by day and by night)
+    this.mesh.castShadow = true; this.mesh.frustumCulled = false; this.mesh.visible = false;
+    this.beams = new THREE.InstancedMesh(beamGeometry(this.spec.L), lampMaterial(beamTexture(), { vertexColors: true }), 1);
+    this.beams.instanceMatrix = this.mesh.instanceMatrix; this.beams.layers.set(LAMP_LAYER); this.beams.frustumCulled = false; this.beams.visible = false;
+    scene.add(this.mesh, this.beams);
+    this.m = new THREE.Matrix4();
+    this.walls = new Walls(tiles);
+    this.view = null;
+  }
+
+  // Into a car at (x, z), facing `heading` (radians, 0 = +z): on the ground there, or at height y if given (a
+  // car set down on a bridge starts on its deck).
+  start(x, z, heading, y = null) {
+    this.x = x; this.z = z; this.heading = heading; this.course = heading;
+    this.speed = 0; this.steer = 0; this.y = y ?? this.surface(x, z, -2); this.pitch = 0; this.roll = 0;
+    this.bump = 0; this.on = true; this.mesh.visible = this.beams.visible = true; this.parked = null;
+    this.ghost = 2; // (seconds: set down in a queue of traffic, it drives out of it before anything stops it)
+  }
+  // Out of it: gone, or (park) left where it stopped, lamps off, to get back into (parked: its place)
+  stop({ park = false } = {}) {
+    this.on = false; this.view = null; this.beams.visible = false; this.brake.array[0] = 0; this.brake.needsUpdate = true;
+    this.parked = park ? { x: this.x, z: this.z, y: this.y, heading: this.heading } : null;
+    this.mesh.visible = park;
+    if (this.sim()) this.sim().probe = null;
+  }
+  unpark() { if (!this.on) { this.parked = null; this.mesh.visible = false; } }
 
   // ---------------------------------------------------------------- each frame
   update(dt, keys) {
@@ -113,7 +167,7 @@ export class Driver {
     // walls: the nose (or the tail, backing up) and its corners
     const half = this.spec.L * 0.5, side = this.spec.spec.W * 0.5, s = Math.sin(this.heading), c = Math.cos(this.heading), dir = v >= 0 ? 1 : -1;
     const probes = [[0, half * dir], [side, half * dir * 0.85], [-side, half * dir * 0.85]];
-    const hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => this.blocked(nx + c * a + s * b, nz - s * a + c * b));
+    const hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => this.walls.blocked(nx + c * a + s * b, nz - s * a + c * b));
     // the simulated cars round about (two circles each, front and back)
     // A car already deep inside this one is driving through it (it keeps to its recorded way and fades out,
     // simtraffic.js): no obstacle. One met from outside is.

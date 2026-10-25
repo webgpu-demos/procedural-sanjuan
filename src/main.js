@@ -15,6 +15,8 @@ import { buildFlyovers } from './world/flyovers.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad } from './world/drive.js';
+import { Walker, Flyer } from './world/player.js';
+import { Hud } from './hud.js';
 import { SimSignals } from './world/simsignals.js';
 import { Experience } from './experience.js';
 import { SpeedMap } from './world/speedmap.js';
@@ -56,7 +58,10 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.info.autoReset = false; // the composer renders several passes; count the whole frame
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// (PCF, filtered: three r18x has no PCFSoftShadowMap, and swaps it for this the first time the map is drawn, after
+// the night's materials were compiled for the old one: their shadow samplers then meet a depth texture of the
+// other kind, and from a night set straight to day nothing lit was drawn at all)
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.shadowMap.autoUpdate = false; // (redrawn when needed: see the frame loop)
 document.body.appendChild(renderer.domElement);
 
@@ -383,7 +388,6 @@ addEventListener('keydown', (e) => {
   // A panel control that was clicked keeps the keyboard: the arrow keys would then step its slider or its
   // city list instead of moving the view. Movement keys always belong to the scene.
   if (MOVE_KEYS.has(e.code)) { e.preventDefault(); if (el && el !== document.body) el.blur(); }
-  if (e.code === 'KeyN') { clockTime.live = false; clockTime.hour = env.dark > 0.5 ? 12 : 22; } // noon <-> night
   keys.add(e.code);
 }, { capture: true });
 addEventListener('keyup', (e) => keys.delete(e.code));
@@ -433,7 +437,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
   raycaster.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
-  if (sim && simOn() && !driver.on) {
+  if (sim && simOn() && mode === 'explore') {
     const vid = sim.pick(raycaster.ray, clockTime.hour * 3600, Math.max(4, camera.position.distanceTo(controls.target) * 0.012));
     if (vid != null) { ride(vid); return; }
   }
@@ -446,36 +450,108 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 // drag of the view, lets it go.
 const chase = { on: false, target: new THREE.Vector3(), eye: new THREE.Vector3(), heading: 0, back: 13, up: 4.2, yaw: 0, tilt: 0.3, drag: null };
 function ride(vid) {
-  stopDriving();
-  sim.followed = vid; chase.on = true; chase.fresh = true; chase.yaw = 0;
+  setMode('explore');
+  sim.followed = vid; chase.on = true; chase.fresh = true; chase.yaw = 0; Object.assign(chase, { back: 13, tilt: 0.3 });
   controls.enabled = false;
 }
-function stopRiding() { stopDriving(); if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; atmosphere.focus(null); }
+function stopRiding() { setMode('explore'); if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; atmosphere.focus(null); }
 
-// ---------------------------------------------------------------- driving (drive.js)
-// E gets in (on the road nearest the point looked at, in its right-hand lane, facing the way the camera
-// looks) and out again; Esc too. The camera rides lower and closer, looking a little ahead at speed.
-const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles: () => scene.children.filter((o) => o.name.startsWith('tile ')) });
-function drive() {
-  if (driver.on) return true;
-  if (sim) sim.followed = null;
+// ---------------------------------------------------------------- the ways round the city (drive.js, player.js)
+// Explorar (the map's camera), Caminar, Manejar, Volar: 1 to 4 (hud.js); E gets in a car (on foot or exploring)
+// and out of it again, Esc back to exploring. Each way has its camera rigs (V cycles: chase, close, first person,
+// cinematic). Where you were, and how, is kept for the next visit.
+const tiles = () => scene.children.filter((o) => o.name.startsWith('tile '));
+const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles });
+const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
+let mode = 'explore', cameraIndex = 0;
+const active = () => players[mode] ?? null;
+const CAMERAS = [['chase', 'Persecución'], ['close', 'Cerca'], ['pov', 'Primera persona'], ['orbit', 'Cinemática']];
+// [distance behind, elevation] of each rig, and the height of the eyes in first person
+const RIG = {
+  car: { chase: [7.2, 0.17], close: [4.6, 0.09], orbit: [12, 0.3], eye: 1.15 },
+  walk: { chase: [4.4, 0.24], close: [2.4, 0.1], orbit: [7, 0.32], eye: 1.62 },
+  fly: { chase: [24, 0.3], close: [13, 0.16], orbit: [42, 0.38], eye: 1.7 },
+};
+const cameraId = () => CAMERAS[cameraIndex][0];
+function applyRig() {
+  const r = RIG[mode]?.[cameraId()];
+  if (r) Object.assign(chase, { back: r[0], tilt: r[1], yaw: 0 });
+  // first person: the body out of the way (it would fill the view)
+  for (const [k, p] of Object.entries(players)) { const m = p.mesh ?? p.model; if (m && p.on) m.visible = !(k === mode && cameraId() === 'pov'); }
+  if (driver.on && driver.beams) driver.beams.visible = true;
+}
+function cycleCamera(step) { cameraIndex = (cameraIndex + step + CAMERAS.length) % CAMERAS.length; applyRig(); }
+// to another way round the city, at a place given or where you are now
+function setMode(next, at = null) {
+  if (next === mode && !at) return true;
   const look = Math.atan2(controls.target.x - camera.position.x, controls.target.z - camera.position.z);
-  const at = placeOnRoad(roads, controls.target.x, controls.target.z, look);
-  if (!at) return false;
-  driver.start(at.x, at.z, at.heading, at.raised ? at.y : null);
-  Object.assign(chase, { on: true, fresh: true, yaw: 0, back: 7.2, tilt: 0.17 });
-  controls.enabled = false; clockTime.live = false; clockTime.rate = 1;
+  const from = at ?? active()?.view ?? { x: controls.target.x, z: controls.target.z, heading: look };
+  const heading = from.heading ?? look;
+  if (sim) sim.followed = null;
+  // out of the car on foot, it stays where it stopped (E beside it gets back in); any other way, it goes
+  const leave = () => { if (mode === 'car' && next === 'walk') driver.stop({ park: true }); else active()?.stop(); if (next !== 'walk' && next !== 'car') driver.unpark(); };
+  if (next === 'explore') {
+    leave(); mode = 'explore'; chase.on = false; controls.enabled = true; atmosphere.focus(null); atmosphere.blur(0);
+    if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
+    // the map's camera over where you were, looking the way you were going
+    controls.target.set(from.x, streamer.ground(from.x, from.z), from.z);
+    camera.position.set(from.x - Math.sin(heading) * 150, controls.target.y + 110, from.z - Math.cos(heading) * 150);
+    return true;
+  }
+  let place = { x: from.x, z: from.z, heading, y: null };
+  if (at?.exact) place = { x: at.x, z: at.z, heading, y: at.y ?? null }; // (just there: out of the car, back into it)
+  else if (next !== 'fly') {
+    const road = placeOnRoad(roads, from.x, from.z, heading);
+    if (!road) return false;
+    place = { x: road.x, z: road.z, heading: road.heading, y: road.raised ? road.y : null };
+    if (next === 'walk') { // on foot: off the lane, towards the pavement on its right (unless a wall is there)
+      const rx = -Math.cos(road.heading), rz = Math.sin(road.heading), wx = road.x + rx * 3.5, wz = road.z + rz * 3.5;
+      if (!players.walk.walls.blocked(wx, wz)) Object.assign(place, { x: wx, z: wz });
+    }
+  }
+  leave();
+  mode = next;
+  players[next].start(place.x, place.z, place.heading, next === 'fly' ? (from.y ?? streamer.ground(from.x, from.z)) + 70 : place.y);
+  Object.assign(chase, { on: true, fresh: true, heading: place.heading });
+  applyRig();
+  controls.enabled = false; clockTime.live = false; if (clockTime.rate > 6) clockTime.rate = 1;
+  savePlace();
   return true;
 }
-function stopDriving() {
-  if (!driver.on) return;
-  driver.stop(); chase.on = false; controls.enabled = true; atmosphere.focus(null); atmosphere.blur(0);
-  Object.assign(chase, { back: 13, tilt: 0.3 });
-  if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
+// (for the experience: the car, and back)
+function drive() { return setMode('car'); }
+function stopDriving() { if (mode !== 'explore') setMode('explore'); }
+// the active one, somewhere else: a road there for the car and on foot, the air above it for the helicopter
+function teleport(x, z) {
+  if (mode === 'explore') { setMode('explore', { x, z, heading: Math.atan2(controls.target.x - camera.position.x, controls.target.z - camera.position.z) }); return; }
+  setMode(mode, { x, z, heading: active()?.view?.heading ?? 0 });
 }
+// where you were, for the next visit
+function savePlace() {
+  try {
+    const v = active()?.view, p = v ? { mode, x: v.x, z: v.z, heading: v.heading } : { mode: 'explore', x: controls.target.x, z: controls.target.z, heading: 0 };
+    localStorage.setItem(`procedural-sanjuan:place:${AREA}`, JSON.stringify(p));
+  } catch { /* storage unavailable */ }
+}
+function savedPlace() { try { return JSON.parse(localStorage.getItem(`procedural-sanjuan:place:${AREA}`)); } catch { return null; } }
+addEventListener('pagehide', savePlace);
+let nextSave = 0;
 addEventListener('keydown', (e) => {
-  if (e.code !== 'KeyE' || e.repeat || document.activeElement?.tagName === 'INPUT' || xp?.directing) return;
-  if (driver.on) stopDriving(); else drive();
+  if (e.repeat || document.activeElement?.tagName === 'INPUT' || xp?.directing || hud?.mapOpen) return;
+  // E: into a car (from exploring or on foot), out of it on foot beside it; Esc: back to exploring
+  if (e.code === 'KeyE' && mode !== 'fly') {
+    if (mode === 'car') { // out of the driver's door (on the left; the right if a wall is there)
+      const v = driver.view;
+      if (v) {
+        const lx = Math.cos(v.heading) * 1.5, lz = -Math.sin(v.heading) * 1.5, side = players.walk.walls.blocked(v.x + lx, v.z + lz) ? -1 : 1;
+        setMode('walk', { x: v.x + lx * side, z: v.z + lz * side, y: v.y, heading: v.heading, exact: true });
+      }
+    } else { // into the car left nearby, or one on the nearest road
+      const p = driver.parked, w = active()?.view;
+      if (p && w && Math.hypot(p.x - w.x, p.z - w.z) < 9) setMode('car', { ...p, exact: true }); else setMode('car');
+    }
+  }
+  if (e.key === 'Escape') { if (mode !== 'explore') setMode('explore'); else stopRiding(); }
 });
 function rideRandom() {
   const W = sim.windows.get(sim.windowStart(clockTime.hour * 3600));
@@ -486,28 +562,27 @@ function rideRandom() {
     if (SimTraffic.at(W, i, T, p) && SimTraffic.at(W, i, T + 120, p)) { ride(W.vid[i]); return; }
   }
 }
-addEventListener('keydown', (e) => { if (e.key === 'Escape') stopRiding(); });
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!chase.on) return;
-  if (e.button === 2) { stopRiding(); return; }
+  if (e.button === 2 && mode === 'explore') { stopRiding(); return; }
   chase.drag = { x: e.clientX, y: e.clientY };
 });
 addEventListener('pointermove', (e) => {
   if (!chase.on || !chase.drag) return;
-  // look around the car: sideways swings the camera round it, up and down raises or lowers it
+  // look around: sideways swings the camera round, up and down raises or lowers it (in first person: looks)
   chase.yaw -= (e.clientX - chase.drag.x) * 0.006;
-  chase.tilt = THREE.MathUtils.clamp(chase.tilt + (e.clientY - chase.drag.y) * 0.004, 0.05, 1.2);
+  chase.tilt = THREE.MathUtils.clamp(chase.tilt + (e.clientY - chase.drag.y) * 0.004, cameraId() === 'pov' ? -0.7 : 0.03, 1.2);
   chase.drag = { x: e.clientX, y: e.clientY };
 });
 addEventListener('pointerup', () => { chase.drag = null; });
 renderer.domElement.addEventListener('wheel', (e) => {
   if (!chase.on) return;
-  chase.back = THREE.MathUtils.clamp(chase.back * Math.exp(Math.sign(e.deltaY) * 0.12), 6, 80);
+  chase.back = THREE.MathUtils.clamp(chase.back * Math.exp(Math.sign(e.deltaY) * 0.12), mode === 'walk' ? 1.6 : 3.5, 120);
 }, { passive: true });
 function chaseCamera(dt) {
-  const v = driver.on ? driver.view : sim?.view;
+  const player = active(), v = player ? player.view : sim?.view;
   if (!chase.on) return;
-  if (driver.on && !v) return;
+  if (player && !v) return;
   // the car has arrived: ride on with another one near it (or let go, if there is none)
   if (!v) {
     if (chase.fresh) return;
@@ -516,32 +591,41 @@ function chaseCamera(dt) {
     if (next) { sim.followed = next.vid; chase.fresh = false; } else stopRiding();
     return;
   }
-  // ease the heading, so the camera swings round behind the car instead of snapping (backing up, the camera
-  // stays behind as it was)
+  const cam = player ? cameraId() : 'chase', fast = player && mode !== 'walk';
+  // ease the heading, so the camera swings round behind instead of snapping (backing up, it stays as it was)
   let dh = v.heading - chase.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-  if (!v.reversing) chase.heading += dh * (chase.fresh ? 1 : 1 - Math.exp(-dt * (driver.on ? 3.2 : 2.2)));
-  // (let go, the camera drifts back behind the car)
-  if (!chase.drag) chase.yaw *= Math.exp(-dt * 0.35);
-  const h = chase.heading + chase.yaw, flat = Math.cos(chase.tilt) * chase.back;
-  // driving: the camera looks a little ahead of the car as it gathers speed, widens, and feels a knock
-  const ahead = driver.on ? Math.min(7, v.speed * 0.22) : 0;
-  const want = new THREE.Vector3(v.x + Math.sin(v.heading) * ahead, v.y + 1.4, v.z + Math.cos(v.heading) * ahead);
-  if (driver.on) {
-    const fov = 55 + Math.min(14, v.speed * 0.32);
-    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
+  if (!v.reversing) chase.heading += dh * (chase.fresh ? 1 : 1 - Math.exp(-dt * (player ? 3.2 : 2.2)));
+  // (let go, the camera drifts back behind; the cinematic one circles on its own)
+  if (cam === 'orbit') chase.yaw += dt * 0.16; else if (!chase.drag) chase.yaw *= Math.exp(-dt * (cam === 'pov' ? 2 : 0.35));
+  // first person: at the eyes, looking the way it faces (a drag looks round)
+  if (cam === 'pov') {
+    const eyeY = v.y + RIG[mode].eye, h = v.heading + chase.yaw, pitch = -(chase.tilt - RIG[mode].chase[1]) * 0.8;
+    camera.position.set(v.x + Math.sin(v.heading) * (mode === 'car' ? 0.3 : 0.15), eyeY, v.z + Math.cos(v.heading) * (mode === 'car' ? 0.3 : 0.15));
+    camera.lookAt(camera.position.x + Math.sin(h) * Math.cos(pitch) * 20, eyeY + Math.sin(pitch) * 20, camera.position.z + Math.cos(h) * Math.cos(pitch) * 20);
+    controls.target.set(v.x, v.y, v.z);
+    chase.target.set(v.x, v.y + 1.4, v.z); chase.eye.copy(camera.position);
+  } else {
+    const h = chase.heading + chase.yaw, flat = Math.cos(chase.tilt) * chase.back;
+    // moving fast: the camera looks a little ahead as the speed gathers, widens, and feels a knock
+    const ahead = fast ? Math.min(mode === 'fly' ? 20 : 7, v.speed * 0.22) : 0;
+    const lift = mode === 'walk' ? 1.5 : mode === 'fly' ? 2 : 1.4;
+    const want = new THREE.Vector3(v.x + Math.sin(v.heading) * ahead, v.y + lift, v.z + Math.cos(v.heading) * ahead);
     if (v.bump > 0.02) want.y += (Math.random() - 0.5) * v.bump * 0.6;
+    const eye = new THREE.Vector3(v.x - Math.sin(h) * flat, v.y + lift + Math.sin(chase.tilt) * chase.back, v.z - Math.cos(h) * flat);
+    eye.y = Math.max(eye.y, streamer.ground(eye.x, eye.z) + 1); // (never under the ground)
+    if (chase.fresh) { chase.target.copy(want); chase.eye.copy(eye); chase.fresh = false; }
+    // (with a player, the camera is held close: only its swing round the turns is eased, above)
+    chase.target.lerp(want, 1 - Math.exp(-dt * (player ? 20 : 8)));
+    chase.eye.lerp(eye, 1 - Math.exp(-dt * (player ? 14 : 3.5)));
+    controls.target.copy(chase.target);
+    camera.position.copy(chase.eye);
+    camera.lookAt(chase.target);
   }
-  const eye = new THREE.Vector3(v.x - Math.sin(h) * flat, v.y + 1.4 + Math.sin(chase.tilt) * chase.back, v.z - Math.cos(h) * flat);
-  if (chase.fresh) { chase.target.copy(want); chase.eye.copy(eye); chase.fresh = false; }
-  // (driving, the camera is held close: only its swing round the turns is eased, above)
-  chase.target.lerp(want, 1 - Math.exp(-dt * (driver.on ? 20 : 8)));
-  chase.eye.lerp(eye, 1 - Math.exp(-dt * (driver.on ? 14 : 3.5)));
-  controls.target.copy(chase.target);
-  camera.position.copy(chase.eye);
-  camera.lookAt(chase.target);
-  // riding along: the car sharp, the city behind it soft (driving: everything sharp, as a game is)
-  atmosphere.focus(driver.on ? null : camera.position.distanceTo(chase.target));
-  atmosphere.blur(driver.on ? Math.min(1.1, v.speed / 30) : 0); // (driving: the street rushes past)
+  const fov = fast ? 55 + Math.min(14, v.speed * 0.32) : 55;
+  if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
+  // riding along: the car sharp, the city behind it soft (playing: everything sharp, as a game is)
+  atmosphere.focus(player ? null : camera.position.distanceTo(chase.target));
+  atmosphere.blur(fast && cam !== 'orbit' ? Math.min(1.1, v.speed / 30) : 0); // (driving: the street rushes past)
 }
 
 addEventListener('resize', () => {
@@ -554,8 +638,30 @@ addEventListener('resize', () => {
 // ---------------------------------------------------------------- the experience (the simulated morning to watch)
 const xp = sim && params.get('xp') !== '0' ? new Experience({
   scene, camera, controls, streamer, clockTime, atmosphere, roads, manifest, chase, ride, stopRiding, setScenario, speedMap, driver, drive, stopDriving,
+  // free roaming from the title: where you were last time, else in a car on Ponce de León at the Milla de Oro
+  startFree() { const p = savedPlace(); setMode(p?.mode && p.mode !== 'explore' ? p.mode : 'car', p ?? { x: 6262, z: 4640, heading: Math.PI }); },
+  get mode() { return mode; },
   get sim() { return sim; },
 }) : null;
+// the heads-up display of free roaming (hud.js)
+const hud = new Hud({
+  roads, proj,
+  get mode() { return mode; },
+  setMode: (m) => { if (!xp?.directing) setMode(m); },
+  cycleCamera, cameraName: () => (active() ? CAMERAS[cameraIndex][1] : chase.on ? 'Siguiendo un carro' : 'Mapa'),
+  view: () => active()?.view ?? null,
+  focus: () => ({ x: controls.target.x, z: controls.target.z }),
+  lookHeading: () => Math.atan2(controls.target.x - camera.position.x, controls.target.z - camera.position.z),
+  vehicleLabel: () => active()?.label ?? (chase.on ? 'Carro simulado' : 'Explorando'),
+  teleport,
+  setHour: (h) => { clockTime.live = false; clockTime.hour = h; if (clockTime.rate === 0 || clockTime.rate > 6) clockTime.rate = 1; },
+  hour: () => clockTime.hour,
+  soundOn: () => !!xp?.sound.on, toggleSound: () => xp?.toggleSound(),
+  sim: () => (sim && simOn() ? sim : null),
+  fps: () => fps,
+  mapOpen: (open) => { keys.clear(); },
+  keys, // (the touch controls press them)
+});
 if (xp) {
   // a clean picture: the settings panel and the readout come back with G
   guiPanel?.hide(); document.getElementById('hud').style.display = 'none';
@@ -566,7 +672,7 @@ if (xp) {
 }
 
 // ---------------------------------------------------------------- loop
-const hud = document.getElementById('hud');
+const readout = document.getElementById('hud'); // (the technical readout: G)
 const clock = new THREE.Clock();
 let frames = 0, fpsTime = 0, fps = 0;
 
@@ -622,8 +728,17 @@ function frame(_, manual) {
   if (traffic.group.parent && !simulating) traffic.update(dt, controls.target);
   if (sim) { sim.rate = clockTime.rate; if (simulating) sim.update(clockTime.hour * 3600, camera, dt); else sim.hide(); }
   if (simSignals) { props.mats.lens.uniforms.uSigOn.value = simulating ? 1 : 0; if (simulating) simSignals.update(clockTime.hour * 3600); }
-  driver.update(dt, keys);
+  // the one being played: on foot, in the car, in the air (the simulated cars round it fade rather than pass through)
+  const player = active();
+  player?.update(dt, keys);
+  // (the simulated cars run into you, or fade away rather than drive through you, or through the car parked)
+  if (sim) { const v = player && mode !== 'fly' ? player.view : null, pk = mode === 'walk' ? driver.parked : null; sim.probe = v ? (pk ? [v.x, v.z, pk.x, pk.z] : [v.x, v.z]) : null; }
   chaseCamera(dt);
+  if (hud) {
+    hud.visible = !xp?.directing && !xp?.titleUp && !loading;
+    if (!hud.locked) hud.update(dt);
+    if (player && performance.now() > nextSave) { savePlace(); nextSave = performance.now() + 5000; }
+  }
   xp?.update(dt, { night: env.night, uGrid: shared.uGrid.value });
   speedMap?.update(dt, clockTime.hour * 3600, camera.position.y - streamer.ground(camera.position.x, camera.position.z));
   ferries?.update(clockTime.hour * 3600, manifest.sea ?? 0);
@@ -638,7 +753,9 @@ function frame(_, manual) {
   env.sun.shadow.intensity = Math.min(1, env.daylight / 0.15);
   {
     const p = env.sun.target.position, key = `${p.x},${p.z},${env.shadowExtent}`;
-    renderer.shadowMap.needsUpdate = env.sun.shadow.intensity > 0 && (key !== shadowKey || ++shadowFrame % 3 === 0);
+    // (and once at the start, by night too: until the map exists the materials' shadow samplers are given a
+    // texture of the wrong kind, and their draws fail)
+    renderer.shadowMap.needsUpdate = !env.sun.shadow.map || (env.sun.shadow.intensity > 0 && (key !== shadowKey || ++shadowFrame % 3 === 0));
     shadowKey = key;
   }
   lampLight.update(scene, controls.target, camera.position, env.night);
@@ -651,7 +768,7 @@ function frame(_, manual) {
   if (fpsTime >= 0.5) { fps = frames / fpsTime; frames = 0; fpsTime = 0; }
   const s = streamer.stats, info = renderer.info.render;
   const [lon, lat] = proj.unproject(controls.target.x, controls.target.z);
-  hud.textContent =
+  readout.textContent =
     `${manifest.name}  ${Math.abs(lat).toFixed(5)}${lat < 0 ? 'S' : 'N'} ${Math.abs(lon).toFixed(5)}${lon < 0 ? 'W' : 'E'}  ${controls.target.y.toFixed(1)} m\n` +
     `San Juan ${clockTime.label()}${clockTime.live ? ' (live)' : ''} · sun ${env.elevation.toFixed(0)}°\n` +
     `${fps.toFixed(0)} fps${governor.level ? ` (quality step ${governor.level})` : ''} · ${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)}M tris\n` +
@@ -664,4 +781,4 @@ function frame(_, manual) {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, driver, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt) };
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt) };

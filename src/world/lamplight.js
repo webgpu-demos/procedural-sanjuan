@@ -74,7 +74,11 @@ if (uLampOn > 0.5) {
   vec3 lampAt = cameraPosition + lampToWorld * geometryPosition;
   vec2 lampUv = vec2(lampAt.x - uLampRect.x, uLampRect.y - lampAt.z) / (2.0 * uLampRect.z) + 0.5;
   vec2 lampEdge = smoothstep(vec2(0.0), vec2(0.04), lampUv) * (1.0 - smoothstep(vec2(0.96), vec2(1.0), lampUv));
+  #ifdef LAMP_SIDES
+  float lampUp = mix(0.45, 1.0, smoothstep(-0.2, 0.7, (lampToWorld * geometryNormal).y)); // (the one you are: lit on its sides too)
+  #else
   float lampUp = smoothstep(0.25, 0.7, (lampToWorld * geometryNormal).y);
+  #endif
   vec4 lampTexel = texture2D(uLampMap, lampUv);
   float lampLevel = 1.0 - smoothstep(2.5, 5.0, abs(lampAt.y - (lampTexel.a * ${YSPAN}.0 - ${Y0}.0)));   // only light lying at this height
   reflectedLight.directDiffuse += lampTexel.rgb * lampEdge.x * lampEdge.y * lampUp * lampLevel * material.diffuseColor;
@@ -88,6 +92,21 @@ if (uLampOn > 0.5) {
 }
 export function lampUniforms(shader) {
   shader.uniforms.uLampOn = shared.uLampOn; shader.uniforms.uLampMap = shared.uLampMap; shader.uniforms.uLampRect = shared.uLampRect;
+}
+// The one you are (the walker, the helicopter; the car driven has its own, traffic.js): lit by the street lamps on
+// its sides as well as from above, and at night the glow of the city along its edges, so its shape reads against
+// the dark street.
+export const HERO_RIM = 'pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 3.0) * uNight * vec3(0.16, 0.18, 0.24)';
+export function heroLit(m) {
+  m.defines = { ...m.defines, LAMP_SIDES: '' };
+  m.onBeforeCompile = (shader) => {
+    lampUniforms(shader); shader.uniforms.uNight = shared.uNight;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uNight;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += ${HERO_RIM};`);
+  };
+  m.customProgramCacheKey = () => 'hero-lit-v1';
+  return m;
 }
 
 export class LampLight {

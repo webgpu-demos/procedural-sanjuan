@@ -82,15 +82,34 @@ Puerto Rico has nothing like Japan's PLATEAU survey of road surfaces, so the com
 The terrain tiles carry bathymetry offshore; the compiler flattens the sea to 0 m inside the coastline,
 levels lagoons and ponds at their lowest shore, and keeps dry land above the sea.
 
+## Free roaming (`src/hud.js`, `src/world/drive.js`, `src/world/player.js`)
+
+"Explorar libremente", or the end of the opening, leaves you in the city with a game's heads-up display, after
+mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
+
+- **Four ways round** (`1`–`4`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump);
+  Manejar (W A S D, Space the handbrake, Shift a push); Volar, a helicopter (W S, A D, Space up, C down, Shift a
+  push; it cannot fly through the towers, and by night it lights the street with its searchlight). `E` gets out
+  of the car on foot, by the driver's door (the car stays parked where it stopped), and back in; `Esc` goes back
+  to exploring. The one you are is lit by the street lamps it passes under.
+- **Cameras** (`V`): chase, close, first person, cinematic.
+- **The time of day**: dawn, rush hour, noon, dusk, night (the simulated cars from 4:30 to 10:15; outside the
+  run, the procedural traffic).
+- **Ir a** and **Mapa** (`M`): places of San Juan; the full map pans and zooms, and a click goes there. The
+  minimap shows the roads and the simulated cars round you, and Puerto Rico's green street-name signs say where
+  you are.
+- **Touch**: a thumbstick where the left thumb lands, and the buttons of the way in use.
+- Where you were, and how, is kept for the next visit (localStorage). `H` hides the HUD, `N` the sound.
+
 ## The simulated morning (`tools/sim/`)
 
 A weekday morning in San Juan, 4:30 to 10:15, simulated with [Eclipse SUMO](https://eclipse.dev/sumo/) on the
 city's own road graph and played back in the browser: some 360,000 car trips and the AMA's 520 bus trips. It
 opens with a title and four shots (the city before dawn, the headlights on PR-22, one commuter's ride, the sun
 coming up behind the Milla de Oro: it rises about 6:19 AST in late October); then the clock and its time line,
-the speed of time (the cars at their own speed by default), **driving** (`E` gets in a car on the road nearest the
-view: W A S D, Space the handbrake, Shift a push; the car rides the ground or the flyover it drove onto, stops
-against the buildings' walls and the simulated cars, and the camera follows close, with motion blur at speed), the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
+the speed of time (the cars at their own speed by default), **free roaming** on foot, by car and by helicopter
+(below: the car rides the ground or the flyover it drove onto and stops against the buildings' walls and the
+simulated cars, which fade rather than drive through you), the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
 wave from the Monacillos transmission centre, and the rush is simulated without them, every dark signal an
 all-way stop as the law has it; it plays as a scene of
 its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two hours

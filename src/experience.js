@@ -15,6 +15,7 @@ const CSS = `
 #xp-cap { position: fixed; left: 50%; bottom: 13vh; transform: translateX(-50%); z-index: 960; text-align: center; width: min(900px, 90vw);
   opacity: 0; transition: opacity 1.2s ease; pointer-events: none; text-shadow: 0 2px 18px rgba(0,0,0,0.75); }
 #xp-cap.on { opacity: 1; }
+body:not(.hud-off) #xp-cap { bottom: 140px; } /* (free roaming: above the HUD's ways round the city) */
 #xp-cap .a { font-size: clamp(18px, 2.3vw, 30px); font-weight: 600; letter-spacing: 0.01em; }
 #xp-cap .b { margin-top: 8px; font-size: clamp(12px, 1.25vw, 15px); letter-spacing: 0.14em; text-transform: uppercase; color: rgba(246,241,231,0.72); }
 #xp-start { position: fixed; inset: 0; z-index: 980; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
@@ -25,18 +26,19 @@ const CSS = `
 #xp-start .s { font-size: clamp(16px, 2vw, 22px); color: rgba(246,241,231,0.85); }
 #xp-start .d { max-width: 640px; text-align: center; font-size: 13px; line-height: 1.55; color: rgba(246,241,231,0.62); padding: 0 20px; }
 #xp-start .row { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
-.xp button { appearance: none; border: 0; cursor: pointer; font: inherit; color: inherit; }
+.xp button { appearance: none; border: 0; cursor: pointer; font: inherit; color: inherit; background: none; }
 #xp-start button { padding: 13px 26px; border-radius: 999px; font-size: 15px; font-weight: 600; letter-spacing: 0.04em; }
 #xp-start .go { background: linear-gradient(90deg, #ff7a45, #f2c94c); color: #1b1206; box-shadow: 0 6px 30px rgba(255,122,69,0.35); }
 #xp-start .free { background: rgba(255,255,255,0.1); }
 #xp-start button:hover { filter: brightness(1.08); }
 #xp-skip { position: fixed; right: 22px; top: 3.2vh; z-index: 970; padding: 7px 14px; border-radius: 999px; background: rgba(0,0,0,0.45); font-size: 12px; letter-spacing: 0.08em; display: none; }
-#xp-dock { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 940; display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px 8px 16px; border-radius: 16px; background: rgba(8,12,20,0.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 8px 30px rgba(0,0,0,0.35); transition: opacity 0.6s ease, transform 0.6s ease; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); }
-#xp-dock.hidden { opacity: 0; transform: translate(-50%, 20px); pointer-events: none; }
+#xp-dock { position: fixed; right: 18px; top: 76px; z-index: 930; display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px 6px 14px; border-radius: 16px; background: rgba(18,19,22,0.62); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid rgba(255,255,255,0.09); box-shadow: 0 18px 40px -18px rgba(0,0,0,0.7); transition: opacity 0.6s ease, transform 0.6s ease; flex-wrap: wrap; justify-content: center;
+  width: min(470px, calc(100vw - 36px)); box-sizing: border-box; font-family: 'Inter', -apple-system, sans-serif; }
+#xp-dock.hidden, .hud-hidden #xp-dock { opacity: 0; transform: translateY(-14px); pointer-events: none; }
 #xp-dock .clock { display: flex; align-items: baseline; gap: 6px; min-width: 128px; }
-#xp-dock .clock .t { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+#xp-dock .clock .t { font-size: 22px; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 #xp-dock .clock .ap { font-size: 13px; color: rgba(246,241,231,0.7); }
 #xp-dock .clock .day { font-size: 11px; color: rgba(246,241,231,0.5); text-transform: uppercase; letter-spacing: 0.12em; }
 #xp-dock .grp { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(255,255,255,0.06); }
@@ -45,10 +47,10 @@ const CSS = `
 #xp-dock .grp button.alert.on { background: #c43d2b; color: #fff; }
 #xp-dock .act { padding: 9px 13px; border-radius: 10px; background: rgba(255,255,255,0.08); font-size: 13px; }
 #xp-dock .act:hover, #xp-dock .grp button:hover { background: rgba(255,255,255,0.18); }
-#xp-stats { position: fixed; top: 14px; left: 16px; z-index: 930; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(246,241,231,0.7);
+#xp-stats { position: fixed; top: 78px; left: 20px; z-index: 930; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(246,241,231,0.7);
   text-shadow: 0 1px 8px rgba(0,0,0,0.6); pointer-events: none; transition: opacity 0.6s; }
 #xp-stats b { color: #fff; font-weight: 600; }
-#xp-story { position: fixed; right: 18px; bottom: 90px; z-index: 935; width: 300px; padding: 14px 16px; border-radius: 14px;
+#xp-story { position: fixed; right: 18px; bottom: 200px; z-index: 935; width: 300px; padding: 14px 16px; border-radius: 14px;
   background: rgba(8,12,20,0.66); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 8px 30px rgba(0,0,0,0.35);
   opacity: 0; transform: translateY(10px); transition: opacity 0.5s ease, transform 0.5s ease; pointer-events: none; }
 #xp-story.on { opacity: 1; transform: none; }
@@ -86,7 +88,9 @@ const CSS = `
 #xp-truth .nums b { display: block; font-size: 22px; color: #fff; font-variant-numeric: tabular-nums; }
 #xp-truth canvas { width: 100%; height: 190px; border-radius: 10px; background: rgba(255,255,255,0.04); }
 #xp-truth .not { margin-top: 8px; font-size: 12px; color: rgba(246,241,231,0.6); }
-@media (max-width: 700px) { #xp-dock .clock .t { font-size: 22px; } #xp-story { width: calc(100vw - 36px); bottom: 150px; } #xp-dock .grp button { padding: 6px 7px; } }
+@media (max-width: 760px) { body:not(.hud-off) #xp-stats { display: none; } #xp-dock { top: 70px; padding: 4px 6px 12px 10px; gap: 6px; }
+  #xp-dock .clock .t { font-size: 19px; } #xp-dock .act { padding: 7px 10px; font-size: 12px; } #xp-dock .grp button { font-size: 12px; } #xp-time .mark { font-size: 8.5px; } }
+@media (max-width: 700px) { #xp-dock .clock .t { font-size: 19px; } #xp-story { width: calc(100vw - 36px); bottom: 150px; } #xp-dock .grp button { padding: 6px 7px; } }
 `;
 
 const KIND = {
@@ -127,17 +131,13 @@ export class Experience {
       <div class="g"><div>salió<b class="dep">–</b></div><div>velocidad<b class="spd">–</b></div><div>demora del viaje<b class="loss">–</b></div><div>vehículo<b class="typ">–</b></div></div>
       <div class="st"></div></div>`);
     this.skip = el('<button id="xp-skip" class="xp">Saltar intro · skip ›</button>');
-    this.speedo = el(`<div id="xp-drive" class="xp"><div class="v">0</div><div class="u">KM/H</div><div class="st"></div>
-      <div class="help">W A S D · Espacio freno de mano · Shift turbo · arrastra para mirar · E salir</div></div>`);
     this.dock = el(`<div id="xp-dock" class="xp hidden">
       <div id="xp-time"><input type="range" min="16200" max="36000" step="30" value="21060"></div>
       <div class="clock"><span class="t">5:50</span><span class="ap">a.m.</span><span class="day"></span></div>
       <div class="grp speed"><button data-r="0" title="pausa">❚❚</button><button data-r="1">1×</button><button data-r="6">6×</button><button data-r="30">30×</button><button data-r="120">120×</button></div>
       <div class="grp scen"><button data-s="morning" class="on">Mañana normal</button><button data-s="apagon" class="alert">Apagón</button></div>
-      <button class="act drive">🚘 Manejar <span class="k">E</span></button>
       <button class="act ride">🚗 Seguir un carro</button>
       <button class="act map">🗺️ Tapón</button>
-      <button class="act snd">🔊 Sonido</button>
       <button class="act truth">📊 ¿Qué tan real?</button>
     </div>`);
     this.truth = el(`<div id="xp-truth" class="xp" hidden></div>`);
@@ -149,8 +149,6 @@ export class Experience {
     this.marks();
     this.dock.querySelectorAll('.scen button').forEach((b) => b.addEventListener('click', () => this.setScenario(b.dataset.s)));
     this.dock.querySelector('.ride').addEventListener('click', () => this.rideNear());
-    this.dock.querySelector('.drive').addEventListener('click', (e) => { e.currentTarget.blur(); if (this.app.driver?.on) this.app.stopDriving(); else this.app.drive(); });
-    this.dock.querySelector('.snd').addEventListener('click', () => this.toggleSound());
     this.dock.querySelector('.truth').addEventListener('click', () => this.toggleTruth());
     this.dock.querySelector('.map').addEventListener('click', () => {
       const m = this.app.speedMap; if (!m) return;
@@ -160,7 +158,6 @@ export class Experience {
     addEventListener('keydown', (e) => { if (this.directing && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); this.endIntro(); } });
     // driving wants a keyboard: on a touch screen alone, the button is not offered
     this.canDrive = !!app.drive && !(matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches);
-    if (!this.canDrive) this.dock.querySelector('.drive').style.display = 'none';
     this.trips = null; this.tripinfo = null; this.loadStories(this.app.sim);
     this.nameIndex = this.indexNames(app.roads);
   }
@@ -204,15 +201,16 @@ export class Experience {
   // ---------------------------------------------------------------- the title, the opening
   showTitle(total) {
     const n = total ? total.toLocaleString('es-PR') : '', end = clockLabel((this.app.sim?.end ?? 36000) / 3600).t;
+    this.titleUp = true;
     this.start = (() => { const d = document.createElement('div'); d.id = 'xp-start'; d.className = 'xp'; document.body.appendChild(d); return d; })();
     this.start.innerHTML = `<div class="k">Puerto Rico · simulación</div><h1>SAN JUAN</h1><div class="s">La mañana — un martes cualquiera</div>
       <div class="d">${n ? n + ' viajes' : 'Cada viaje'} simulados con SUMO, de las 4:30 a las ${end} de la mañana: quién sale de dónde, cuándo y hacia dónde,
       según el Censo (ACS), con los conteos de la FHWA y las calles de OpenStreetMap.<br>Every car you will see is a simulated trip.</div>
       <div class="row"><button class="go">▶ Comenzar · with sound</button><button class="free">Explorar libremente</button></div>`;
     this.start.querySelector('.go').addEventListener('click', () => { this.sound.start(); this.setSoundButton(); this.hideTitle(); this.beginIntro(); });
-    this.start.querySelector('.free').addEventListener('click', () => { this.clouds(); this.hideTitle(); this.endIntro(true); });
+    this.start.querySelector('.free').addEventListener('click', () => { this.clouds(); this.hideTitle(); this.endIntro(true); this.app.startFree?.(); });
   }
-  hideTitle() { this.start?.classList.add('gone'); setTimeout(() => this.start?.remove(), 1100); }
+  hideTitle() { this.titleUp = false; this.start?.classList.add('gone'); setTimeout(() => this.start?.remove(), 1100); }
 
   // The opening: dark (5:28), blue hour over the expressway into the city (5:58), a ride with the headlights on
   // (6:06), the sun coming up behind the towers of the Milla de Oro, looking east (it rises about 6:19 in late
@@ -337,8 +335,8 @@ export class Experience {
     }
     app.controls.enabled = true;
     this.dock.classList.remove('hidden');
-    // what can be done now: drive (a keyboard's), or look
-    if (this.canDrive) { this.caption(['Pulsa E para manejar', 'press E to drive · W A S D · drag to look around']); setTimeout(() => !this.directing && this.caption(null), 6000); }
+    // what can be done now: the ways round the city (a keyboard's)
+    if (this.canDrive && !fromTitle) { this.caption(['Recorre San Juan: 2 caminar · 3 manejar · 4 volar', 'walk, drive or fly · M for the map · V for the camera']); setTimeout(() => !this.directing && this.caption(null), 7000); }
   }
 
   // the moments of the morning, under the time line
@@ -414,7 +412,7 @@ export class Experience {
     b.classList.toggle('on', on); b.style.background = on ? 'rgba(255,122,69,0.45)' : '';
   }
   toggleSound() { if (this.sound.on) this.sound.stop(); else this.sound.start(); this.setSoundButton(); }
-  setSoundButton() { this.dock.querySelector('.snd').textContent = this.sound.on ? '🔊 Sonido' : '🔈 Sin sonido'; }
+  setSoundButton() { /* (the HUD's sound button follows the sound itself: hud.js) */ }
 
   // ---------------------------------------------------------------- each frame
   update(dt, { night, uGrid }) {
@@ -427,7 +425,8 @@ export class Experience {
       if (this.shotT > s.dur && !this.cutting) { this.cutting = true; this.cut(this.shot + 1).then(() => { this.cutting = false; }); }
     }
     // the end of the simulated morning: round again from before dawn (it can run as a loop, unattended)
-    if (sim && !this.directing && app.clockTime.rate > 0 && T >= sim.end - 30) {
+    const ran = this.lastT != null && this.lastT < sim?.end - 30 && T - this.lastT < 60; this.lastT = T;
+    if (sim && ran && !this.directing && app.clockTime.rate > 0 && T >= sim.end - 30) {
       app.clockTime.hour = 5.45; this.wave = null;
       this.caption(['Otra mañana', 'the simulated morning begins again']); setTimeout(() => this.caption(null), 4000);
     }
@@ -453,17 +452,8 @@ export class Experience {
       this.stats.innerHTML = st.active ? `SUMO · <b>${st.active.toLocaleString('es-PR')}</b> carros en la calle${st.nearSpeed != null ? ` · cerca, <b>${Math.round(st.nearSpeed * 3.6)}</b> km/h` : ''}${uGrid.z >= 0 ? ' · <b style="color:#ff6a4d">apagón</b>' : ''}` : '';
       this.stats.style.opacity = this.directing ? 0 : 1;
     }
-    // driving: the speed, the street
-    const dv = app.driver?.on ? app.driver.view : null;
-    this.speedo.classList.toggle('on', !!dv);
-    this.dock.querySelector('.drive').firstChild.textContent = dv ? '🚘 Salir del carro ' : '🚘 Manejar ';
-    if (dv) {
-      this.speedo.querySelector('.v').textContent = Math.round(dv.kmh);
-      const street = this.streetAt(dv.x, dv.z);
-      if (street !== this.lastStreet) { this.speedo.querySelector('.st').textContent = street ?? ''; this.lastStreet = street; }
-    }
     // the story of the car being ridden with
-    const v = dv ? null : sim?.view;
+    const v = app.mode && app.mode !== 'explore' ? null : sim?.view;
     if (v && app.chase.on) {
       const t = this.trip(v.vid), bus = sim.buses?.[v.vid];
       this.story.classList.add('on');

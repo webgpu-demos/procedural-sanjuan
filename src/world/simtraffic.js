@@ -132,6 +132,7 @@ export class SimTraffic {
     this.trace = null;     // (testing: called with each seen car's placement, to find what would show as a glitch)
     this.probe = null;     // [x, z] of the visitor's car, if driving; probeHits: the cars within 30 m of it,
     this.probeHits = [];   // 7 numbers each (x, y, z, heading, length, width, speed)
+    this.nearby = [];      // [x, z] of the cars within 320 m of the camera (the minimap's dots)
     this.heights = new Map(); this.frameNo = 0; // (each seen car's eased height, and the frame it was set)
     this.rate = 1;         // the clock's speed: a car's arrival and departure fade over about half a second of it
     this.followed = null;  // vehicle id the camera rides with
@@ -235,7 +236,7 @@ export class SimTraffic {
     const counts = this.fleets.map(() => 0);
     let mid = 0, lights = 0, active = 0, nearSpeed = 0, nearStopped = 0, nearN = 0;
     const m = this.m.elements, night = shared.uNight.value;
-    this.view = null; this.probeHits.length = 0;
+    this.view = null; this.probeHits.length = 0; this.nearby.length = 0;
     // A seen car's height is eased over a tenth of a second: the ground under some roads (the elevation model
     // round an overpass's fill) rises and falls a few metres in a few, and at the speed of the opening a car
     // would hop there. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
@@ -307,8 +308,13 @@ export class SimTraffic {
       // through it (they keep to their recorded way) fades out instead of driving through it
       if (this.probe) {
         const px = p[0] - this.probe[0], pz = p[2] - this.probe[1], pd = px * px + pz * pz;
-        if (pd < 900) { this.probeHits.push(p[0], y, p[2], heading, spec.L, spec.spec.W, speed); if (pd < 3.2 * 3.2) shown *= smooth(1.8, 3.2, Math.sqrt(pd)); }
+        if (pd < 900) this.probeHits.push(p[0], y, p[2], heading, spec.L, spec.spec.W, speed);
+        for (let j = 0; j < this.probe.length; j += 2) { // (and after it, the car parked: [x, z, x2, z2])
+          const qx = p[0] - this.probe[j], qz = p[2] - this.probe[j + 1], qd = qx * qx + qz * qz;
+          if (qd < 3.2 * 3.2) shown *= smooth(1.8, 3.2, Math.sqrt(qd));
+        }
       }
+      if (d2 < 320 * 320) this.nearby.push([p[0], p[2]]); // (for the minimap)
       if (d2 < 250 * 250) { nearN++; nearSpeed += speed; if (speed < 0.5) nearStopped++; }
       // near: the model; across the band at its edge it dissolves into the box, which stands in from there out
       const d = Math.sqrt(d2), near = this.near, handover = followed ? 0 : smooth(near - BAND, near, d);

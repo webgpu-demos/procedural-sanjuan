@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { shared } from './materials.js';
-import { LAMP_LAYER, lampMaterial } from './lamplight.js';
+import { LAMP_LAYER, lampMaterial, lampUniforms, HERO_RIM } from './lamplight.js';
 
 const LANE = 3.0;
 const CAR_RADIUS = 330, CARS = 260; // the default number of cars, and the distance from the focus they keep within
@@ -45,18 +45,20 @@ function taper(w0, w1, y0, y1, zA0, zB0, zA1, zB1, rgb, code = 0) {
   flat.computeVertexNormals();
   return finish(flat, rgb, code);
 }
-// a wheel: the tyre, its rim set in a little, five spokes (the driven car's: rounder)
+// a wheel: the tyre, its rim set in a little, five spokes; the driven car's: an alloy, its lip a bright ring and
+// the dark of the brake between the spokes (in the traffic: a grey wheel face, which reads at a distance)
 const wheel = (r, x, z, hi = false, lo = false) => {
-  const out = Math.sign(x), seg = hi ? 28 : lo ? 8 : 14;
+  const out = Math.sign(x), seg = hi ? 28 : lo ? 8 : 14, alloy = hi ? [0.6, 0.61, 0.64] : [0.5, 0.51, 0.54];
   if (lo) return [finish(new THREE.CylinderGeometry(r, r, 0.23, seg).rotateZ(Math.PI / 2).translate(x, r, z), TYRE, 4)]; // (far off: a tyre)
   const parts = [
     finish(new THREE.CylinderGeometry(r, r, 0.23, seg).rotateZ(Math.PI / 2).translate(x, r, z), TYRE, 4),
-    finish(new THREE.CylinderGeometry(r * 0.66, r * 0.66, 0.02, seg).rotateZ(Math.PI / 2).translate(x + out * 0.1, r, z), [0.08, 0.08, 0.09], 4),
-    finish(new THREE.CylinderGeometry(r * 0.16, r * 0.16, 0.05, 8).rotateZ(Math.PI / 2).translate(x + out * 0.12, r, z), [0.7, 0.71, 0.74], 4),
+    finish(new THREE.CylinderGeometry(r * 0.66, r * 0.66, 0.02, seg).rotateZ(Math.PI / 2).translate(x + out * 0.1, r, z), hi ? [0.05, 0.05, 0.055] : [0.26, 0.26, 0.28], 4),
+    finish(new THREE.CylinderGeometry(r * 0.16, r * 0.16, 0.05, 8).rotateZ(Math.PI / 2).translate(x + out * 0.12, r, z), alloy, 4),
   ];
+  if (hi) parts.push(finish(new THREE.TorusGeometry(r * 0.64, 0.022, 6, seg).rotateY(Math.PI / 2).translate(x + out * 0.11, r, z), alloy, 4));
   for (let k = 0; k < 5; k++) {
     const a = (k / 5) * Math.PI * 2;
-    parts.push(finish(new THREE.BoxGeometry(0.03, r * 0.56, 0.06).translate(0, r * 0.3, 0).rotateX(a).translate(x + out * 0.115, r, z), [0.72, 0.73, 0.76], 4));
+    parts.push(finish(new THREE.BoxGeometry(0.03, r * 0.5, hi ? 0.075 : 0.06).translate(0, r * 0.38, 0).rotateX(a).translate(x + out * 0.115, r, z), alloy, 4));
   }
   return parts;
 };
@@ -239,7 +241,9 @@ export function carMaterial(lit = true, { hero = false } = {}) {
     ? new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.05 })
     : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.5 });
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; // (no lamp light here; the sampler still needs its texture)
+    // (no lamp light on the traffic: a car is lit by its own lamps; the sampler still needs its texture.) The car
+    // driven takes it: the pools of the street lamps slide over its roof and bonnet as it passes under them
+    if (hero) lampUniforms(shader); else { shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; }
     shader.uniforms.uNight = shared.uNight;
     shader.vertexShader = shader.vertexShader
       // aBrake (per car, from simtraffic.js; 0 where a mesh has none): the tail lamps flare when it brakes
@@ -257,13 +261,16 @@ export function carMaterial(lit = true, { hero = false } = {}) {
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vGlow > 3.5 ? 0.85 : vGlow > 2.5 ? 0.06 : roughnessFactor;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vGlow > 3.5 ? 0.0 : vGlow > 2.5 ? 0.9 : metalnessFactor;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        ${hero ? `// (and at night the glow of the city along its edges, so its shape reads against the dark street)
+        if (vGlow < 0.5) totalEmissiveRadiance += ${HERO_RIM};` : ''}
         if (vGlow > 0.5 && vGlow < 2.5) totalEmissiveRadiance += lamp * (0.15 + uNight * ${lit ? '(vGlow > 1.5 ? 2.0 : 3.6)' : '0.0'}
           + (vGlow > 1.5 ? vBrake * (1.4 + uNight * 3.0) : 0.0));`)
       // (the windows are marked in alpha for the reflection pass, like those of the buildings)
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif (vGlow > 2.5 && vGlow < 3.5) gl_FragColor.a = 0.1;');
     dissolve(shader);
   };
-  m.customProgramCacheKey = () => (hero ? 'car-hero-v2' : lit ? 'car-v7' : 'car-parked-v7');
+  if (hero) m.defines = { ...m.defines, LAMP_SIDES: '' };
+  m.customProgramCacheKey = () => (hero ? 'car-hero-v3' : lit ? 'car-v7' : 'car-parked-v7');
   return m;
 }
 
