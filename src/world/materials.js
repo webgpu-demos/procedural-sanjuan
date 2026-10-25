@@ -376,6 +376,7 @@ uniform sampler2D uShore;
 uniform vec4 uShoreRect;
 uniform vec3 uSunDir;
 uniform vec3 uSunGlint;
+uniform float uDark;
 varying float vLayer;
 varying vec3 vWPos;
 varying vec3 vWNrm;
@@ -476,8 +477,13 @@ const GROUND_MAIN = /* glsl */ `
       float s = max(dot(reflect(-V, n), uSunDir), 0.0), sharp = mix(1600.0, 40.0, smoothstep(0.3, 25.0, px));
       gGlint = uSunGlint * pow(s, sharp) * (sharp + 1.0) * 0.006 * mix(0.25, 1.0, fresnel) * (1.0 - foam) * step(0.0, uSunDir.y);
       vec3 R = reflect(-V, n);
+      float fw = 0.02 + 0.98 * pow(1.0 - max(dot(V, n), 0.0), 5.0); // (by the wave's own face: the waves show)
       float toward = pow(max(dot(normalize(R.xz + 1e-5), normalize(uSunDir.xz + 1e-5)), 0.0), 5.0);
-      gSheen = uSunGlint * 0.05 * toward * fresnel * (1.0 - smoothstep(0.02, 0.4, uSunDir.y)) * (1.0 - foam);
+      gSheen = uSunGlint * 0.05 * toward * fw * (1.0 - smoothstep(0.02, 0.4, uSunDir.y)) * (1.0 - foam);
+      // by night the waves mirror the navy of the night sky (atmosphere.js draws it after the environment map
+      // is made, so the map is near black), and the glow of the city low over the horizon
+      float low = 1.0 - smoothstep(0.0, 0.35, R.y);
+      gSheen += fw * uDark * (vec3(0.02, 0.034, 0.075) + vec3(0.05, 0.032, 0.018) * low * low) * (1.0 - foam);
     }
     // the reflection pass (reflections.js) mirrors the city in it, by water's Fresnel
     gMirror = fresnel * (1.0 - foam) * (1.0 - 0.6 * pool);
@@ -493,7 +499,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       uGroundScale: { value: tex.ground.scales }, uFixedLayer: { value: fixedLayer },
       uOrtho: shared.uOrtho, uOrthoRect: shared.uOrthoRect, uOrthoOn: shared.uOrthoOn,
       uLampOn: shared.uLampOn, uLampMap: shared.uLampMap, uLampRect: shared.uLampRect,
-      uTime: shared.uTime, uShore: shared.uShore, uShoreRect: shared.uShoreRect, uSunDir: shared.uSunDir, uSunGlint: shared.uSunGlint,
+      uTime: shared.uTime, uShore: shared.uShore, uShoreRect: shared.uShoreRect, uSunDir: shared.uSunDir, uSunGlint: shared.uSunGlint, uDark: shared.uDark,
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nattribute float aLayer;\nvarying float vLayer;\n${WORLD_VARYINGS_VERT}`)
@@ -508,7 +514,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v4';
+  m.customProgramCacheKey = () => 'ground-v5';
   return m;
 }
 
