@@ -120,5 +120,6 @@ export class Environment {
     this.renderer.toneMappingExposure = lerp(DAY.exposure, NIGHT.exposure);
     this.bloom = lerp(DAY.bloom, NIGHT.bloom);
     shared.uNight.value = this.night;
+    shared.uDark.value = this.dark;
   }
 }

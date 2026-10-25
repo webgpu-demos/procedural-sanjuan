@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { TILE as TILE_SIZE } from '../shared/geo.js';
 
 export const shared = {
-  uNight: { value: 0 }, // 0 day .. 1 night
+  uNight: { value: 0 }, // 0 day .. 1 night: how far the city's lights are on (they come on before sunset)
+  uDark: { value: 0 },  // how dark it is: this follows the sun down through twilight (environment.js)
   // The grid (an apagón): where it failed (x, z), how far the darkness has spread from there (m; < 0: the power
   // is on everywhere) and how wide its edge is. Lit windows, signs and street lamps go out inside it, except
   // where a building has its own generator.

@@ -28,15 +28,16 @@ class Scale extends Effect {
 
 // The sky in the dark hours: the physical sky all but vanishes once the sun is ten degrees down, which reads as
 // a black void; twilight is a deep navy, lighter towards the horizon, with the brighter stars. Added where the
-// depth says sky, as much as the night is dark (uNight).
+// depth says sky, as much as it is dark (uDark: it follows the sun down through twilight, where uNight, the
+// city's lights, is already full at sunset; by uNight the stars were out over a sunset).
 class TwilightSky extends Effect {
   constructor(camera) {
     super('TwilightSky', `
-      uniform mat4 uInvViewProj; uniform float uNight; uniform vec3 uSunDir; uniform vec3 uCam;
+      uniform mat4 uInvViewProj; uniform float uDark; uniform vec3 uSunDir; uniform vec3 uCam;
       float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
       void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
         outputColor = inputColor;
-        if (uNight <= 0.0) return;
+        if (uDark <= 0.0) return;
         vec4 w = uInvViewProj * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
         vec3 hit = w.xyz / w.w, dir = normalize(hit - uCam);
         float up = clamp(dir.y, -0.05, 1.0);
@@ -45,7 +46,7 @@ class TwilightSky extends Effect {
           // the far ground and sea melt into the twilight horizon (the physical haze stays bright after dusk)
           // (lights shine through: only what is dim is darkened)
           float lum = dot(inputColor.rgb, vec3(0.3, 0.59, 0.11));
-          float far = smoothstep(1500.0, 20000.0, distance(hit, uCam)) * uNight * 0.9 * (1.0 - smoothstep(0.35, 1.2, lum));
+          float far = smoothstep(1500.0, 20000.0, distance(hit, uCam)) * uDark * 0.9 * (1.0 - smoothstep(0.35, 1.2, lum));
           outputColor.rgb = mix(inputColor.rgb, vec3(0.03, 0.05, 0.11) * 0.6, far);
           return;
         }
@@ -55,12 +56,12 @@ class TwilightSky extends Effect {
         sky += vec3(0.09, 0.045, 0.03) * pow(east, 3.0) * (1.0 - smoothstep(0.0, 0.25, up)) * smoothstep(-0.35, -0.02, uSunDir.y);
         // stars: the brightest, fading in as it darkens
         vec3 cell = floor(dir * 420.0);
-        float star = step(0.9975, hash(cell)) * smoothstep(0.05, 0.3, up) * smoothstep(0.55, 0.95, uNight);
+        float star = step(0.9975, hash(cell)) * smoothstep(0.05, 0.3, up) * smoothstep(0.55, 0.95, uDark);
         sky += vec3(star * (0.4 + 0.6 * hash(cell + 7.0)));
-        outputColor.rgb = inputColor.rgb + sky * uNight * 0.6;
+        outputColor.rgb = inputColor.rgb + sky * uDark * 0.6;
       }`, {
       attributes: EffectAttribute.DEPTH,
-      uniforms: new Map([['uInvViewProj', new THREE.Uniform(new THREE.Matrix4())], ['uNight', shared.uNight], ['uSunDir', shared.uSunDir], ['uCam', new THREE.Uniform(new THREE.Vector3())]]),
+      uniforms: new Map([['uInvViewProj', new THREE.Uniform(new THREE.Matrix4())], ['uDark', shared.uDark], ['uSunDir', shared.uSunDir], ['uCam', new THREE.Uniform(new THREE.Vector3())]]),
     });
     this.camera = camera;
   }
