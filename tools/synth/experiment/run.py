@@ -51,38 +51,43 @@ def summarise(exp, rows):
     meta = json.load(open(os.path.join(exp, 'experiment.json')))
     out += [f'Classes: {", ".join(meta["classes"])}. Real frames train/val/test: {meta["frames"]["train"]}/{meta["frames"]["val"]}/{meta["frames"]["test"]} '
             f'({meta["flights"]["train"]}/{meta["flights"]["val"]}/{meta["flights"]["test"]} flights). Synthetic frames available: {meta["synth_frames"]}.', '']
-    for mode in sorted({r['mode'] for r in rows}):
-        rs = [r for r in rows if r['mode'] == mode]
-        fracs = sorted({float(r['real_frac']) for r in rs})
-        ratios = sorted({r['synth'] for r in rs}, key=lambda s: (s == 'only', float(s) if s != 'only' else 0))
-        for metric in ('map50_95', 'map50'):
-            out += [f'## {metric} ({mode})', '', '| real share | ' + ' | '.join(f'synth {s}' for s in ratios) + ' |', '|---|' + '---|' * len(ratios)]
-            for f in fracs:
-                vals = [cell([float(r[metric]) for r in rs if float(r['real_frac']) == f and r['synth'] == s]) for s in ratios]
-                out.append(f'| {f:g} | ' + ' | '.join(vals) + ' |')
-            out.append('')
-        # gain over the real-only baseline, paired by seed
-        if any(r['synth'] == '0' for r in rs):
-            out += [f'## gain in map50_95 over real only, paired by seed ({mode})', '', '| real share | ' + ' | '.join(f'synth {s}' for s in ratios if s not in ('0', 'only')) + ' |', '|---|' + '---|' * len([s for s in ratios if s not in ('0', 'only')])]
-            for f in fracs:
-                base = {r['seed']: float(r['map50_95']) for r in rs if float(r['real_frac']) == f and r['synth'] == '0'}
-                vals = []
-                for s in ratios:
-                    if s in ('0', 'only'):
-                        continue
-                    d = [float(r['map50_95']) - base[r['seed']] for r in rs if float(r['real_frac']) == f and r['synth'] == s and r['seed'] in base]
-                    vals.append(cell(d))
-                out.append(f'| {f:g} | ' + ' | '.join(vals) + ' |')
-            out.append('')
-        # per class
-        classes = meta['classes']
-        out += [f'## map50_95 per class ({mode})', '', '| real share | synth | ' + ' | '.join(classes) + ' |', '|---|---|' + '---|' * len(classes)]
+    rs = [r for r in rows if r['mode'] == 'scratch']
+    fracs = sorted({float(r['real_frac']) for r in rs})
+    ratios = sorted({r['synth'] for r in rs}, key=lambda s: (s == 'only', float(s) if s != 'only' else 0))
+    mixed = [s for s in ratios if s not in ('0', 'only')]
+    for metric in ('map50_95', 'map50'):
+        out += [f'## {metric}', '', '| real share | ' + ' | '.join('real only' if s == '0' else 'synthetic only' if s == 'only' else f'+ {s} synthetic per real' for s in ratios) + ' |', '|---|' + '---|' * len(ratios)]
         for f in fracs:
-            for s in ratios:
-                sel = [json.loads(r['per_class_map50_95']) for r in rs if float(r['real_frac']) == f and r['synth'] == s]
-                if sel:
-                    out.append(f'| {f:g} | {s} | ' + ' | '.join(cell([p.get(c, 0.0) for p in sel]) for c in classes) + ' |')
+            out.append(f'| {f:g} | ' + ' | '.join(cell([float(r[metric]) for r in rs if float(r['real_frac']) == f and r['synth'] == s]) for s in ratios) + ' |')
         out.append('')
+    base = {(float(r['real_frac']), r['seed']): float(r['map50_95']) for r in rs if r['synth'] == '0'}
+    if mixed and base:
+        out += ['## gain in map50_95 over real only (paired by seed)', '', '| real share | ' + ' | '.join(f'+ {s} synthetic per real' for s in mixed) + ' |', '|---|' + '---|' * len(mixed)]
+        for f in fracs:
+            if f == 0:
+                continue
+            out.append(f'| {f:g} | ' + ' | '.join(cell([float(r['map50_95']) - base[(f, r['seed'])] for r in rs if float(r['real_frac']) == f and r['synth'] == s and (f, r['seed']) in base]) for s in mixed) + ' |')
+        out.append('')
+    ft = [r for r in rows if r['mode'] == 'finetune']
+    if ft and base:
+        out += ['## pretrained on synthetic only, then fine-tuned on the real share (map50_95)', '', '| real share | real only | fine-tuned | gain (paired by seed) |', '|---|---|---|---|']
+        for f in sorted({float(r['real_frac']) for r in ft}):
+            sel = [r for r in ft if float(r['real_frac']) == f]
+            out.append(f'| {f:g} | {cell([base[(f, r["seed"])] for r in sel if (f, r["seed"]) in base])} | {cell([float(r["map50_95"]) for r in sel])} | '
+                       f'{cell([float(r["map50_95"]) - base[(f, r["seed"])] for r in sel if (f, r["seed"]) in base])} |')
+        out.append('')
+    classes = meta['classes']
+    out += ['## map50_95 per class', '', '| real share | training | ' + ' | '.join(classes) + ' |', '|---|---|' + '---|' * len(classes)]
+    for mode, group in (('scratch', rs), ('finetune', ft)):
+        for f in sorted({float(r['real_frac']) for r in group}):
+            for s in ratios:
+                sel = [json.loads(r['per_class_map50_95']) for r in group if float(r['real_frac']) == f and r['synth'] == s]
+                if sel:
+                    lab = 'fine-tuned' if mode == 'finetune' else 'real only' if s == '0' else 'synthetic only' if s == 'only' else f'+ {s} synthetic per real'
+                    out.append(f'| {f:g} | {lab} | ' + ' | '.join(cell([p.get(c, 0.0) for p in sel]) for c in classes) + ' |')
+    n_test = meta.get('instances_per_class', {}).get('real_test', {})
+    out += ['', 'Instances in the real test frames: ' + ', '.join(f'{c} {n_test.get(c, "?")}' for c in classes) + '. A class with none there gets the mean of the others '
+            '(Ultralytics), so its column says nothing.', '']
     open(os.path.join(exp, 'summary.md'), 'w').write('\n'.join(out))
 
 

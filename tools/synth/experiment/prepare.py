@@ -168,7 +168,16 @@ def main():
                 lst = os.path.join(out, 'lists', f'{name}.txt')
                 open(lst, 'w').write('\n'.join(tr[:nr] + syn[:ns]) + '\n')
                 conds.append({'name': name, 'real_frac': frac, 'synth': ratio, 'seed': seed, 'real_train': nr, 'synth_train': ns, 'data': yaml(name, lst)})
-    meta = {'classes': keep, 'real_names': real_names, 'real': os.path.abspath(a.real), 'synth': [os.path.abspath(d) for d in a.synth],
+    def count(paths):
+        n = [0] * len(keep)
+        for p in paths:
+            lab = os.path.join(pool_l, os.path.splitext(os.path.basename(p))[0] + '.txt')
+            for line in open(lab):
+                if line.strip():
+                    n[int(line.split()[0])] += 1
+        return dict(zip(keep, n))
+    meta = {'instances_per_class': {**{f'real_{k}': count(v) for k, v in lists.items()}, 'synthetic': count(synth)},
+            'classes': keep, 'real_names': real_names, 'real': os.path.abspath(a.real), 'synth': [os.path.abspath(d) for d in a.synth],
             'group': a.group, 'flights': {k: len(v) for k, v in split.items()}, 'frames': {k: len(v) for k, v in lists.items()},
             'boxes': {'real': boxes_real, 'synth': boxes_synth}, 'synth_frames': len(synth), 'conditions': conds}
     json.dump(meta, open(os.path.join(out, 'experiment.json'), 'w'), indent=1)
