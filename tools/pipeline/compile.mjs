@@ -19,6 +19,7 @@ import { makeProjection, TILE, tileOf, tileKey } from '../../src/shared/geo.js';
 import { encodeTile, AREA, BFLAG, PROP, VERSION, SPORT, MATERIAL } from '../../src/shared/tileformat.js';
 import { readOsm, buildRoadGraph, buildRailways } from './osm.mjs';
 import { buildHeightGrid, sampleGrid, demSource, FAR_DEM } from './terrain.mjs';
+import { applyLidar, LIDAR } from './lidar.mjs';
 import { PolyIndex, readLand, clipRing, placeProps, inRings } from './landscape.mjs';
 import { buildMarkings } from './markings.mjs';
 import { splitOutlineRoads } from './roadsplit.mjs';
@@ -140,6 +141,11 @@ function rasterize(grid, polygons, fn) {
 
 // ---------------------------------------------------------------- terrain, the sea and the water
 const grid = buildHeightGrid(path.join(area.rawDir, 'dem'), proj, extent, TERRAIN_STEP);
+// the 1 m lidar ground where it covers the area (tools/pipeline/lidar.mjs), over the terrain tiles' 10 m surface
+const lidar = await applyLidar(grid, path.join(area.rawDir, 'dem', 'lidar'), proj, log);
+if (lidar.tiles) log(`lidar: ${lidar.covered} of ${lidar.cells} grid cells from ${lidar.tiles} tiles (${(lidar.covered / lidar.cells * 100).toFixed(0)}%), ` +
+  `mean change ${lidar.meanAbsChange} m; land cells on a whole metre ${(lidar.plateauShareBefore * 100).toFixed(0)}% -> ${(lidar.plateauShareAfter * 100).toFixed(0)}%`);
+else log('lidar: none in data/raw (npm run fetch gets it); the terrain tiles alone');
 const rawGround = (x, z) => sampleGrid(grid, x, z);
 const seaRaw = buildSea(path.join(area.rawDir, 'osm_coast.json'), { west: extW, south: extS, east: extE, north: extN }, (lon, lat) => rawGround(...proj.project(lon, lat)) < -3);
 const seaPolys = cleanPolygons(seaRaw.polygons, 20);
@@ -686,7 +692,9 @@ const manifest = {
   frame: 'metres; x east, y up (above mean sea level), z south',
   tileSize: TILE, bounds: Object.fromEntries(Object.entries(bounds).map(([k, v]) => [k, r2(v)])),
   extent, // the bounds out to the tile grid: the terrain and the aerial photo cover this
-  terrain: { file: 'terrain.bin', x0: r2(grid.x0), z0: r2(grid.z0), step: grid.step, w: grid.w, h: grid.h, min: r2(gMin), max: r2(gMax) },
+  terrain: { file: 'terrain.bin', x0: r2(grid.x0), z0: r2(grid.z0), step: grid.step, w: grid.w, h: grid.h, min: r2(gMin), max: r2(gMax),
+    // what the heights come from: the lidar's share of the grid cells, the rest the terrain tiles
+    lidar: lidar.tiles ? { tiles: lidar.tiles, share: +(lidar.covered / lidar.cells).toFixed(3), project: LIDAR.projects[0] } : null },
   // the sea surface, where the area has a coast (the client fills the world beyond the area with sea)
   sea: seaPolys.length ? SEA : null,
   view: area.view ?? null,
@@ -705,6 +713,7 @@ const manifest = {
     'Building heights: FEMA / ORNL USA Structures (public domain)',
     ...(garita ? ['Building ids (Overture GERS) and lidar heights: Garita (https://github.com/webgpu-demos/garita), from Overture Maps Foundation and USGS 3DEP'] : []),
     'Elevation: USGS 3DEP via AWS Terrain Tiles',
+    ...(lidar.tiles ? [LIDAR.attribution] : []),
   ],
 };
 fs.writeFileSync(path.join(area.outDir, 'manifest.json'), JSON.stringify(manifest, null, 1));

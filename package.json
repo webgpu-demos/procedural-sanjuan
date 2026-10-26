@@ -11,7 +11,7 @@
     "fetch": "node --max-old-space-size=4096 tools/pipeline/fetch.mjs",
     "compile": "node --max-old-space-size=6144 tools/pipeline/compile.mjs",
     "preview": "node tools/pipeline/preview.mjs",
-    "test": "node tools/tests/tileformat.test.mjs && node tools/tests/road-markings.test.mjs && node tools/tests/twin-links.test.mjs && node tools/tests/garita-tiles.test.mjs",
+    "test": "node tools/tests/tileformat.test.mjs && node tools/tests/road-markings.test.mjs && node tools/tests/lidar.test.mjs && node tools/tests/twin-links.test.mjs && node tools/tests/garita-tiles.test.mjs",
     "sim:setup": "python3 -m venv .venv-sim && .venv-sim/bin/pip install -q eclipse-sumo==1.28.0 libsumo==1.28.0 numpy openpyxl pyshp",
     "sim:net": "node tools/sim/network.mjs && node tools/sim/buildings.mjs && .venv-sim/bin/python tools/sim/hpms.py",
     "sim:demand": ".venv-sim/bin/python tools/sim/demand.py",
@@ -37,6 +37,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "geotiff": "^2.1.3",
     "osm-pbf-parser-node": "^1.1.4",
     "sharp": "^0.35.5",
     "vite": "^8.3.2"

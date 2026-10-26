@@ -101,6 +101,7 @@ until the municipality took it in; its links open there.)
 | [OpenStreetMap](https://www.openstreetmap.org/) ([Geofabrik](https://download.geofabrik.de/north-america/us/puerto-rico.html) Puerto Rico extract) | Building outlines, `height`, `building:levels`, building parts; drivable road graph (class, lanes, one-way, speed, layer, bridge/tunnel, names); railways; coastline; parks, woods, beaches, water, trees, crossings, signals; paths, car parks, walls; named places for signs |
 | [FEMA / ORNL USA Structures](https://gis-fema.hub.arcgis.com/pages/usa-structures) | Building heights (from LiDAR) and occupancy classes, for the buildings OSM gives no height or use; buildings OSM does not have |
 | [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Terrain (terrarium encoding, zoom 15; USGS 3DEP elevations on land); zoom 12 for the surroundings |
+| [USGS 3DEP 1 m lidar DEM](https://www.usgs.gov/3d-elevation-program) (project `PR_PuertoRicoUSVI_D24`, flown 2023-25) | The ground of the area itself: each terrain cell the mean of the 1 m lidar cells inside it, where at least half hold data (the terrain tiles stand in elsewhere); `tools/pipeline/lidar.mjs` |
 | [USGS The National Map](https://www.usgs.gov/programs/national-geospatial-program/national-map) | Orthoimagery draped over the open ground (zoom 16) and over the surroundings (zoom 13) |
 
 OpenStreetMap comes from Geofabrik's daily Puerto Rico extract (74 MB, downloaded once a day and shared by the
@@ -110,6 +111,11 @@ large area, and slow when the public servers are busy).
 
 Puerto Rico has nothing like Japan's PLATEAU survey of road surfaces, so the compiler builds them: see
 `tools/pipeline/roadsurface.mjs` (right-of-way per road class) and `roadsplit.mjs` (carriageway and sidewalk).
+The terrain comes from the 1 m lidar DEM wherever it covers the area (`npm run fetch` downloads its 10 km tiles,
+about 130 MB each: 2 for Condado, 6 for the municipality; `--no-lidar` skips them). The terrain tiles' 10 m surface
+lies on the coastal plain in flat terraces at whole metres and carries the expressway's overpasses as ridges; the
+lidar ground is bare earth, buildings and bridges removed. The compiler logs the share of the grid it covered and the
+share of land cells sitting on a whole metre before and after, and the manifest says (`terrain.lidar`).
 The terrain tiles carry bathymetry offshore; the compiler flattens the sea to 0 m inside the coastline,
 levels lagoons and ponds at their lowest shore, and keeps dry land above the sea.
 
