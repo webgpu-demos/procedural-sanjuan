@@ -1,0 +1,2 @@
+# the experiment harness (prepare.py has no dependencies; run.py trains and scores with Ultralytics YOLO)
+ultralytics>=8.3

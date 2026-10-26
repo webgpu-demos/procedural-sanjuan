@@ -918,4 +918,8 @@ function frame(_, manual) {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt) };
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
+  proj, manifest,
+  // synthetic drone images with labels (src/synth/synth.js; tools/synth/export.mjs), made on first use
+  get synth() { return (synthApi ??= import('./synth/synth.js').then(({ Synth }) => new Synth(window.__app))); } };
+let synthApi = null;

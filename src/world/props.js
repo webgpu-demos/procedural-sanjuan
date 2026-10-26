@@ -688,6 +688,7 @@ export class Props {
       } else if (kind === PROP.PARKED) {
         const kit = parkedVehicles(), mesh = instanced(rows, kit.models[variant % kit.models.length], kit.material, { lift: 0.05 });
         rows.forEach((i, n) => mesh.setColorAt(n, new THREE.Color(kit.colors[(props[i + 1] >> 2) % kit.colors.length])));
+        mesh.userData.vehicle = true; // (labelled as vehicles in synthetic training images, src/synth/labels.js)
       } else if (this.furniture[kind]) {
         const models = this.furniture[kind];
         instanced(rows, models[variant % models.length], this.mats.metal, { lift: 0.12 });
