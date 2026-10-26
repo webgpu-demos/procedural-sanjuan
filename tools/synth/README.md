@@ -29,7 +29,9 @@ Limits, which matter when reading the results: the city is procedural above the 
 roof shapes are generated; roofs are not the real roofs), the ground is procedural unless `--ortho` drapes the
 aerial photo (which then carries the real roofs and cars of the photo, unlabelled), there are no people, laundry,
 water tanks or solar panels, and damage is limited to tarps and debris piles (no collapsed walls, no missing roofs).
-A frame where distant buildings are drawn as plain unlabelled blocks over more than 2 % of the picture is skipped.
+Roof-only structures (OSM `building=roof`: canopies, the tops of some car parks), footbridges and platforms are
+not labelled as buildings; they still hide what is under them. A frame where distant buildings are drawn as plain
+unlabelled blocks over more than 2 % of the picture is skipped.
 
 ## Making a dataset
 
