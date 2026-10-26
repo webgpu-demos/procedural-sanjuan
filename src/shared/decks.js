@@ -5,7 +5,7 @@
 // width of the corridor in which everything is held at that level. A wide bridge (a plaza over the tracks)
 // is covered by the corridors of the several ways that cross it. The compiler also marks the road polygons
 // on a bridge (area.code = DECK_FLAG | index) to find the open edges that need a parapet.
-import { sampleGrid } from './terrain.js';
+import { sampleGrid, meshHeight } from './terrain.js';
 
 export const DECK_FLAG = 0x8000;
 export const deckOf = (code) => (code & DECK_FLAG ? code & 0x7fff : -1);
@@ -24,8 +24,10 @@ export function projectOnDeck(deck, x, z) {
   return best;
 }
 
-// Returns surface(x, z): the height to stand on — the level of the highest deck whose corridor contains
-// the point, blended back to the terrain over FADE metres beside the corridor; the terrain elsewhere.
+// Returns surface(x, z, deck): the height to stand on — the level of the highest deck whose corridor contains
+// the point, blended back to the terrain over FADE metres beside the corridor; the terrain elsewhere (deck below
+// -1: the terrain alone, under any deck). Between the corners of the meshes' lattice it is flat across their
+// triangles, as the tiles draw it.
 // What is overhead at (x, z), for things that pass underneath (railway tracks): the terrain itself, or a
 // bridge deck. Unlike the surface, a deck counts only over its real width — its corridor is CORRIDOR_MARGIN
 // wider than the bridge so that sidewalks and plazas are held level, and must not roof the open track beside it.
@@ -51,9 +53,9 @@ export function makeSurface(grid, decks) {
     const m = d.half + FADE;
     return [x0 - m, x1 + m, z0 - m, z1 + m];
   });
-  return (x, z, deck = -1) => {
+  // at the lattice's corners: the terrain, raised to the decks
+  const corner = (x, z) => {
     const terrain = sampleGrid(grid, x, z);
-    if (deck < -1) return terrain;
     let y = terrain;
     for (let i = 0; i < decks.length; i++) {
       const b = boxes[i];
@@ -65,4 +67,15 @@ export function makeSurface(grid, decks) {
     }
     return y;
   };
+  // (between the corners, flat across the triangles the tiles draw the ground and the roads with: what stands on
+  // the surface stands on what is drawn, src/shared/terrain.js meshHeight)
+  return (x, z, deck = -1) => (deck < -1 ? meshHeight(grid, x, z) : meshHeight(grid, x, z, undefined, corner));
+}
+
+// The street at (x, z) for something at about height y there (a car, a walker): where a bridge at street level
+// stands well over the ground, its deck for what is up on it, the ground under it for what passes beneath.
+export function streetAt(surface, x, z, y) {
+  const top = surface(x, z), under = surface(x, z, -2);
+  if (top < under + 2.5) return top;
+  return Math.abs(y - under) < Math.abs(y - top) ? under : top;
 }

@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { clearLanes } from '../shared/roadway.js';
 import { solidsOf } from './collide.js';
 import { tileKey } from '../shared/geo.js';
-import { sampleGrid } from '../shared/terrain.js';
+import { meshHeight } from '../shared/terrain.js';
 import { makeSurface, makeCover } from '../shared/decks.js';
 import { SIGN_LOD_DISTANCE } from './signs.js';
 import { shared } from './materials.js';
@@ -70,7 +70,7 @@ export class Streamer {
   }
 
   // Terrain height, and the height of whatever one stands on (the terrain, or a bridge deck).
-  ground(x, z) { return sampleGrid(this.grid, x, z); }
+  ground(x, z) { return meshHeight(this.grid, x, z); } // (the terrain as its mesh draws it: src/shared/terrain.js)
   // How high the paving at (x, z) stands over the terrain (a sidewalk, a carriageway, an island), where its tile is
   // loaded; 0 elsewhere
   lift(x, z) {

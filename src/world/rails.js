@@ -88,7 +88,9 @@ export function sections(pts, ground) {
 
 // ground(x, z): terrain height; cover(x, z): what is overhead for a track passing there — the terrain, or a
 // bridge deck (makeCover in src/shared/decks.js).
-export async function buildRailways(url, ground, cover = ground) {
+// depth(x, z): how far inside the lanes of a road at street level (x, z) is (src/shared/roadway.js laneDepth), for
+// the viaduct's piers to stand clear of them; null: anywhere
+export async function buildRailways(url, ground, cover = ground, depth = null) {
   const lines = await (await fetch(url)).json();
   const concrete = [0.64, 0.64, 0.62], steel = [0.33, 0.31, 0.3], white = [1, 1, 1];
   const bed = new Soup(), structure = new Soup(), wires = [];
@@ -165,8 +167,21 @@ export async function buildRailways(url, ground, cover = ground) {
     const electrified = line.railway !== 'subway'; // the Ginza Line runs on a third rail
     let mastPrev = null;
     cs.forEach((c, i) => {
-      if (!c.deck && c.h > VIADUCT_ABOVE + 0.5 && Math.round(c.s / STEP) % Math.round(PIER_SPACING / STEP) === 0)
-        structure.box(c.p, c.t, c.n, 0.7, 1.3, c.p[1] - c.h - 1.5, c.p[1] - 0.9, concrete);
+      if (!c.deck && c.h > VIADUCT_ABOVE + 0.5 && Math.round(c.s / STEP) % Math.round(PIER_SPACING / STEP) === 0) {
+        // where the viaduct crosses a street, the pier stands at the nearest place along the track (or a step to the
+        // side) clear of its lanes: a median, a sidewalk, the far kerb; none if there is no such place within 12 m
+        let q = null;
+        for (const k of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+          const e = cs[i + k];
+          if (!e || e.deck || e.h <= VIADUCT_ABOVE + 0.5) continue;
+          for (const l of [0, 0.8, -0.8]) {
+            const p = [e.p[0] + e.n[0] * l, e.p[1], e.p[2] + e.n[2] * l];
+            if (!depth || depth(p[0], p[2]) + 1.3 <= 0) { q = { ...e, p }; break; }
+          }
+          if (q) break;
+        }
+        if (q) structure.box(q.p, q.t, q.n, 0.7, 1.3, q.p[1] - q.h - 1.5, q.p[1] - 0.9, concrete);
+      }
       if (electrified && headroom(c) < 7) { mastPrev = wire(mastPrev, c); return; } // under a bridge: no mast
       if (electrified && (Math.round(c.s / STEP) % Math.round(MAST_SPACING / STEP) === 0 || i === cs.length - 1)) {
         // the mast stands on the outer side; a track with neighbours on both sides hangs its wires from theirs
