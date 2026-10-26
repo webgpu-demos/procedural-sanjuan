@@ -71,7 +71,10 @@ Both twins name a building by its Overture GERS id. `npm run fetch` takes Garita
 the GERS id Garita carries for it (a `building:part` its outline's; a FEMA-only building the id of the Garita
 building under it), and Garita's height where Garita measured it in the lidar point cloud (an OSM `height` tag still
 wins over it; building:levels and the FEMA average do not). `t_x_z.ids` beside each tile has `<gers>,<osm>` per
-building in tile order; the client fetches it when a building is clicked, and the HUD shows both ids.
+building in tile order; the client fetches it when a building is clicked, and the HUD shows both ids. An area
+compiled before this (its simulated runs are made on its roads, so recompiling it means simulating again) gets the
+ids without a new compile: `node tools/pipeline/ids.mjs --area=<id>` gives each building the ids of the Garita
+building under it (on Condado: the same GERS id as the compiler's for 99.6 % of buildings).
 
 ## Pipeline
 
