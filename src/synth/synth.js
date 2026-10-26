@@ -166,7 +166,7 @@ export class Synth {
   plan({ box, alt = [60, 120], pitch = [-90, -70], hfov = 73.7, aspect = 4 / 3, heading = null, side = 0.3, front = 0.5, max = 500, seed = 1, minBuildings = 20 } = {}) {
     // only over the city: a shot whose 256 m tile holds fewer than minBuildings buildings (sea, park, beach) is left out
     const M = this.app.manifest, size = M.tileSize, count = new Map(M.tiles.map((t) => [t.x + ',' + t.z, t.buildings]));
-    const city = (x, z) => (count.get(Math.floor(x / size) + ',' + Math.floor(z / size)) ?? 0) >= minBuildings;
+    const city = (x, z) => (count.get(Math.floor(x / size) + ',' + Math.floor(z / size)) ?? 0) >= minBuildings && this.app.streamer.ground(x, z) > 0.3;
     const r = rng(hash(`plan|${seed}`)), mean = (alt[0] + alt[1]) / 2, half = Math.tan((hfov * Math.PI) / 360);
     const fw = 2 * mean * half, fh = fw / aspect, spacing = fw * (1 - side), step = fh * (1 - front);
     const h0 = heading ?? r() * 180, a = (h0 * Math.PI) / 180, dir = [Math.sin(a), -Math.cos(a)], nrm = [-dir[1], dir[0]];
@@ -177,7 +177,11 @@ export class Synth {
       for (let s = -R; s <= R; s += step) {
         const t = back ? -s : s, x = cx + nrm[0] * w + dir[0] * t, z = cz + nrm[1] * w + dir[1] * t;
         if (x < x0 || x > x1 || z < z0 || z > z1 || !city(x, z)) continue;
-        out.push({ x, z, alt: alt[0] + r() * (alt[1] - alt[0]), pitch: pitch[0] + r() * (pitch[1] - pitch[0]), heading: (h0 + (back ? 180 : 0) + (r() * 2 - 1) * 10 + 360) % 360, line: l });
+        const p = { x, z, alt: alt[0] + r() * (alt[1] - alt[0]), pitch: pitch[0] + r() * (pitch[1] - pitch[0]), heading: (h0 + (back ? 180 : 0) + (r() * 2 - 1) * 10 + 360) % 360, line: l };
+        // (and where it looks: the ground point at the middle of the picture, over land in the city too)
+        const ahead = p.alt / Math.tan((-p.pitch * Math.PI) / 180), hh = (p.heading * Math.PI) / 180;
+        if (!city(x + Math.sin(hh) * ahead, z - Math.cos(hh) * ahead)) continue;
+        out.push(p);
       }
     }
     // more shots than wanted: an even pick along the flight
