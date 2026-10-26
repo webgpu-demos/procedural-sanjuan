@@ -8,6 +8,7 @@
 //   aBldg    x: building height (m), y: category + 8 * texture layer, z: kind (KIND), w: bay width (m, 0 = no windows)
 import * as THREE from 'three';
 import { TILE as TILE_SIZE } from '../shared/geo.js';
+import { TARP_GLSL } from '../synth/tarp.js';
 
 export const shared = {
   uNight: { value: 0 }, // 0 day .. 1 night: how far the city's lights are on (they come on before sunset)
@@ -348,6 +349,17 @@ const PHOTO_MAIN = /* glsl */ `
   gMetal *= 1.0 - k;
 }
 `;
+// A blue tarp over a damaged roof, where synthetic training images ask for one (src/synth: aSynth, src/synth/tarp.js).
+// Polyethylene, creased along its length, darker where it is weighted down at the edges.
+const TARP_MAIN = /* glsl */ `
+if (synthTarp(vWPos, vSynth, vBldg.z) > 0.5) {
+  float u = synthTarpU(vWPos, vSynth), crease = 0.5 + 0.5 * sin(u * 4.7 + vnoise(vWPos.xz * 0.6) * 2.5);
+  vec3 blue = mix(vec3(0.010, 0.075, 0.33), vec3(0.025, 0.13, 0.46), crease) * (0.92 + 0.16 * vnoise(vWPos.xz * 2.3));
+  diffuseColor.rgb = blue;
+  gRough = 0.45; gMetal = 0.0; gEmissive = vec3(0.0); gPane = 0.0; gGlint = vec3(0.0);
+  gNm = normalize(vec3(cos(u * 4.7) * 0.25, 0.0, 1.0));
+}
+`;
 
 function facadeMaterial(tex) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.0 });
@@ -360,11 +372,11 @@ function facadeMaterial(tex) {
       uWallScale: { value: tex.wall.scales }, uWallDetail: { value: tex.wall.details },
     });
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec4 aFacade;\nattribute vec4 aBldg;\nattribute vec2 aPhoto;\nvarying vec4 vFacade;\nvarying vec4 vBldg;\nvarying vec2 vPhoto;\n${WORLD_VARYINGS_VERT}`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvFacade = aFacade;\nvBldg = aBldg;\nvPhoto = aPhoto;\n${WORLD_VARYINGS_SET}`);
+      .replace('#include <common>', `#include <common>\nattribute vec4 aFacade;\nattribute vec4 aBldg;\nattribute vec2 aPhoto;\nattribute vec4 aSynth;\nvarying vec4 vFacade;\nvarying vec4 vBldg;\nvarying vec2 vPhoto;\nflat varying vec4 vSynth;\n${WORLD_VARYINGS_VERT}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvFacade = aFacade;\nvBldg = aBldg;\nvPhoto = aPhoto;\nvSynth = aSynth;\n${WORLD_VARYINGS_SET}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + FACADE_PARS + PHOTO_PARS)
-      .replace('#include <color_fragment>', '#include <color_fragment>\n' + FACADE_MAIN + PHOTO_MAIN)
+      .replace('#include <common>', '#include <common>\n' + FACADE_PARS + PHOTO_PARS + 'flat varying vec4 vSynth;\n' + TARP_GLSL)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + FACADE_MAIN + PHOTO_MAIN + TARP_MAIN)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = gMetal;')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + APPLY_NORMAL)
@@ -373,7 +385,7 @@ function facadeMaterial(tex) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gPane;');
   };
-  m.customProgramCacheKey = () => 'facade-v25';
+  m.customProgramCacheKey = () => 'facade-v26';
   return m;
 }
 
