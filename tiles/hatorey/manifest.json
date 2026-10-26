@@ -2,7 +2,7 @@
  "format": 7,
  "area": "hatorey",
  "name": "Hato Rey (Milla de Oro)",
- "compiled": "2026-10-26T20:21:44.187Z",
+ "compiled": "2026-10-26T23:03:02.906Z",
  "origin": {
   "lon": -66.0629,
   "lat": 18.4236
@@ -808,8 +808,8 @@
    "buildings": 5,
    "areas": 2173,
    "props": 276,
-   "signs": 0,
-   "bytes": 106994,
+   "signs": 2,
+   "bytes": 107062,
    "ids": "t_0_-2.ids"
   },
   {
@@ -830,8 +830,8 @@
    "buildings": 34,
    "areas": 955,
    "props": 204,
-   "signs": 16,
-   "bytes": 53708,
+   "signs": 17,
+   "bytes": 53742,
    "ids": "t_2_-2.ids"
   },
   {
@@ -994,8 +994,8 @@
    "buildings": 17,
    "areas": 1696,
    "props": 301,
-   "signs": 19,
-   "bytes": 88802,
+   "signs": 21,
+   "bytes": 88870,
    "ids": "t_2_-1.ids"
   },
   {
@@ -1311,8 +1311,8 @@
    "buildings": 112,
    "areas": 939,
    "props": 306,
-   "signs": 2,
-   "bytes": 71736,
+   "signs": 4,
+   "bytes": 71804,
    "ids": "t_1_1.ids"
   },
   {

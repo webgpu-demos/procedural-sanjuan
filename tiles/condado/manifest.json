@@ -2,7 +2,7 @@
  "format": 7,
  "area": "condado",
  "name": "Condado",
- "compiled": "2026-10-26T20:20:34.563Z",
+ "compiled": "2026-10-26T23:01:51.315Z",
  "origin": {
   "lon": -66.07165,
   "lat": 18.45604
@@ -528,8 +528,8 @@
    "buildings": 19,
    "areas": 717,
    "props": 274,
-   "signs": 8,
-   "bytes": 61143,
+   "signs": 9,
+   "bytes": 61177,
    "ids": "t_-7_-4.ids"
   },
   {
@@ -1046,8 +1046,8 @@
    "buildings": 38,
    "areas": 475,
    "props": 382,
-   "signs": 46,
-   "bytes": 41462,
+   "signs": 48,
+   "bytes": 41530,
    "ids": "t_-2_-1.ids"
   },
   {
@@ -1058,7 +1058,7 @@
    "areas": 299,
    "props": 177,
    "signs": 44,
-   "bytes": 28448,
+   "bytes": 28443,
    "ids": "t_-1_-1.ids"
   },
   {
@@ -1068,8 +1068,8 @@
    "buildings": 14,
    "areas": 53,
    "props": 42,
-   "signs": 6,
-   "bytes": 6117,
+   "signs": 5,
+   "bytes": 6083,
    "ids": "t_0_-1.ids"
   },
   {
@@ -1173,8 +1173,8 @@
    "buildings": 65,
    "areas": 751,
    "props": 170,
-   "signs": 24,
-   "bytes": 48235,
+   "signs": 25,
+   "bytes": 48269,
    "ids": "t_-5_0.ids"
   },
   {
@@ -1217,8 +1217,8 @@
    "buildings": 79,
    "areas": 915,
    "props": 360,
-   "signs": 49,
-   "bytes": 67290,
+   "signs": 46,
+   "bytes": 67188,
    "ids": "t_-1_0.ids"
   },
   {
@@ -1228,8 +1228,8 @@
    "buildings": 56,
    "areas": 1025,
    "props": 338,
-   "signs": 28,
-   "bytes": 63914,
+   "signs": 27,
+   "bytes": 63880,
    "ids": "t_0_0.ids"
   },
   {
@@ -1251,7 +1251,7 @@
    "areas": 645,
    "props": 172,
    "signs": 25,
-   "bytes": 46889,
+   "bytes": 46900,
    "ids": "t_2_0.ids"
   },
   {
@@ -1328,7 +1328,7 @@
    "areas": 423,
    "props": 197,
    "signs": 29,
-   "bytes": 39290,
+   "bytes": 39302,
    "ids": "t_-6_1.ids"
   },
   {
@@ -1371,8 +1371,8 @@
    "buildings": 89,
    "areas": 1125,
    "props": 316,
-   "signs": 19,
-   "bytes": 72485,
+   "signs": 20,
+   "bytes": 72519,
    "ids": "t_-2_1.ids"
   },
   {
@@ -1382,8 +1382,8 @@
    "buildings": 66,
    "areas": 1470,
    "props": 518,
-   "signs": 16,
-   "bytes": 105564,
+   "signs": 17,
+   "bytes": 105598,
    "ids": "t_-1_1.ids"
   },
   {
@@ -1514,8 +1514,8 @@
    "buildings": 148,
    "areas": 390,
    "props": 232,
-   "signs": 45,
-   "bytes": 42360,
+   "signs": 44,
+   "bytes": 42302,
    "ids": "t_-4_2.ids"
   },
   {
@@ -1559,7 +1559,7 @@
    "areas": 775,
    "props": 168,
    "signs": 44,
-   "bytes": 60069,
+   "bytes": 60078,
    "ids": "t_0_2.ids"
   },
   {
@@ -1894,8 +1894,8 @@
    "buildings": 45,
    "areas": 894,
    "props": 297,
-   "signs": 40,
-   "bytes": 55936,
+   "signs": 41,
+   "bytes": 55953,
    "ids": "t_1_4.ids"
   },
   {
@@ -2076,8 +2076,8 @@
    "buildings": 13,
    "areas": 226,
    "props": 111,
-   "signs": 5,
-   "bytes": 16669,
+   "signs": 4,
+   "bytes": 16616,
    "ids": "t_3_5.ids"
   },
   {
