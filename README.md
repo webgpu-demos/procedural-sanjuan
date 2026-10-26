@@ -47,6 +47,22 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
 Drag to pan, right-drag to rotate, WASD to move, N for day/night, click a building to inspect it.
 URL parameters: `?area=condado`, `?night=1`, `?time=18.5`, `?cam=x,z,distance,azimuth,elevation`, `?radius=1500`.
 
+## Garita, the island above it (`src/shared/twin.js`)
+
+This city is the street view of [Garita](https://github.com/webgpu-demos/garita), the island-wide twin: Garita opens
+a building or a place in the municipality here, and a building clicked here opens in Garita.
+
+- `?ll=lat,lon[,distance,azimuth,elevation]` opens the view on a place by its coordinates (latitude first) instead of
+  `?cam`'s world metres, and goes straight there, past the opening (`?xp=1` keeps it). Outside the area, the area's
+  own view.
+- `?sea=1.5` raises the sea to that level in metres above mean sea level, Garita's sea-level scenario: the sea's
+  surface over every point of ground below it, its shallows and surf along the new shore, and a line at the top of
+  the screen saying so. It is Garita's bathtub, not a flood model: ground below the level is under water whether or
+  not the sea can reach it.
+- `?from=garita` adds a way back (top centre, *← Garita*), to the place in view.
+- Click a building: *Este edificio en Garita ↗* opens Garita over it with `?pick=lon,lat` (the point clicked, half a
+  metre inside the wall), which pins the footprint there, with the raised sea if there is one.
+
 ## Pipeline
 
 ```
