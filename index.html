@@ -33,6 +33,20 @@
         background: rgba(10, 14, 22, 0.66); color: inherit; font: inherit;
       }
       #sources-toggle:hover { background: rgba(10, 14, 22, 0.85); }
+      /* Garita (src/shared/twin.js), top centre: a raised sea (?sea=) says so for as long as it is raised, and the way to
+         Garita shows the building clicked, or the way back when the visit came from there */
+      #twin {
+        position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 1015; max-width: calc(100vw - 32px);
+        display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; font: 12.5px/1.4 system-ui, sans-serif;
+      }
+      #sea-tag { padding: 6px 12px; border-radius: 6px; background: rgba(8, 40, 64, 0.85); color: #e8f4ff; text-align: center; }
+      #twin-link {
+        pointer-events: auto; padding: 5px 12px; border-radius: 6px; background: rgba(10, 14, 22, 0.78); color: #7fd8ff;
+        text-decoration: none; white-space: nowrap;
+      }
+      #twin-link:hover { background: rgba(10, 14, 22, 0.9); text-decoration: underline; }
+      #twin-link:focus-visible { outline: 2px solid #5fe0d0; outline-offset: 2px; }
+      #twin [hidden] { display: none; }
       #sources-toggle:focus-visible { outline: 2px solid #5fe0d0; outline-offset: 2px; }
       #sources-toggle .chev { display: inline-block; transition: transform 0.15s ease; }
       #sources-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
@@ -85,6 +99,7 @@
     </script>
     <div id="hud">loading…</div>
     <div id="toast" role="status" aria-live="polite"></div>
+    <div id="twin"><div id="sea-tag" role="status" hidden></div><a id="twin-link" href="https://webgpu-demos.github.io/garita/" target="_blank" rel="noopener" hidden>Garita</a></div>
     <div id="sources">
       <div id="sources-list" role="region" aria-label="Data sources" hidden></div>
       <button id="sources-toggle" type="button" aria-expanded="false" aria-controls="sources-list"><span class="chev" aria-hidden="true">▴</span> Data sources <span class="osm">· © OpenStreetMap contributors</span></button>
