@@ -4,12 +4,14 @@
 //   FEMA / ORNL      USA Structures: building outlines with a LiDAR height and an occupancy class
 //                    (ArcGIS feature service), used for the heights and uses OSM does not record
 //   AWS Terrain      terrarium elevation tiles (USGS 3DEP on land)
+//   USGS 3DEP lidar  the 1 m bare-earth DEM tiles under the area (tools/pipeline/lidar.mjs; --no-lidar skips them)
 //   USGS imagery     The National Map orthoimagery tiles, into public/ortho/<area>/ (the client drapes them on the ground)
-// Usage: node tools/pipeline/fetch.mjs [--area=sanjuan] [--force] [--overpass]
+// Usage: node tools/pipeline/fetch.mjs [--area=sanjuan] [--force] [--overpass] [--no-lidar]
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveArea, ROOT, RAW } from './config.mjs';
 import { demTileRange, DEM_SOURCES, FAR_DEM } from './terrain.mjs';
+import { LIDAR, tilesFor } from './lidar.mjs';
 import { EXTRACT_URL, extractArea } from './extract.mjs';
 
 const area = resolveArea();
@@ -256,6 +258,30 @@ async function fetchDem() {
   }
 }
 
+// The 1 m lidar DEM (tools/pipeline/lidar.mjs): the bucket listed, the 10 km tiles the area touches downloaded
+// (about 130 MB each: 2 for Condado, 6 for the municipality). --no-lidar skips it; the compiler then keeps the
+// terrain tiles alone.
+async function fetchLidar() {
+  if (process.argv.includes('--no-lidar')) return log('lidar: skipped (--no-lidar)');
+  const dir = path.join(area.rawDir, 'dem', 'lidar'), keys = [];
+  for (const project of LIDAR.projects) {
+    let token = null;
+    do {
+      const q = new URLSearchParams({ 'list-type': '2', prefix: `${LIDAR.prefix}${project}/TIFF/` });
+      if (token) q.set('continuation-token', token);
+      const xml = (await download(`${LIDAR.bucket}?${q}`, null, { timeout: 60000 })).toString('utf8');
+      for (const m of xml.matchAll(/<Key>([^<]+\.tif)<\/Key>/g)) keys.push(m[1]);
+      token = /<IsTruncated>true<\/IsTruncated>/.test(xml) ? (/<NextContinuationToken>([^<]+)</.exec(xml)?.[1] ?? null) : null;
+    } while (token);
+  }
+  const want = tilesFor(keys, margin(area.bbox));
+  const todo = want.filter((t) => !exists(path.join(dir, t.name)));
+  log(`lidar: ${keys.length} tiles listed, ${want.length} under the area, ${todo.length} to download`);
+  await pool(todo, 2, async (t) => {
+    try { await download(LIDAR.bucket + t.key, path.join(dir, t.name), { timeout: 900000 }); log(`  ${t.name}`); } catch (e) { log(`  ${e.message} (left out: the terrain tiles stand in)`); }
+  });
+}
+
 // Aerial photo: zoom 16 (about 2.3 m per pixel here) is the finest The National Map serves over Puerto Rico
 // (a large area takes zoom 15: the client stitches the whole photo into one texture).
 async function fetchOrtho() {
@@ -288,6 +314,7 @@ async function fetchSurroundings() {
 
 log(`area ${area.id}: bbox lat ${area.bbox.south.toFixed(5)}..${area.bbox.north.toFixed(5)} lon ${area.bbox.west.toFixed(5)}..${area.bbox.east.toFixed(5)}`);
 await fetchDem();
+await fetchLidar();
 await fetchOrtho();
 await fetchSurroundings();
 await fetchStructures();

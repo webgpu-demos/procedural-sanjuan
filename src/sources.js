@@ -48,6 +48,12 @@ export const SOURCES = [
         via: ['AWS Terrain Tiles (Mapzen / Tilezen)', 'https://registry.opendata.aws/terrain-tiles/'],
       },
       {
+        name: 'USGS 3DEP 1 m lidar DEM', url: 'https://www.usgs.gov/3d-elevation-program',
+        what: 'The ground of the city itself where an area was compiled with it: bare earth from the 2023-25 lidar, buildings and bridges removed, averaged into each terrain cell (the 10 m surface stands in where it has no data).',
+        license: 'Public domain',
+        via: ['USGS The National Map, project PR_PuertoRicoUSVI_D24', 'https://prd-tnm.s3.amazonaws.com/index.html?prefix=StagedProducts/Elevation/1m/Projects/PR_PuertoRicoUSVI_D24/'],
+      },
+      {
         name: 'USGS The National Map orthoimagery', url: 'https://www.usgs.gov/programs/national-geospatial-program/national-map',
         what: 'The aerial photo on the open ground and on the surrounding island.',
         license: 'Public domain',
