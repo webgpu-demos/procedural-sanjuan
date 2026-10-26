@@ -20,6 +20,9 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   Inside Old San Juan's walls every house gets one of the colonial city's colours, and El Morro, San
   Cristóbal and their bastions are drawn as windowless sandstone. Flat concrete roofs with water tanks; a
   few houses with metal roofs. Windows lit room by room at night.
+- **Water** (`materials.js`, `water.js`, `reflections.js`): the trade-wind sea in waves, deep blue offshore and turquoise
+  over the shallows, surf where the Atlantic reaches the shore and still water in the bay and the lagoons (a map of
+  the distance to land and the openness to the ocean, made at load); the sun's glitter, and the city mirrored in it.
 - **Ground**: terrain, the sea traced from OSM's coastline (the Atlantic, San Juan Bay, the Condado lagoon),
   beaches, parks, mangrove, the blue adoquín cobbles of the old city, the city walls (La Muralla), and
   road surfaces generated from the OSM centrelines (`tools/pipeline/roadsurface.mjs`): each road widened
@@ -35,6 +38,8 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   hours, compacts, sedans, SUVs, pickups, delivery trucks and AMA buses drive around the camera.
 - **Surroundings** (`far.js`): beyond the area, the rest of the island out to the horizon (the far shore of
   the bay, Cataño, Guaynabo, the mountains) as coarse terrain under a low-resolution aerial photo, over the sea.
+- **The city from afar at night** (`nightroads.js`, `far.js`): the streets of the whole area drawn into a map of light the
+  distant ground wears, sodium on the avenues and white on the back streets, pools under the lamps nearer.
 - **Atmosphere** (`atmosphere.js`, `environment.js`): physical sky and aerial perspective placed on the globe
   at San Juan, volumetric clouds, sun shadows, ambient occlusion, bloom, day and night on San Juan's clock
   (AST, UTC−4 all year).
