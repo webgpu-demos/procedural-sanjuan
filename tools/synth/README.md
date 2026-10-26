@@ -35,6 +35,8 @@ A frame where distant buildings are drawn as plain unlabelled blocks over more t
 
 ```sh
 npm install
+node tools/assets/fetch_textures.mjs                       # once, if public/textures is not there yet
+npm run fetch -- --area=sanjuan && npm run compile -- --area=sanjuan   # if the area is not compiled yet
 npm run dev                         # the client, at http://localhost:5173/ (or serve a build)
 node tools/synth/export.mjs --area=sanjuan --frames=400 --damage=0.25 --out=data/synth/sj
 node tools/synth/export.mjs --area=hatorey --frames=200 --damage=0.1 --seed=2 --out=data/synth/hr
