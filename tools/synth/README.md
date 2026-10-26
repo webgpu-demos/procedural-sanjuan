@@ -40,8 +40,9 @@ node tools/synth/export.mjs --area=sanjuan --frames=400 --damage=0.25 --out=data
 node tools/synth/export.mjs --area=hatorey --frames=200 --damage=0.1 --seed=2 --out=data/synth/hr
 ```
 
-Chrome or Chromium is found in the usual places; else `--chrome=<path>`. A GPU makes it quick (a few seconds a
-frame); without one Chrome draws on the CPU (SwiftShader) and a frame takes a minute or more. The output is the
+Chrome or Chromium is found in the usual places; else `--chrome=<path>`. Without a GPU, Chrome draws on the CPU
+(SwiftShader): there the city took about two minutes to load and a 640 × 480 frame about a minute. Use a machine
+with a GPU for thousands of frames. The output is the
 layout Ultralytics reads (`images/{train,val}`, `labels/{train,val}`, `dataset.yaml`), so
 `yolo train data=data/synth/sj/dataset.yaml` trains on it directly.
 
