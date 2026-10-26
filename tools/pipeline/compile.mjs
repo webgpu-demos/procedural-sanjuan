@@ -239,13 +239,52 @@ for (const b of src.buildings) {
     gers: b.gers ?? null, ref: /^[wr]\d/.test(b.id) ? b.id : null };
   allBuildings.push(building);
 }
+// Uses neither OSM nor FEMA gives (building=yes over FEMA's "Unclassified", which is now how FEMA files most of the
+// Milla de Oro's office towers): the named places inside the outline say it (an office or a bank: offices; a hotel;
+// shops and restaurants: shops, with homes above them in anything taller than a few floors), else, for a building
+// of eight floors or more, its name (a Plaza, a Torre, an Edificio, a Center: offices; a Condominio: homes).
+const useStats = { fromPlaces: 0, fromName: 0 };
+{
+  const CELL = 64, cells = new Map(), unknown = allBuildings.filter((b) => b.usage === 461);
+  for (const b of unknown) {
+    const k = Math.floor(b.cx / CELL) + ',' + Math.floor(b.cz / CELL);
+    if (!cells.has(k)) cells.set(k, []);
+    cells.get(k).push(b);
+  }
+  const found = new Map(); // building -> { office, hotel, shop }
+  for (const e of JSON.parse(fs.readFileSync(path.join(area.rawDir, 'osm_poi.json'), 'utf8')).elements) {
+    const t = e.tags ?? {}, lon = e.lon ?? e.center?.lon, lat = e.lat ?? e.center?.lat;
+    if (lon == null || t.building) continue;
+    const kind = t.office || t.amenity === 'bank' ? 'office' : t.tourism === 'hotel' ? 'hotel'
+      : t.shop || /^(restaurant|fast_food|cafe|bar|pharmacy|clinic|dentist|doctors)$/.test(t.amenity ?? '') ? 'shop' : null;
+    if (!kind) continue;
+    const [x, z] = proj.project(lon, lat), cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+    for (let i = cx - 2; i <= cx + 2; i++) for (let j = cz - 2; j <= cz + 2; j++)
+      for (const b of cells.get(i + ',' + j) ?? []) if (b.polygons.some((rings) => inRings(x, z, rings))) {
+        if (!found.has(b)) found.set(b, {});
+        found.get(b)[kind] = true;
+      }
+  }
+  const OFFICE_NAME = /\b(plaza|center|centre|centro|torre|tower|edificio|building|corporate|financial|banco|bank|oficinas|professional|profesional)\b/i;
+  const HOME_NAME = /\b(condominio|condo|cond\.|residencial|residences|apartamentos|apartments|apts|villas?)\b/i;
+  for (const b of unknown) {
+    const p = found.get(b);
+    let usage = null;
+    if (p) { usage = p.office ? 401 : p.hotel ? 403 : b.height > 12 ? 414 : 402; useStats.fromPlaces++; }
+    else if (b.name && b.storeys >= 8 && !HOME_NAME.test(b.name) && OFFICE_NAME.test(b.name)) { usage = 401; useStats.fromName++; }
+    else if (b.name && b.storeys >= 8 && HOME_NAME.test(b.name)) { usage = 412; useStats.fromName++; }
+    if (usage) b.usage = usage;
+  }
+  bstats.usage = {};
+  for (const b of allBuildings) bstats.usage[b.usage] = (bstats.usage[b.usage] ?? 0) + 1;
+}
 const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0; };
 const s0 = src.stats;
-log(`buildings: ${allBuildings.length} kept of ${s0.osm} OSM outlines (${s0.parts} building parts standing for ${s0.outlinesWithParts} outlines) and ${s0.femaOnly} FEMA-only; ${bstats.dropped} dropped, ${bstats.wet} in the sea`);
+log(`buildings: ${allBuildings.length} kept of ${s0.osm} OSM outlines (${s0.parts} building parts standing for ${s0.outlinesWithParts} outlines; ${s0.outlinesCapped} outlines kept under raised parts) and ${s0.femaOnly} FEMA-only; ${bstats.dropped} dropped, ${bstats.wet} in the sea`);
 log(`  heights from: OSM height ${s0.fromHeight}, Garita lidar ${s0.fromLidar}, OSM floors ${s0.fromLevels}, FEMA LiDAR ${s0.fromFema}, default ${s0.fromDefault} (FEMA has ${s0.femaTotal} outlines here)`);
 if (garita) log(`  GERS ids from Garita: ${s0.withGers} of ${src.buildings.length} buildings`);
 log(`  height median ${pct(bstats.heights, 0.5).toFixed(1)} m, p95 ${pct(bstats.heights, 0.95).toFixed(1)} m, max ${pct(bstats.heights, 1).toFixed(1)} m; ground drop under outline p95 ${pct(bstats.slope, 0.95).toFixed(1)} m`);
-log(`  usage codes: ${Object.entries(bstats.usage).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}:${v}`).join(' ')}`);
+log(`  usage codes: ${Object.entries(bstats.usage).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}:${v}`).join(' ')} (unknown uses settled by the places inside ${useStats.fromPlaces}, by the name ${useStats.fromName})`);
 
 // ---------------------------------------------------------------- OSM road graph
 const osm = readOsm(path.join(area.rawDir, 'osm.json'));
