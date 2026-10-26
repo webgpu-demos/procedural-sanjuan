@@ -5,12 +5,14 @@
 //                    (ArcGIS feature service), used for the heights and uses OSM does not record
 //   AWS Terrain      terrarium elevation tiles (USGS 3DEP on land)
 //   USGS imagery     The National Map orthoimagery tiles, into public/ortho/<area>/ (the client drapes them on the ground)
-// Usage: node tools/pipeline/fetch.mjs [--area=sanjuan] [--force] [--overpass]
+//   Garita           the island twin's building tiles over the area (GERS ids, lidar heights; tools/pipeline/garita.mjs)
+// Usage: node tools/pipeline/fetch.mjs [--area=sanjuan] [--force] [--overpass] [--garita=<site url or dir>] [--no-garita]
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveArea, ROOT, RAW } from './config.mjs';
 import { demTileRange, DEM_SOURCES, FAR_DEM } from './terrain.mjs';
 import { EXTRACT_URL, extractArea } from './extract.mjs';
+import { GARITA, BLD_Z, tileRange } from './garita.mjs';
 
 const area = resolveArea();
 const FORCE = process.argv.includes('--force');
@@ -286,10 +288,43 @@ async function fetchSurroundings() {
   fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify({ z, x0, x1, y0, y1, attribution: 'Aerial photo: USGS The National Map orthoimagery' }));
 }
 
+// Garita's building tiles over the area, into data/raw/<area>/garita/14/{x}/{y}.bin and .ids. --garita= points at
+// another build of the site (a URL, or a directory holding tiles/bld/); without ids (an older build) the compiler
+// takes nothing from them. A failure here is not fatal: the city compiles without the link.
+async function fetchGarita() {
+  if (process.argv.includes('--no-garita')) return log('garita: skipped');
+  const arg = process.argv.find((a) => a.startsWith('--garita='))?.slice(9) || GARITA;
+  const local = !/^https?:/.test(arg), base = local ? path.resolve(arg) : arg.replace(/\/?$/, '/');
+  const dir = path.join(area.rawDir, 'garita');
+  const get = async (rel, file) => {
+    if (!local) return download(base + rel, file, { retries: 2, timeout: 60000 });
+    const buf = fs.readFileSync(path.join(base, rel));
+    if (file) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, buf); }
+    return buf;
+  };
+  const indexFile = path.join(dir, 'index.json');
+  let index, before = null;
+  try { before = JSON.parse(fs.readFileSync(indexFile, 'utf8')).generated; } catch {}
+  try { index = JSON.parse(await get('tiles/bld/index.json', indexFile)); }
+  catch (e) { return log(`garita: no building index at ${base} (${e.message}); the city compiles without it`); }
+  // a new build renumbers the records: tiles cached from another build go (an ids file must match its tile)
+  const stale = before !== index.generated;
+  if (stale) fs.rmSync(path.join(dir, String(BLD_Z)), { recursive: true, force: true });
+  const { x0, x1, y0, y1 } = tileRange(area.bbox);
+  const want = (index.tiles ?? []).filter(([x, y]) => x >= x0 && x <= x1 && y >= y0 && y <= y1);
+  const jobs = want.flatMap(([x, y]) => ['bin', 'ids'].map((ext) => ({ rel: `tiles/bld/${BLD_Z}/${x}/${y}.${ext}`, file: path.join(dir, String(BLD_Z), String(x), `${y}.${ext}`) })));
+  const todo = jobs.filter((j) => !exists(j.file));
+  log(`garita: ${want.length} building tiles (${index.ids ? 'with' : 'without'} ids), ${todo.length} files to get`);
+  let missing = 0;
+  await pool(todo, 6, async (j) => { try { await get(j.rel, j.file); } catch { missing++; } });
+  if (missing) log(`garita: ${missing} files missing (an ids file is absent from older builds)`);
+}
+
 log(`area ${area.id}: bbox lat ${area.bbox.south.toFixed(5)}..${area.bbox.north.toFixed(5)} lon ${area.bbox.west.toFixed(5)}..${area.bbox.east.toFixed(5)}`);
 await fetchDem();
 await fetchOrtho();
 await fetchSurroundings();
 await fetchStructures();
 await fetchOsm();
+await fetchGarita();
 log('done');

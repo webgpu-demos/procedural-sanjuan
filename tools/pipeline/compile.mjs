@@ -29,6 +29,7 @@ import { readExtra, buildExtras } from './extras.mjs';
 import { profileRoads, flyover, BANK } from './roadprofile.mjs';
 import { DECK_FLAG, CORRIDOR_MARGIN, projectOnDeck } from '../../src/shared/decks.js';
 import { readBuildingSources } from './buildings.mjs';
+import { readGarita } from './garita.mjs';
 import { buildSea } from './coast.mjs';
 import { buildRoadSurfaces } from './roadsurface.mjs';
 import { Tris, fort, wallGaritas, domeOn, lighthouse, cathedral, convention, encodeMesh, simplify } from './landmarks.mjs';
@@ -209,7 +210,10 @@ const tileFor = (x, z) => {
 // Point-in-polygon indexes used to place paint, trees and street furniture.
 const idx = { building: new PolyIndex(), road: new PolyIndex(), carriageway: new PolyIndex(), sidewalk: new PolyIndex(), water: new PolyIndex() };
 
-const src = readBuildingSources({ osmFile: path.join(area.rawDir, 'osm_buildings.json'), femaFile: path.join(area.rawDir, 'fema_structures.json'), proj, heritage: area.heritage, colonial: COLONIAL });
+// Garita's building tiles over the area (tools/pipeline/garita.mjs; fetched beside the rest): GERS ids and lidar heights
+const garita = readGarita(path.join(area.rawDir, 'garita'));
+if (garita) log(`garita: ${garita.stats.records} buildings in ${garita.stats.tiles} tiles, ${garita.stats.withIds} with ids, ${garita.stats.withGers} with a GERS id, ${garita.stats.lidar} with a lidar height`);
+const src = readBuildingSources({ osmFile: path.join(area.rawDir, 'osm_buildings.json'), femaFile: path.join(area.rawDir, 'fema_structures.json'), proj, heritage: area.heritage, colonial: COLONIAL, garita });
 const bstats = { dropped: 0, wet: 0, heights: [], usage: {}, slope: [] };
 const allBuildings = [];
 for (const b of src.buildings) {
@@ -225,13 +229,15 @@ for (const b of src.buildings) {
   bstats.slope.push(gc - lowest);
   bstats.heights.push(b.height);
   bstats.usage[b.usage] = (bstats.usage[b.usage] ?? 0) + 1;
-  const building = { id: b.id, usage: b.usage, storeys: b.storeys, flags: b.masonry ? BFLAG.MASONRY : 0, base: r2(base), height: r2(height), measuredHeight: b.measured ? r2(height) : -1, polygons: polys, surfaces: [], hint: b.hint, cx, cz, roof: b.roof, name: b.name };
+  const building = { id: b.id, usage: b.usage, storeys: b.storeys, flags: b.masonry ? BFLAG.MASONRY : 0, base: r2(base), height: r2(height), measuredHeight: b.measured ? r2(height) : -1, polygons: polys, surfaces: [], hint: b.hint, cx, cz, roof: b.roof, name: b.name,
+    gers: b.gers ?? null, ref: /^[wr]\d/.test(b.id) ? b.id : null };
   allBuildings.push(building);
 }
 const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0; };
 const s0 = src.stats;
 log(`buildings: ${allBuildings.length} kept of ${s0.osm} OSM outlines (${s0.parts} building parts standing for ${s0.outlinesWithParts} outlines) and ${s0.femaOnly} FEMA-only; ${bstats.dropped} dropped, ${bstats.wet} in the sea`);
-log(`  heights from: OSM height ${s0.fromHeight}, OSM floors ${s0.fromLevels}, FEMA LiDAR ${s0.fromFema}, default ${s0.fromDefault} (FEMA has ${s0.femaTotal} outlines here)`);
+log(`  heights from: OSM height ${s0.fromHeight}, Garita lidar ${s0.fromLidar}, OSM floors ${s0.fromLevels}, FEMA LiDAR ${s0.fromFema}, default ${s0.fromDefault} (FEMA has ${s0.femaTotal} outlines here)`);
+if (garita) log(`  GERS ids from Garita: ${s0.withGers} of ${src.buildings.length} buildings`);
 log(`  height median ${pct(bstats.heights, 0.5).toFixed(1)} m, p95 ${pct(bstats.heights, 0.95).toFixed(1)} m, max ${pct(bstats.heights, 1).toFixed(1)} m; ground drop under outline p95 ${pct(bstats.slope, 0.95).toFixed(1)} m`);
 log(`  usage codes: ${Object.entries(bstats.usage).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}:${v}`).join(' ')}`);
 
@@ -628,6 +634,11 @@ for (const t of [...tiles.values()].sort((a, b) => a.tz - b.tz || a.tx - b.tx)) 
   fs.writeFileSync(path.join(area.outDir, file), buf);
   bytes += buf.length;
   const entry = { x: t.tx, z: t.tz, file, buildings: t.buildings.length, areas: t.areas.length, props: t.props.length, signs: t.signs.length, bytes: buf.length };
+  // the ids beside the tile, one line per building in tile order: "<gers>,<osm>" (src/world/streamer.js idsOf)
+  if (t.buildings.length) {
+    entry.ids = `t_${t.tx}_${t.tz}.ids`;
+    fs.writeFileSync(path.join(area.outDir, entry.ids), t.buildings.map((b) => `${b.gers ?? ''},${b.ref ?? ''}`).join('\n') + '\n');
+  }
   const models = lmTiles.get(tileKey(t.tx, t.tz));
   if (models?.count) {
     const mesh = encodeMesh(models);
@@ -692,6 +703,7 @@ const manifest = {
   attribution: [
     'Buildings, roads, coastline and places: © OpenStreetMap contributors (ODbL 1.0)',
     'Building heights: FEMA / ORNL USA Structures (public domain)',
+    ...(garita ? ['Building ids (Overture GERS) and lidar heights: Garita (https://github.com/webgpu-demos/garita), from Overture Maps Foundation and USGS 3DEP'] : []),
     'Elevation: USGS 3DEP via AWS Terrain Tiles',
   ],
 };

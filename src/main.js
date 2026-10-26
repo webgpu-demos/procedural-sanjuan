@@ -35,7 +35,7 @@ import { Environment } from './world/environment.js';
 import { Atmosphere } from './world/atmosphere.js';
 import { createBirds, MAX_BIRDS } from './world/birds.js';
 import { LampLight, installLampLight } from './world/lamplight.js';
-import { parseLatLon, parseSeaLevel, garitaLink } from './shared/twin.js';
+import { parseLatLon, parseSeaLevel, parseGers, garitaLink } from './shared/twin.js';
 
 installLampLight(); // (before any material is compiled)
 
@@ -47,6 +47,7 @@ const AREA = ALIASES[params.get('area')] ?? params.get('area') ?? 'sanjuan';
 // in it goes straight there, past the opening (?xp=1 keeps it).
 const LL = parseLatLon(params.get('ll'));
 const FROM_GARITA = params.get('from') === 'garita';
+const BLD = parseGers(params.get('bld')); // the building Garita had selected (its GERS id), found near ?ll=
 
 // The loading screen (index.html): the city's name, a bar and what is being done.
 const loader = {
@@ -482,9 +483,31 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     const p = hit.point.clone(), n = hit.face?.normal;
     if (n && Math.abs(n.y) < 0.5) p.addScaledVector(new THREE.Vector3(n.x, 0, n.z).normalize(), -0.5);
     picked.at = proj.unproject(p.x, p.z);
+    withIds(picked);
   }
   showTwinLink();
 });
+// The ids of a picked building (the tile's ids file, fetched once): its GERS id goes to Garita with the link.
+function withIds(b) {
+  streamer.idsOf(b.tile).then((ids) => {
+    if (picked !== b || !ids?.[b.index]) return;
+    Object.assign(b, ids[b.index]);
+    showTwinLink();
+  });
+}
+// Arriving from Garita with a building (?bld=): the building with that id near ?ll= is the one picked, once its tile is in.
+if (BLD && LL) {
+  const [x, z] = proj.project(LL.lon, LL.lat);
+  streamer.findGers(BLD, x, z).then((found) => {
+    if (!found) return;
+    const take = (tries) => {
+      const b = streamer.buildingIn(found.key, found.index);
+      if (b) { if (!picked) { picked = Object.assign(b, { gers: BLD, at: [LL.lon, LL.lat] }); withIds(picked); showTwinLink(); } return; }
+      if (tries > 0) setTimeout(() => take(tries - 1), 500);
+    };
+    take(60);
+  });
+}
 
 // The way to Garita (top centre, index.html #twin): the building clicked, else (arriving from Garita) the place in view.
 const twinLink = document.getElementById('twin-link');
@@ -493,7 +516,7 @@ function showTwinLink() {
   const at = picked?.at ?? (FROM_GARITA ? proj.unproject(controls.target.x, controls.target.z) : null);
   twinLink.hidden = !at;
   if (!at) return;
-  twinLink.href = garitaLink(at[0], at[1], { sea: FLOOD });
+  twinLink.href = garitaLink(at[0], at[1], { sea: FLOOD, gers: picked?.gers });
   twinLink.textContent = picked?.at ? 'Este edificio en Garita ↗' : '← Garita';
   twinLink.title = picked?.at ? 'Open this building in Garita, the island-wide twin' : 'Back to Garita, at the place in view';
 }
@@ -888,7 +911,8 @@ function frame(_, manual) {
     `tiles ${s.loaded}/${manifest.tiles.length}${streamer.pending ? ` (+${streamer.pending})` : ''} · ${s.buildings} buildings\n` +
     (sim && simOn() ? `simulated: ${sim.stats.active.toLocaleString()} cars on the road · ${sim.stats.near} near · ${clockTime.rate}×\n` : '') +
     (picked ? `\n▸ ${USAGE[picked.usage] ?? 'usage ' + picked.usage}, ${picked.height.toFixed(1)} m` +
-      `${picked.storeys ? `, ${picked.storeys} floors` : ''}, base ${picked.base.toFixed(1)} m\n` : '') +
+      `${picked.storeys ? `, ${picked.storeys} floors` : ''}, base ${picked.base.toFixed(1)} m` +
+      `${picked.osm ? `\n  OSM ${picked.osm}` : ''}${picked.gers ? `${picked.osm ? ' · ' : '\n  '}GERS ${picked.gers.slice(0, 8)}…` : ''}\n` : '') +
     `\ndrag pan · right-drag rotate · wheel zoom\nWASD move (shift fast) · N day/night · click building`;
   if (manual == null) requestAnimationFrame(frame);
 }

@@ -304,15 +304,49 @@ export class Streamer {
     tex.needsUpdate = true;
   }
 
-  // Building under a raycast hit on a facade mesh: { usage, storeys, height, base }.
+  // Building under a raycast hit on a facade mesh: { usage, storeys, height, base, tile, index } (index: in the tile).
   buildingAt(hit) {
-    const { info, ends } = hit.object.userData ?? {};
+    const { info, ends, tile } = hit.object.userData ?? {};
     if (!info || !hit.face) return null;
     const v = hit.face.a;
     let lo = 0, hi = ends.length - 1;
     while (lo < hi) { const mid = (lo + hi) >> 1; if (ends[mid] > v) hi = mid; else lo = mid + 1; }
     const [usage, storeys, height, base] = info[lo];
-    return { usage, storeys, height, base };
+    return { usage, storeys, height, base, tile, index: lo };
+  }
+
+  // The same for a building of a loaded tile by its index, or null while the tile is not loaded.
+  buildingIn(key, index) {
+    let found = null;
+    this.tiles.get(key)?.group?.traverse((o) => { if (o.userData.facade && o.userData.info?.[index]) found = o.userData.info[index]; });
+    if (!found) return null;
+    const [usage, storeys, height, base] = found;
+    return { usage, storeys, height, base, tile: key, index };
+  }
+
+  // The ids of a tile's buildings, in tile order: [{ gers, osm }] (the compiler's t_x_z.ids; null when the area has
+  // none). Fetched on first use, then kept.
+  idsOf(key) {
+    this.ids ??= new Map();
+    if (!this.ids.has(key)) {
+      const file = this.available.get(key)?.ids;
+      this.ids.set(key, !file ? Promise.resolve(null) : fetch(`${this.base}/${file}`).then((r) => (r.ok ? r.text() : null)).then((t) => t && t.split('\n').map((l) => {
+        const [gers, osm] = l.split(',');
+        return { gers: gers || null, osm: osm || null };
+      })).catch(() => null));
+    }
+    return this.ids.get(key);
+  }
+
+  // The tile key and index of the building with this GERS id in the tile holding (x, z) or a neighbour of it.
+  async findGers(gers, x, z) {
+    const size = this.manifest.tileSize, tx = Math.floor(x / size), tz = Math.floor(z / size);
+    for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+      const key = tileKey(tx + dx, tz + dz), ids = await this.idsOf(key);
+      const index = ids?.findIndex((r) => r.gers === gers) ?? -1;
+      if (index >= 0) return { key, index };
+    }
+    return null;
   }
 
   get pending() { return this.inFlight; }

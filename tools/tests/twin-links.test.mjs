@@ -1,6 +1,6 @@
 // The links to and from Garita (src/shared/twin.js): what a street-view link carries in, what a building carries out.
 import assert from 'node:assert/strict';
-import { parseLatLon, parseSeaLevel, garitaLink, GARITA } from '../../src/shared/twin.js';
+import { parseLatLon, parseSeaLevel, parseGers, garitaLink, GARITA } from '../../src/shared/twin.js';
 
 // ?ll: latitude first; a view only when all three numbers are there
 assert.deepEqual(parseLatLon('18.4655,-66.1057'), { lat: 18.4655, lon: -66.1057, view: null });
@@ -33,5 +33,16 @@ const plain = new URL(garitaLink(-66.1, 18.4, { lang: null }));
 assert.equal(plain.searchParams.has('sea'), false);
 assert.equal(plain.searchParams.has('lang'), false);
 assert.ok(!garitaLink(-66.1, 18.4).includes('%2C'), 'commas left readable');
+
+// ?bld: the building's GERS id, both ways (Garita's own parser takes the same form)
+const G = 'cf29c0cc-f255-4f2f-8453-d43beb5c1961';
+assert.equal(parseGers(G), G);
+assert.equal(parseGers(` ${G.toUpperCase()} `), G);
+assert.equal(parseGers(G.replace(/-/g, '')), null, 'dashes required, as in Garita');
+assert.equal(parseGers('w113348553'), null);
+assert.equal(parseGers(null), null);
+assert.equal(new URL(garitaLink(-66.1, 18.4, { gers: G })).searchParams.get('bld'), G);
+assert.equal(new URL(garitaLink(-66.1, 18.4, { gers: 'nonsense' })).searchParams.has('bld'), false);
+assert.equal(new URL(garitaLink(-66.1, 18.4)).searchParams.has('bld'), false);
 
 console.log('twin links: ok');
