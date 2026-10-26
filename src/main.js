@@ -1,6 +1,7 @@
 // Procedural San Juan client: streams the compiled city and renders it. Free camera for now; the car comes next.
 //
 // URL parameters: ?area=condado (default: sanjuan)  ?time=18.5 (San Juan hour; default: now; the simulated morning if there is one)  ?sim=0  ?scenario=apagon  ?rate=60  ?night=1  ?cam=x,z,distance,azimuthDeg,elevationDeg  ?radius=3000  ?traffic=0  ?ortho=0  ?clouds=0.25 (on, with that cover)  ?birds=150  ?cars=600
+//                 ?ll=lat,lon[,distance,azimuthDeg,elevationDeg] (a place instead of ?cam; skips the opening)  ?sea=1.5 (the sea raised to that level, metres)  ?from=garita (a way back)
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import GUI from 'lil-gui';
@@ -34,6 +35,7 @@ import { Environment } from './world/environment.js';
 import { Atmosphere } from './world/atmosphere.js';
 import { createBirds, MAX_BIRDS } from './world/birds.js';
 import { LampLight, installLampLight } from './world/lamplight.js';
+import { parseLatLon, parseSeaLevel, garitaLink } from './shared/twin.js';
 
 installLampLight(); // (before any material is compiled)
 
@@ -41,6 +43,10 @@ const params = new URLSearchParams(location.search);
 // (Old San Juan was an area of its own, around the same origin: its links, views included, open in the municipality)
 const ALIASES = { viejosanjuan: 'sanjuan' };
 const AREA = ALIASES[params.get('area')] ?? params.get('area') ?? 'sanjuan';
+// A place by its coordinates (Garita's street-view links): ?ll=lat,lon opens the view on it, and a link with a place
+// in it goes straight there, past the opening (?xp=1 keeps it).
+const LL = parseLatLon(params.get('ll'));
+const FROM_GARITA = params.get('from') === 'garita';
 
 // The loading screen (index.html): the city's name, a bar and what is being done.
 const loader = {
@@ -122,13 +128,16 @@ if (LARGE) {
 }
 loader.set(0.14, 'railways and roads');
 const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
+// A raised sea (?sea=, Garita's sea-level scenario): the sea's surface at that height, over everything lower. It is
+// Garita's bathtub, not a flood model: ground below the level is under water whether or not the sea can reach it.
+const FLOOD = parseSeaLevel(params.get('sea'), manifest.sea ?? 0);
 // Beyond the area: the rest of the island (far.js) over the sea, out to the haze of the horizon; without the
 // surroundings, plain ground in the grey of the area's own unbuilt land unless the area has a coast.
 {
   const b = manifest.bounds, coastal = manifest.sea != null || manifest.far != null;
-  const plain = new THREE.Mesh(new THREE.CircleGeometry(50000, 64).rotateX(-Math.PI / 2), coastal ? materials.sea
+  const plain = new THREE.Mesh(new THREE.CircleGeometry(50000, 64).rotateX(-Math.PI / 2), coastal || FLOOD != null ? materials.sea
     : new THREE.MeshStandardMaterial({ color: 0x8a8a86, roughness: 0.95, metalness: 0 }));
-  plain.position.set((b.minX + b.maxX) / 2, coastal ? (manifest.sea ?? 0) - 0.15 : manifest.terrain.min - 1, (b.minZ + b.maxZ) / 2); // just under the sea in the tiles, or the lowest ground
+  plain.position.set((b.minX + b.maxX) / 2, FLOOD ?? (coastal ? (manifest.sea ?? 0) - 0.15 : manifest.terrain.min - 1), (b.minZ + b.maxZ) / 2); // just under the sea in the tiles, or the lowest ground
   plain.receiveShadow = true;
   plain.name = 'plain';
   scene.add(plain);
@@ -136,7 +145,8 @@ const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
 // the ground of the tiles not loaded, and of the island around the area (far.js)
 buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj).then((far) => far && scene.add(far));
 // how far the sea lies from the land, for its shallows and its surf (water.js)
-buildShore(streamer.grid, manifest, `tiles/${AREA}`).catch((e) => console.warn('shore:', e.message));
+// (with the sea raised, its shore is where the ground meets the new level: the shallows and the surf follow it inland)
+buildShore(streamer.grid, FLOOD != null ? { ...manifest, sea: FLOOD } : manifest, `tiles/${AREA}`).catch((e) => console.warn('shore:', e.message));
 const birds = createBirds(manifest.bounds, streamer.ground(0, 0));
 if (params.get('birds') != null) birds.geometry.instanceCount = Math.min(MAX_BIRDS, Number(params.get('birds')) || 0);
 scene.add(birds);
@@ -201,8 +211,14 @@ async function setScenario(name) {
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && !list.hidden) show(false); });
 }
 
-// initial view: the area's own (manifest.view), or over the origin
-const [cx, cz, dist, az, el] = (params.get('cam') || (manifest.view ?? [0, 0, 600, 200, 32]).join(',')).split(',').map(Number);
+// initial view: ?cam, else the place of ?ll when the area holds it, else the area's own (manifest.view), or over the origin
+let llView = null;
+if (LL && !params.get('cam')) {
+  const [x, z] = proj.project(LL.lon, LL.lat), b = manifest.bounds;
+  if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) llView = [x, z, ...(LL.view ?? [320, 200, 38])];
+  else console.warn(`?ll=${LL.lat},${LL.lon} is outside ${manifest.name}: opening its own view`);
+}
+const [cx, cz, dist, az, el] = llView ?? (params.get('cam') || (manifest.view ?? [0, 0, 600, 200, 32]).join(',')).split(',').map(Number);
 controls.target.set(cx, streamer.ground(cx, cz), cz);
 camera.position.copy(controls.target).add(new THREE.Vector3().setFromSphericalCoords(
   dist, THREE.MathUtils.degToRad(90 - el), THREE.MathUtils.degToRad(az)));
@@ -379,6 +395,7 @@ function viewLink() {
   url.searchParams.set('cam', [controls.target.x, controls.target.z, viewSpherical.radius, az, el].map((v) => Math.round(v)).join(','));
   if (clockTime.live) url.searchParams.delete('time'); else url.searchParams.set('time', clockTime.hour.toFixed(2));
   url.searchParams.delete('night'); // (the hour says it)
+  url.searchParams.delete('ll'); // (the camera says where; ?sea and ?from stay)
   return url.href.replace(/%2C/g, ','); // (commas are fine in a query: keep the link readable)
 }
 let linkWritten = 0, lastLink = '';
@@ -459,7 +476,37 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   }
   const hit = raycaster.intersectObjects(scene.children, true).find((h) => h.object.userData.facade);
   picked = hit ? streamer.buildingAt(hit) : null;
+  if (picked) {
+    // where the building stands, for Garita: the point hit, half a metre inside when it is on a wall (Garita finds the
+    // footprint that holds the point)
+    const p = hit.point.clone(), n = hit.face?.normal;
+    if (n && Math.abs(n.y) < 0.5) p.addScaledVector(new THREE.Vector3(n.x, 0, n.z).normalize(), -0.5);
+    picked.at = proj.unproject(p.x, p.z);
+  }
+  showTwinLink();
 });
+
+// The way to Garita (top centre, index.html #twin): the building clicked, else (arriving from Garita) the place in view.
+const twinLink = document.getElementById('twin-link');
+function showTwinLink() {
+  if (!twinLink) return;
+  const at = picked?.at ?? (FROM_GARITA ? proj.unproject(controls.target.x, controls.target.z) : null);
+  twinLink.hidden = !at;
+  if (!at) return;
+  twinLink.href = garitaLink(at[0], at[1], { sea: FLOOD });
+  twinLink.textContent = picked?.at ? 'Este edificio en Garita ↗' : '← Garita';
+  twinLink.title = picked?.at ? 'Open this building in Garita, the island-wide twin' : 'Back to Garita, at the place in view';
+}
+if (FROM_GARITA) { showTwinLink(); controls.addEventListener('end', () => { if (!picked) showTwinLink(); }); }
+// The raised sea says what it is, on screen for as long as it is raised.
+if (FLOOD != null) {
+  const tag = document.getElementById('sea-tag');
+  if (tag) {
+    tag.hidden = false;
+    tag.textContent = `Mar a +${FLOOD.toFixed(1)} m · modelo de bañera, como en Garita`;
+    tag.title = 'Bathtub model: all ground below the level is under water, connected to the sea or not (as Garita counts it)';
+  }
+}
 
 // ---------------------------------------------------------------- riding with a car
 // The camera follows one simulated car: behind and above it, easing after it through the turns. Esc, or a
@@ -690,7 +737,7 @@ addEventListener('resize', () => {
 });
 
 // ---------------------------------------------------------------- the experience (the simulated morning to watch)
-const xp = sim && params.get('xp') !== '0' ? new Experience({
+const xp = sim && params.get('xp') !== '0' && !(llView && params.get('xp') == null) ? new Experience({
   scene, camera, controls, streamer, clockTime, atmosphere, roads, manifest, chase, ride, stopRiding, setScenario, speedMap, driver, drive, stopDriving,
   // free roaming from the title: where you were last time, else in a car on Ponce de León at the Milla de Oro
   startFree() { const p = savedPlace(); setMode(p?.mode && p.mode !== 'explore' ? p.mode : 'car', p ?? { x: 6262, z: 4640, heading: Math.PI }); },
