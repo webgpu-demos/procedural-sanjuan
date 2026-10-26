@@ -120,6 +120,9 @@ def main():
     random.Random(12345).shuffle(names)
     fr = [float(x) for x in a.split.split(',')]
     n1, n2 = round(len(names) * fr[0] / sum(fr)), round(len(names) * (fr[0] + fr[1]) / sum(fr))
+    if len(names) >= 3:  # (at least one flight each for val and test)
+        n1 = max(1, min(n1, len(names) - 2))
+        n2 = max(n1 + 1, min(n2, len(names) - 1))
     split = {'train': names[:n1], 'val': names[n1:n2], 'test': names[n2:]}
     lists = {k: sorted(p for g in v for p in groups[g]) for k, v in split.items()}
     for k in ('val', 'test'):

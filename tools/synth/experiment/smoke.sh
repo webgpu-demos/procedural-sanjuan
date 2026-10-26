@@ -9,7 +9,7 @@ rm -rf "$W"; mkdir -p "$W/fake_real/images" "$W/fake_real/labels" "$W/syn/images
 i=0
 for img in $(ls "$SYN"/images/*/*.jpg | sort); do
   n=$(basename "$img" .jpg); lab=$(ls "$SYN"/labels/*/"$n".txt)
-  if [ $((i % 2)) -eq 0 ]; then d="$W/fake_real"; f="flight$((i / 6))_$n"; ln -s "$img" "$d/images/$f.jpg"; cp "$lab" "$d/labels/$f.txt"
+  if [ $((i % 2)) -eq 0 ]; then d="$W/fake_real"; f="flight$((i / 4))_$n"; ln -s "$img" "$d/images/$f.jpg"; cp "$lab" "$d/labels/$f.txt"
   else ln -s "$img" "$W/syn/images/train/$n.jpg"; cp "$lab" "$W/syn/labels/train/$n.txt"; fi
   i=$((i + 1))
 done
