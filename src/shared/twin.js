@@ -1,6 +1,8 @@
 // Links between this city and Garita (https://webgpu-demos.github.io/garita/), the island-wide twin it is the street
-// view of. Garita opens a place here with ?ll=lat,lon (and its scenario's ?sea=); a building clicked here opens in
-// Garita with ?pick=lon,lat, which selects the footprint under that point. Plain functions: the client and the tests.
+// view of. Garita opens a place here with ?ll=lat,lon (and its scenario's ?sea=, and ?bld=<GERS id> for the building
+// it had selected); a building clicked here opens in Garita with ?pick=lon,lat and, where the compiler had it from
+// Garita, ?bld=<GERS id>: both twins name a building by its Overture GERS id, the point is the fallback. Plain
+// functions: the client and the tests.
 
 export const GARITA = 'https://webgpu-demos.github.io/garita/';
 
@@ -23,10 +25,18 @@ export function parseSeaLevel(s, present = 0) {
   return Number.isFinite(v) && v > present + 0.005 && v < 100 ? v : null;
 }
 
-// Garita, looking down on (lon, lat) with the building there selected; the sea level goes along when raised.
-export function garitaLink(lon, lat, { sea = null, lang = 'es', range = 650 } = {}) {
+// ?bld=<GERS id> -> the id (lower case), or null when it is not one (a UUID; Garita reads it the same way).
+export function parseGers(s) {
+  const v = String(s ?? '').trim().toLowerCase();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v) ? v : null;
+}
+
+// Garita, looking down on (lon, lat) with the building there selected (by its GERS id when known); the sea level goes
+// along when raised.
+export function garitaLink(lon, lat, { sea = null, lang = 'es', range = 650, gers = null } = {}) {
   const u = new URL(GARITA);
   u.searchParams.set('pick', `${round(lon, 6)},${round(lat, 6)}`);
+  if (parseGers(gers)) u.searchParams.set('bld', parseGers(gers));
   u.searchParams.set('cam', `${round(lon, 6)},${round(lat, 6)},${range},0,55`);
   if (sea != null) u.searchParams.set('sea', String(round(sea, 2)));
   if (lang) u.searchParams.set('lang', lang);

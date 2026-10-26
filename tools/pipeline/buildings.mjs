@@ -150,9 +150,10 @@ function readFema(file, proj) {
   return out;
 }
 
-// Returns { buildings: [{ id, polygons (lon/lat), usage, storeys, height, measured, hint }], stats }.
-// proj: makeProjection(); heritage: [[lon, lat], ...] or null.
-export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonial }) {
+// Returns { buildings: [{ id, polygons (lon/lat), usage, storeys, height, measured, hint, gers }], stats }.
+// proj: makeProjection(); heritage: [[lon, lat], ...] or null; garita: readGarita() (tools/pipeline/garita.mjs) or null.
+// gers: the Overture GERS id Garita gives the building (a part takes its outline's), null where Garita has none.
+export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonial, garita = null }) {
   const osm = readOsmBuildings(osmFile), fema = readFema(femaFile, proj);
   const femaIndex = new PolyIndex(32);
   fema.forEach((f, i) => { f.i = i; f.rings.fema = f; femaIndex.add(f.rings); });
@@ -166,14 +167,16 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     return best;
   };
   const heritageRing = heritage ? [heritage.map(([lon, lat]) => proj.project(lon, lat))] : null;
-  const stats = { osm: osm.length, parts: 0, outlinesWithParts: 0, fromHeight: 0, fromLevels: 0, fromFema: 0, fromDefault: 0, femaOnly: 0, femaTotal: fema.length };
+  const stats = { osm: osm.length, parts: 0, outlinesWithParts: 0, fromHeight: 0, fromLidar: 0, fromLevels: 0, fromFema: 0, fromDefault: 0, femaOnly: 0, femaTotal: fema.length, withGers: 0 };
 
   // building:part pieces replace the outline they stand in
   const parts = osm.filter((b) => b.part), whole = osm.filter((b) => !b.part);
   const usedFema = new Set();
   const out = [];
-  const add = (b, isPart) => {
+  const add = (b, isPart, outline = null) => {
     const t = b.tags, outer = b.polygons[0][0];
+    // Garita's record for it: the outline's for a part (Garita keeps outlines; a part's own height stays its own)
+    const g = garita?.byOsm.get((outline ?? b).id) ?? null, lidar = !isPart && g?.hsrc === 'lidar' && g.height > 0 ? g.height : null;
     const [cx, cz] = proj.project(...centroidLL(outer));
     const f = femaAt(cx, cz);
     if (f) usedFema.add(f.i);
@@ -184,6 +187,7 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     const fh = floorHeight(usage, inHeritage);
     let height, measured = false, source;
     if (tagged > 0) { height = tagged; measured = true; source = 'fromHeight'; }
+    else if (lidar) { height = lidar; measured = true; source = 'fromLidar'; } // measured from the point cloud by Garita
     else if (levels > 0) {
       const k = f?.height ? Math.min(4.8, Math.max(2.9, f.height / (levels + roofLevels * 0.5))) : fh;
       height = (levels + roofLevels * 0.5) * k + (f?.height ? 0 : 0.6); source = 'fromLevels';
@@ -203,8 +207,9 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     // fortifications: the stonework of El Morro, San Cristóbal and their bastions
     const masonry = /^(castle|fort|fortress|bunker)$/.test(t.building) || /^(castle|fort|citywalls|fortress)$/.test(t.historic ?? '') || t.castle_type === 'fortress';
     if (masonry) hint = (0x80000000 | STONE[Math.floor(seed * STONE.length)] | (3 << 24)) >>> 0;
+    if (g?.gers) stats.withGers++;
     out.push({ id: b.id, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured, hint, heritage: inHeritage, masonry,
-      roof: t['roof:shape'] ?? null, name: t.name ?? null });
+      roof: t['roof:shape'] ?? null, name: t.name ?? null, gers: g?.gers ?? null });
   };
   // parts by the cell of their middle, to find the ones inside an outline without trying them all
   const PCELL = 50, partCells = new Map();
@@ -225,7 +230,7 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     for (let i = Math.floor(x0 / PCELL); i <= Math.floor(x1 / PCELL) && partCells.size; i++)
       for (let k = Math.floor(z0 / PCELL); k <= Math.floor(z1 / PCELL); k++)
         for (const p of partCells.get(i + ',' + k) ?? []) if (!p.used && inRings(p.at[0], p.at[1], [ring])) mine.push(p);
-    for (const p of mine) { p.used = true; add(p, true); stats.parts++; }
+    for (const p of mine) { p.used = true; add(p, true, b); stats.parts++; }
     if (mine.length) stats.outlinesWithParts++;
     if (mine.length && mine.reduce((s, p) => s + ringAreaLL(p.polygons[0][0], proj), 0) >= 0.6 * ringAreaLL(b.polygons[0][0], proj)) continue;
     add(b, false);
@@ -241,7 +246,9 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     if (osmIndex.has(cx, cz) || ring.some(([x, z]) => osmIndex.has(x, z))) continue;
     const inHeritage = !!heritageRing && inRings(cx, cz, heritageRing);
     const usage = usageOf({ building: 'yes' }, f, inHeritage);
-    out.push({ id: `f${f.i}`, polygons: [f.ll], usage, storeys: Math.max(1, Math.round(f.height / floorHeight(usage, inHeritage))), height: f.height, minHeight: 0, measured: true, hint: 0, heritage: inHeritage });
+    const gers = garita?.at(...centroidLL(f.ll[0]))?.gers ?? null; // Garita's building (an imagery detection, mostly) under it
+    if (gers) stats.withGers++;
+    out.push({ id: `f${f.i}`, polygons: [f.ll], usage, storeys: Math.max(1, Math.round(f.height / floorHeight(usage, inHeritage))), height: f.height, minHeight: 0, measured: true, hint: 0, heritage: inHeritage, gers });
     stats.femaOnly++;
   }
   return { buildings: out, stats };

@@ -61,7 +61,17 @@ a building or a place in the municipality here, and a building clicked here open
   not the sea can reach it.
 - `?from=garita` adds a way back (top centre, *← Garita*), to the place in view.
 - Click a building: *Este edificio en Garita ↗* opens Garita over it with `?pick=lon,lat` (the point clicked, half a
-  metre inside the wall), which pins the footprint there, with the raised sea if there is one.
+  metre inside the wall), which pins the footprint there, with the raised sea if there is one. Where the compile had
+  Garita's tiles, the link also carries `?bld=<GERS id>`, and Garita pins the building by its id first.
+- `?bld=<GERS id>` with `?ll=` (as Garita's street-view link sends it): the building with that id near the place is
+  the one picked here, and the way back carries it.
+
+Both twins name a building by its Overture GERS id. `npm run fetch` takes Garita's building tiles over the area
+(`tools/pipeline/garita.mjs`; `--garita=<site or directory>`, `--no-garita`), and the compile gives each OSM building
+the GERS id Garita carries for it (a `building:part` its outline's; a FEMA-only building the id of the Garita
+building under it), and Garita's height where Garita measured it in the lidar point cloud (an OSM `height` tag still
+wins over it; building:levels and the FEMA average do not). `t_x_z.ids` beside each tile has `<gers>,<osm>` per
+building in tile order; the client fetches it when a building is clicked, and the HUD shows both ids.
 
 ## Pipeline
 
