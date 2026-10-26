@@ -2,7 +2,7 @@
  "format": 7,
  "area": "condado",
  "name": "Condado",
- "compiled": "2026-10-06T02:27:37.687Z",
+ "compiled": "2026-10-26T20:20:34.563Z",
  "origin": {
   "lon": -66.07165,
   "lat": 18.45604
@@ -29,7 +29,12 @@
   "w": 769,
   "h": 564,
   "min": -0.08,
-  "max": 42.64
+  "max": 33.2,
+  "lidar": {
+   "tiles": 3,
+   "share": 0.643,
+   "project": "PR_PuertoRicoUSVI_D24"
+  }
  },
  "sea": 0,
  "view": [
@@ -55,61 +60,61 @@
     0,
     0,
     "k_0_0.bin",
-    978
+    977
    ],
    [
     -1,
     0,
     "k_-1_0.bin",
-    1412
+    1411
    ],
    [
     1,
     0,
     "k_1_0.bin",
-    1127
+    1122
    ],
    [
     -2,
     0,
     "k_-2_0.bin",
-    588
+    585
    ],
    [
     1,
     1,
     "k_1_1.bin",
-    733
+    731
    ],
    [
     -2,
     -1,
     "k_-2_-1.bin",
-    102
+    107
    ],
    [
     -1,
     1,
     "k_-1_1.bin",
-    660
+    659
    ],
    [
     -1,
     -1,
     "k_-1_-1.bin",
-    118
+    119
    ],
    [
     0,
     1,
     "k_0_1.bin",
-    381
+    383
    ],
    [
     0,
     -1,
     "k_0_-1.bin",
-    49
+    48
    ],
    [
     -2,
@@ -125,20 +130,109 @@
  "decks": [
   {
    "pts": [
+    -1687.21,
+    6.52,
+    -633.77,
+    -1680.36,
+    6.52,
+    -621.56,
+    -1670.31,
+    6.4,
+    -603.65,
+    -1662.7,
+    6.29,
+    -585.18,
+    -1658.66,
+    6.19,
+    -568.19,
+    -1658.25,
+    6.17,
+    -565.06,
+    -1656.73,
+    6.11,
+    -553.1,
+    -1655.66,
+    6.04,
+    -541.2,
+    -1654.41,
+    6.04,
+    -527.26
+   ],
+   "half": 20.95
+  },
+  {
+   "pts": [
+    883.08,
+    9.34,
+    796.5,
+    879.34,
+    9.34,
+    809.99,
+    877.58,
+    9.67,
+    816.33,
+    866.69,
+    11.32,
+    848.07,
+    863.52,
+    11.71,
+    855.38,
+    857.95,
+    11.71,
+    868.22
+   ],
+   "half": 20.95
+  },
+  {
+   "pts": [
+    950.13,
+    9.39,
+    891.8,
+    952.88,
+    9.39,
+    878.07,
+    962.18,
+    8.15,
+    831.69,
+    964.93,
+    8.15,
+    817.96
+   ],
+   "half": 22.6
+  },
+  {
+   "pts": [
+    -1648.3,
+    9.87,
+    233.12,
+    -1635.66,
+    9.87,
+    239.14,
+    -1609.53,
+    10.32,
+    251.59,
+    -1596.89,
+    10.32,
+    257.61
+   ],
+   "half": 20.95
+  },
+  {
+   "pts": [
     -1657.37,
-    3.24,
+    3.46,
     -426.35,
     -1653.65,
-    3.24,
+    3.46,
     -412.85,
     -1651.08,
-    3.23,
+    3.48,
     -403.53,
     -1623.54,
-    3.1,
+    3.7,
     -298.56,
     -1619.99,
-    3.1,
+    3.7,
     -285.02
    ],
    "half": 24.25
@@ -146,89 +240,123 @@
   {
    "pts": [
     -1537.22,
-    2.8,
+    2.66,
     -283.12,
     -1538.89,
-    2.8,
+    2.66,
     -297.02,
     -1543.14,
-    2.82,
+    2.74,
     -332.37,
     -1552.69,
-    2.87,
+    2.92,
     -409.35,
     -1553.61,
-    2.88,
+    2.94,
     -417.46,
     -1555.19,
-    2.88,
+    2.94,
     -431.37
    ],
-   "half": 24.25
+   "half": 19.3
   },
   {
    "pts": [
     -1545.3,
-    3.1,
+    2.63,
     -282.03,
     -1547.46,
-    3.1,
+    2.63,
     -295.86,
     -1549.54,
-    3.1,
+    2.65,
     -309.17,
     -1550.24,
-    3.1,
+    2.67,
     -317.18,
     -1562.56,
-    3.12,
+    2.89,
     -417.61,
     -1564.26,
-    3.12,
+    2.89,
     -431.51
    ],
-   "half": 24.25
+   "half": 20.95
+  },
+  {
+   "pts": [
+    580.74,
+    11.85,
+    718.74,
+    587.82,
+    11.85,
+    706.66,
+    609.71,
+    8.21,
+    669.34,
+    616.79,
+    8.21,
+    657.26
+   ],
+   "half": 22.6
   },
   {
    "pts": [
     -1118.94,
-    2.65,
+    1.47,
     -516.31,
     -1132.65,
-    2.65,
+    1.47,
     -513.45,
     -1140.85,
-    2.65,
+    1.5,
     -511.74,
     -1226.61,
-    2.59,
+    1.85,
     -493.77,
     -1236.42,
-    2.59,
+    1.89,
     -491.8,
     -1243.03,
-    2.58,
+    1.91,
     -490.47,
     -1330.6,
-    2.53,
+    2.26,
     -473.86,
     -1333.8,
-    2.53,
+    2.27,
     -473.25,
     -1386.92,
-    2.49,
+    2.48,
     -463.16,
     -1521.64,
-    2.41,
+    3.02,
     -437.61,
     -1527.16,
-    2.4,
+    3.04,
     -436.54,
     -1540.9,
-    2.4,
+    3.04,
     -433.88
    ],
    "half": 22.6
+  },
+  {
+   "pts": [
+    378.72,
+    11.15,
+    699.32,
+    364.72,
+    11.15,
+    699.44,
+    300.55,
+    11.48,
+    699.99,
+    286.55,
+    11.48,
+    700.11
+   ],
+   "half": 17.65
   }
  ],
  "tiles": [
@@ -248,9 +376,9 @@
    "file": "t_-7_-5.bin",
    "buildings": 0,
    "areas": 21,
-   "props": 10,
+   "props": 16,
    "signs": 0,
-   "bytes": 2384
+   "bytes": 2480
   },
   {
    "x": -6,
@@ -387,30 +515,33 @@
    "z": -4,
    "file": "t_-8_-4.bin",
    "buildings": 2,
-   "areas": 60,
-   "props": 17,
+   "areas": 58,
+   "props": 20,
    "signs": 0,
-   "bytes": 4076
+   "bytes": 4108,
+   "ids": "t_-8_-4.ids"
   },
   {
    "x": -7,
    "z": -4,
    "file": "t_-7_-4.bin",
-   "buildings": 16,
-   "areas": 491,
-   "props": 109,
-   "signs": 7,
-   "bytes": 33833
+   "buildings": 19,
+   "areas": 717,
+   "props": 274,
+   "signs": 8,
+   "bytes": 61143,
+   "ids": "t_-7_-4.ids"
   },
   {
    "x": -6,
    "z": -4,
    "file": "t_-6_-4.bin",
-   "buildings": 3,
-   "areas": 40,
-   "props": 2,
-   "signs": 2,
-   "bytes": 4491
+   "buildings": 4,
+   "areas": 50,
+   "props": 28,
+   "signs": 3,
+   "bytes": 8518,
+   "ids": "t_-6_-4.ids"
   },
   {
    "x": -5,
@@ -537,50 +668,56 @@
    "z": -3,
    "file": "t_-8_-3.bin",
    "buildings": 2,
-   "areas": 216,
-   "props": 42,
+   "areas": 286,
+   "props": 67,
    "signs": 0,
-   "bytes": 12196
+   "bytes": 19212,
+   "ids": "t_-8_-3.ids"
   },
   {
    "x": -7,
    "z": -3,
    "file": "t_-7_-3.bin",
    "buildings": 7,
-   "areas": 950,
-   "props": 243,
-   "signs": 2,
-   "bytes": 60725
+   "areas": 1361,
+   "props": 495,
+   "signs": 3,
+   "bytes": 99063,
+   "ids": "t_-7_-3.ids"
   },
   {
    "x": -6,
    "z": -3,
    "file": "t_-6_-3.bin",
-   "buildings": 4,
-   "areas": 46,
+   "buildings": 3,
+   "areas": 52,
    "props": 8,
    "signs": 0,
-   "bytes": 5112
+   "bytes": 7654,
+   "ids": "t_-6_-3.ids",
+   "mesh": "x_-6_-3.bin"
   },
   {
    "x": -5,
    "z": -3,
    "file": "t_-5_-3.bin",
    "buildings": 2,
-   "areas": 82,
-   "props": 112,
+   "areas": 84,
+   "props": 106,
    "signs": 1,
-   "bytes": 8048
+   "bytes": 8272,
+   "ids": "t_-5_-3.ids"
   },
   {
    "x": -4,
    "z": -3,
    "file": "t_-4_-3.bin",
-   "buildings": 5,
+   "buildings": 4,
    "areas": 100,
-   "props": 56,
+   "props": 57,
    "signs": 4,
-   "bytes": 6537
+   "bytes": 6603,
+   "ids": "t_-4_-3.ids"
   },
   {
    "x": -3,
@@ -687,70 +824,75 @@
    "z": -2,
    "file": "t_-8_-2.bin",
    "buildings": 0,
-   "areas": 90,
-   "props": 28,
+   "areas": 55,
+   "props": 31,
    "signs": 0,
-   "bytes": 4632
+   "bytes": 3460
   },
   {
    "x": -7,
    "z": -2,
    "file": "t_-7_-2.bin",
    "buildings": 3,
-   "areas": 1221,
-   "props": 233,
+   "areas": 1107,
+   "props": 235,
    "signs": 0,
-   "bytes": 69898
+   "bytes": 74146,
+   "ids": "t_-7_-2.ids"
   },
   {
    "x": -6,
    "z": -2,
    "file": "t_-6_-2.bin",
    "buildings": 0,
-   "areas": 397,
-   "props": 42,
+   "areas": 369,
+   "props": 39,
    "signs": 0,
-   "bytes": 20296
+   "bytes": 18864
   },
   {
    "x": -5,
    "z": -2,
    "file": "t_-5_-2.bin",
    "buildings": 2,
-   "areas": 227,
+   "areas": 229,
    "props": 102,
    "signs": 2,
-   "bytes": 14207
+   "bytes": 14279,
+   "ids": "t_-5_-2.ids"
   },
   {
    "x": -4,
    "z": -2,
    "file": "t_-4_-2.bin",
    "buildings": 10,
-   "areas": 550,
-   "props": 180,
+   "areas": 555,
+   "props": 178,
    "signs": 5,
-   "bytes": 30671
+   "bytes": 31027,
+   "ids": "t_-4_-2.ids"
   },
   {
    "x": -3,
    "z": -2,
    "file": "t_-3_-2.bin",
-   "buildings": 14,
-   "areas": 725,
-   "props": 256,
-   "signs": 19,
-   "bytes": 40741
+   "buildings": 16,
+   "areas": 677,
+   "props": 247,
+   "signs": 20,
+   "bytes": 38704,
+   "ids": "t_-3_-2.ids"
   },
   {
    "x": -2,
    "z": -2,
    "file": "t_-2_-2.bin",
    "buildings": 7,
-   "areas": 87,
-   "props": 100,
+   "areas": 88,
+   "props": 101,
    "signs": 2,
-   "bytes": 7687
+   "bytes": 7619,
+   "ids": "t_-2_-2.ids"
   },
   {
    "x": -1,
@@ -837,40 +979,43 @@
    "z": -1,
    "file": "t_-8_-1.bin",
    "buildings": 0,
-   "areas": 352,
-   "props": 47,
+   "areas": 365,
+   "props": 87,
    "signs": 0,
-   "bytes": 17300
+   "bytes": 24936
   },
   {
    "x": -7,
    "z": -1,
    "file": "t_-7_-1.bin",
-   "buildings": 7,
-   "areas": 1685,
-   "props": 320,
-   "signs": 4,
-   "bytes": 96563
+   "buildings": 6,
+   "areas": 2264,
+   "props": 507,
+   "signs": 3,
+   "bytes": 137820,
+   "ids": "t_-7_-1.ids"
   },
   {
    "x": -6,
    "z": -1,
    "file": "t_-6_-1.bin",
-   "buildings": 40,
-   "areas": 1347,
+   "buildings": 41,
+   "areas": 1350,
    "props": 270,
-   "signs": 23,
-   "bytes": 82321
+   "signs": 24,
+   "bytes": 82794,
+   "ids": "t_-6_-1.ids"
   },
   {
    "x": -5,
    "z": -1,
    "file": "t_-5_-1.bin",
-   "buildings": 14,
-   "areas": 847,
-   "props": 137,
-   "signs": 9,
-   "bytes": 45117
+   "buildings": 15,
+   "areas": 850,
+   "props": 134,
+   "signs": 14,
+   "bytes": 46368,
+   "ids": "t_-5_-1.ids"
   },
   {
    "x": -4,
@@ -878,9 +1023,10 @@
    "file": "t_-4_-1.bin",
    "buildings": 4,
    "areas": 727,
-   "props": 119,
+   "props": 120,
    "signs": 0,
-   "bytes": 37028
+   "bytes": 37044,
+   "ids": "t_-4_-1.ids"
   },
   {
    "x": -3,
@@ -889,58 +1035,64 @@
    "buildings": 2,
    "areas": 18,
    "props": 34,
-   "signs": 2,
-   "bytes": 2594
+   "signs": 1,
+   "bytes": 3246,
+   "ids": "t_-3_-1.ids"
   },
   {
    "x": -2,
    "z": -1,
    "file": "t_-2_-1.bin",
-   "buildings": 37,
-   "areas": 452,
-   "props": 377,
-   "signs": 48,
-   "bytes": 39131
+   "buildings": 38,
+   "areas": 475,
+   "props": 382,
+   "signs": 46,
+   "bytes": 41462,
+   "ids": "t_-2_-1.ids"
   },
   {
    "x": -1,
    "z": -1,
    "file": "t_-1_-1.bin",
-   "buildings": 39,
-   "areas": 271,
-   "props": 162,
-   "signs": 49,
-   "bytes": 24699
+   "buildings": 38,
+   "areas": 299,
+   "props": 177,
+   "signs": 44,
+   "bytes": 28448,
+   "ids": "t_-1_-1.ids"
   },
   {
    "x": 0,
    "z": -1,
    "file": "t_0_-1.bin",
-   "buildings": 13,
-   "areas": 52,
-   "props": 34,
-   "signs": 5,
-   "bytes": 5321
+   "buildings": 14,
+   "areas": 53,
+   "props": 42,
+   "signs": 6,
+   "bytes": 6117,
+   "ids": "t_0_-1.ids"
   },
   {
    "x": 1,
    "z": -1,
    "file": "t_1_-1.bin",
    "buildings": 22,
-   "areas": 158,
-   "props": 52,
+   "areas": 170,
+   "props": 82,
    "signs": 0,
-   "bytes": 12100
+   "bytes": 16028,
+   "ids": "t_1_-1.ids"
   },
   {
    "x": 2,
    "z": -1,
    "file": "t_2_-1.bin",
-   "buildings": 14,
-   "areas": 17,
-   "props": 14,
-   "signs": 4,
-   "bytes": 6312
+   "buildings": 12,
+   "areas": 38,
+   "props": 15,
+   "signs": 3,
+   "bytes": 10128,
+   "ids": "t_2_-1.ids"
   },
   {
    "x": 3,
@@ -987,20 +1139,21 @@
    "z": 0,
    "file": "t_-8_0.bin",
    "buildings": 0,
-   "areas": 420,
-   "props": 56,
+   "areas": 421,
+   "props": 52,
    "signs": 0,
-   "bytes": 22080
+   "bytes": 22300
   },
   {
    "x": -7,
    "z": 0,
    "file": "t_-7_0.bin",
-   "buildings": 17,
-   "areas": 1639,
-   "props": 324,
-   "signs": 3,
-   "bytes": 87600
+   "buildings": 18,
+   "areas": 1737,
+   "props": 305,
+   "signs": 4,
+   "bytes": 96238,
+   "ids": "t_-7_0.ids"
   },
   {
    "x": -6,
@@ -1008,9 +1161,10 @@
    "file": "t_-6_0.bin",
    "buildings": 71,
    "areas": 315,
-   "props": 230,
-   "signs": 17,
-   "bytes": 30306
+   "props": 229,
+   "signs": 18,
+   "bytes": 30373,
+   "ids": "t_-6_0.ids"
   },
   {
    "x": -5,
@@ -1018,9 +1172,10 @@
    "file": "t_-5_0.bin",
    "buildings": 65,
    "areas": 751,
-   "props": 188,
-   "signs": 15,
-   "bytes": 48319
+   "props": 170,
+   "signs": 24,
+   "bytes": 48235,
+   "ids": "t_-5_0.ids"
   },
   {
    "x": -4,
@@ -1028,89 +1183,98 @@
    "file": "t_-4_0.bin",
    "buildings": 52,
    "areas": 712,
-   "props": 186,
-   "signs": 13,
-   "bytes": 49255
+   "props": 191,
+   "signs": 18,
+   "bytes": 49535,
+   "ids": "t_-4_0.ids"
   },
   {
    "x": -3,
    "z": 0,
    "file": "t_-3_0.bin",
-   "buildings": 14,
-   "areas": 1080,
-   "props": 172,
+   "buildings": 15,
+   "areas": 1086,
+   "props": 194,
    "signs": 2,
-   "bytes": 56641
+   "bytes": 58143,
+   "ids": "t_-3_0.ids"
   },
   {
    "x": -2,
    "z": 0,
    "file": "t_-2_0.bin",
-   "buildings": 66,
-   "areas": 568,
-   "props": 219,
+   "buildings": 67,
+   "areas": 654,
+   "props": 280,
    "signs": 2,
-   "bytes": 41474
+   "bytes": 51952,
+   "ids": "t_-2_0.ids"
   },
   {
    "x": -1,
    "z": 0,
    "file": "t_-1_0.bin",
-   "buildings": 78,
-   "areas": 860,
-   "props": 347,
-   "signs": 46,
-   "bytes": 60770
+   "buildings": 79,
+   "areas": 915,
+   "props": 360,
+   "signs": 49,
+   "bytes": 67290,
+   "ids": "t_-1_0.ids"
   },
   {
    "x": 0,
    "z": 0,
    "file": "t_0_0.bin",
-   "buildings": 53,
-   "areas": 930,
-   "props": 259,
-   "signs": 25,
-   "bytes": 53571
+   "buildings": 56,
+   "areas": 1025,
+   "props": 338,
+   "signs": 28,
+   "bytes": 63914,
+   "ids": "t_0_0.ids"
   },
   {
    "x": 1,
    "z": 0,
    "file": "t_1_0.bin",
    "buildings": 39,
-   "areas": 949,
-   "props": 295,
-   "signs": 35,
-   "bytes": 55273
+   "areas": 1075,
+   "props": 306,
+   "signs": 31,
+   "bytes": 64761,
+   "ids": "t_1_0.ids"
   },
   {
    "x": 2,
    "z": 0,
    "file": "t_2_0.bin",
    "buildings": 34,
-   "areas": 557,
-   "props": 175,
-   "signs": 23,
-   "bytes": 39147
+   "areas": 645,
+   "props": 172,
+   "signs": 25,
+   "bytes": 46889,
+   "ids": "t_2_0.ids"
   },
   {
    "x": 3,
    "z": 0,
    "file": "t_3_0.bin",
    "buildings": 30,
-   "areas": 862,
-   "props": 196,
-   "signs": 17,
-   "bytes": 48359
+   "areas": 951,
+   "props": 204,
+   "signs": 18,
+   "bytes": 53871,
+   "ids": "t_3_0.ids"
   },
   {
    "x": 4,
    "z": 0,
    "file": "t_4_0.bin",
    "buildings": 11,
-   "areas": 67,
-   "props": 43,
+   "areas": 72,
+   "props": 40,
    "signs": 5,
-   "bytes": 8239
+   "bytes": 9923,
+   "ids": "t_4_0.ids"
   },
   {
    "x": 5,
@@ -1120,7 +1284,8 @@
    "areas": 23,
    "props": 101,
    "signs": 2,
-   "bytes": 5823
+   "bytes": 6615,
+   "ids": "t_5_0.ids"
   },
   {
    "x": 6,
@@ -1130,37 +1295,41 @@
    "areas": 10,
    "props": 63,
    "signs": 0,
-   "bytes": 4366
+   "bytes": 4366,
+   "ids": "t_6_0.ids"
   },
   {
    "x": -8,
    "z": 1,
    "file": "t_-8_1.bin",
    "buildings": 2,
-   "areas": 118,
-   "props": 38,
+   "areas": 117,
+   "props": 45,
    "signs": 0,
-   "bytes": 7704
+   "bytes": 7772,
+   "ids": "t_-8_1.ids"
   },
   {
    "x": -7,
    "z": 1,
    "file": "t_-7_1.bin",
    "buildings": 34,
-   "areas": 1125,
-   "props": 301,
+   "areas": 1201,
+   "props": 312,
    "signs": 10,
-   "bytes": 78445
+   "bytes": 81737,
+   "ids": "t_-7_1.ids"
   },
   {
    "x": -6,
    "z": 1,
    "file": "t_-6_1.bin",
    "buildings": 112,
-   "areas": 298,
-   "props": 172,
+   "areas": 423,
+   "props": 197,
    "signs": 29,
-   "bytes": 33626
+   "bytes": 39290,
+   "ids": "t_-6_1.ids"
   },
   {
    "x": -5,
@@ -1168,19 +1337,21 @@
    "file": "t_-5_1.bin",
    "buildings": 148,
    "areas": 355,
-   "props": 289,
+   "props": 286,
    "signs": 25,
-   "bytes": 41174
+   "bytes": 41126,
+   "ids": "t_-5_1.ids"
   },
   {
    "x": -4,
    "z": 1,
    "file": "t_-4_1.bin",
-   "buildings": 113,
+   "buildings": 114,
    "areas": 467,
-   "props": 253,
-   "signs": 28,
-   "bytes": 39581
+   "props": 244,
+   "signs": 29,
+   "bytes": 39597,
+   "ids": "t_-4_1.ids"
   },
   {
    "x": -3,
@@ -1188,89 +1359,98 @@
    "file": "t_-3_1.bin",
    "buildings": 106,
    "areas": 796,
-   "props": 261,
+   "props": 220,
    "signs": 30,
-   "bytes": 58275
+   "bytes": 57130,
+   "ids": "t_-3_1.ids"
   },
   {
    "x": -2,
    "z": 1,
    "file": "t_-2_1.bin",
    "buildings": 89,
-   "areas": 1151,
-   "props": 315,
+   "areas": 1125,
+   "props": 316,
    "signs": 19,
-   "bytes": 73685
+   "bytes": 72485,
+   "ids": "t_-2_1.ids"
   },
   {
    "x": -1,
    "z": 1,
    "file": "t_-1_1.bin",
-   "buildings": 67,
-   "areas": 1500,
-   "props": 495,
-   "signs": 12,
-   "bytes": 99595
+   "buildings": 66,
+   "areas": 1470,
+   "props": 518,
+   "signs": 16,
+   "bytes": 105564,
+   "ids": "t_-1_1.ids"
   },
   {
    "x": 0,
    "z": 1,
    "file": "t_0_1.bin",
    "buildings": 90,
-   "areas": 745,
-   "props": 280,
+   "areas": 898,
+   "props": 242,
    "signs": 7,
-   "bytes": 56596
+   "bytes": 65000,
+   "ids": "t_0_1.ids"
   },
   {
    "x": 1,
    "z": 1,
    "file": "t_1_1.bin",
-   "buildings": 92,
-   "areas": 408,
-   "props": 236,
+   "buildings": 91,
+   "areas": 518,
+   "props": 256,
    "signs": 5,
-   "bytes": 38225
+   "bytes": 47699,
+   "ids": "t_1_1.ids"
   },
   {
    "x": 2,
    "z": 1,
    "file": "t_2_1.bin",
    "buildings": 77,
-   "areas": 922,
-   "props": 269,
+   "areas": 1043,
+   "props": 280,
    "signs": 6,
-   "bytes": 61098
+   "bytes": 70778,
+   "ids": "t_2_1.ids"
   },
   {
    "x": 3,
    "z": 1,
    "file": "t_3_1.bin",
    "buildings": 93,
-   "areas": 732,
-   "props": 202,
-   "signs": 42,
-   "bytes": 51324
+   "areas": 840,
+   "props": 190,
+   "signs": 39,
+   "bytes": 58599,
+   "ids": "t_3_1.ids"
   },
   {
    "x": 4,
    "z": 1,
    "file": "t_4_1.bin",
-   "buildings": 66,
-   "areas": 669,
-   "props": 187,
+   "buildings": 64,
+   "areas": 803,
+   "props": 178,
    "signs": 41,
-   "bytes": 49323
+   "bytes": 59147,
+   "ids": "t_4_1.ids"
   },
   {
    "x": 5,
    "z": 1,
    "file": "t_5_1.bin",
    "buildings": 141,
-   "areas": 510,
-   "props": 386,
+   "areas": 526,
+   "props": 380,
    "signs": 23,
-   "bytes": 51820
+   "bytes": 53092,
+   "ids": "t_5_1.ids"
   },
   {
    "x": 6,
@@ -1278,9 +1458,10 @@
    "file": "t_6_1.bin",
    "buildings": 104,
    "areas": 221,
-   "props": 141,
+   "props": 139,
    "signs": 3,
-   "bytes": 24843
+   "bytes": 24795,
+   "ids": "t_6_1.ids"
   },
   {
    "x": -8,
@@ -1290,37 +1471,41 @@
    "areas": 98,
    "props": 11,
    "signs": 0,
-   "bytes": 5458
+   "bytes": 5458,
+   "ids": "t_-8_2.ids"
   },
   {
    "x": -7,
    "z": 2,
    "file": "t_-7_2.bin",
-   "buildings": 7,
+   "buildings": 6,
    "areas": 171,
    "props": 8,
    "signs": 0,
-   "bytes": 11070
+   "bytes": 10992,
+   "ids": "t_-7_2.ids"
   },
   {
    "x": -6,
    "z": 2,
    "file": "t_-6_2.bin",
-   "buildings": 28,
-   "areas": 158,
-   "props": 70,
+   "buildings": 27,
+   "areas": 440,
+   "props": 128,
    "signs": 2,
-   "bytes": 15029
+   "bytes": 27255,
+   "ids": "t_-6_2.ids"
   },
   {
    "x": -5,
    "z": 2,
    "file": "t_-5_2.bin",
-   "buildings": 83,
-   "areas": 594,
-   "props": 171,
-   "signs": 6,
-   "bytes": 47300
+   "buildings": 82,
+   "areas": 634,
+   "props": 204,
+   "signs": 7,
+   "bytes": 50554,
+   "ids": "t_-5_2.ids"
   },
   {
    "x": -4,
@@ -1328,29 +1513,32 @@
    "file": "t_-4_2.bin",
    "buildings": 148,
    "areas": 390,
-   "props": 237,
+   "props": 232,
    "signs": 45,
-   "bytes": 42530
+   "bytes": 42360,
+   "ids": "t_-4_2.ids"
   },
   {
    "x": -3,
    "z": 2,
    "file": "t_-3_2.bin",
-   "buildings": 152,
-   "areas": 730,
-   "props": 190,
+   "buildings": 151,
+   "areas": 741,
+   "props": 196,
    "signs": 24,
-   "bytes": 54642
+   "bytes": 55160,
+   "ids": "t_-3_2.ids"
   },
   {
    "x": -2,
    "z": 2,
    "file": "t_-2_2.bin",
-   "buildings": 72,
-   "areas": 1303,
-   "props": 243,
-   "signs": 40,
-   "bytes": 75581
+   "buildings": 69,
+   "areas": 1347,
+   "props": 249,
+   "signs": 39,
+   "bytes": 77377,
+   "ids": "t_-2_2.ids"
   },
   {
    "x": -1,
@@ -1358,69 +1546,76 @@
    "file": "t_-1_2.bin",
    "buildings": 77,
    "areas": 1176,
-   "props": 321,
-   "signs": 24,
-   "bytes": 71908
+   "props": 317,
+   "signs": 23,
+   "bytes": 71723,
+   "ids": "t_-1_2.ids"
   },
   {
    "x": 0,
    "z": 2,
    "file": "t_0_2.bin",
    "buildings": 147,
-   "areas": 773,
-   "props": 207,
-   "signs": 43,
-   "bytes": 60725
+   "areas": 775,
+   "props": 168,
+   "signs": 44,
+   "bytes": 60069,
+   "ids": "t_0_2.ids"
   },
   {
    "x": 1,
    "z": 2,
    "file": "t_1_2.bin",
    "buildings": 10,
-   "areas": 812,
-   "props": 231,
+   "areas": 823,
+   "props": 255,
    "signs": 0,
-   "bytes": 53872
+   "bytes": 57324,
+   "ids": "t_1_2.ids"
   },
   {
    "x": 2,
    "z": 2,
    "file": "t_2_2.bin",
-   "buildings": 50,
-   "areas": 1139,
-   "props": 274,
+   "buildings": 49,
+   "areas": 1263,
+   "props": 279,
    "signs": 13,
-   "bytes": 69223
+   "bytes": 79053,
+   "ids": "t_2_2.ids"
   },
   {
    "x": 3,
    "z": 2,
    "file": "t_3_2.bin",
-   "buildings": 128,
-   "areas": 614,
-   "props": 219,
-   "signs": 15,
-   "bytes": 48739
+   "buildings": 129,
+   "areas": 757,
+   "props": 201,
+   "signs": 16,
+   "bytes": 59163,
+   "ids": "t_3_2.ids"
   },
   {
    "x": 4,
    "z": 2,
    "file": "t_4_2.bin",
    "buildings": 142,
-   "areas": 392,
-   "props": 172,
-   "signs": 9,
-   "bytes": 40265
+   "areas": 592,
+   "props": 186,
+   "signs": 8,
+   "bytes": 57500,
+   "ids": "t_4_2.ids"
   },
   {
    "x": 5,
    "z": 2,
    "file": "t_5_2.bin",
    "buildings": 211,
-   "areas": 401,
-   "props": 276,
+   "areas": 415,
+   "props": 281,
    "signs": 23,
-   "bytes": 51280
+   "bytes": 52284,
+   "ids": "t_5_2.ids"
   },
   {
    "x": 6,
@@ -1428,9 +1623,10 @@
    "file": "t_6_2.bin",
    "buildings": 95,
    "areas": 190,
-   "props": 110,
+   "props": 109,
    "signs": 14,
-   "bytes": 23401
+   "bytes": 23385,
+   "ids": "t_6_2.ids"
   },
   {
    "x": -8,
@@ -1460,17 +1656,19 @@
    "areas": 7,
    "props": 252,
    "signs": 0,
-   "bytes": 7046
+   "bytes": 7046,
+   "ids": "t_-6_3.ids"
   },
   {
    "x": -5,
    "z": 3,
    "file": "t_-5_3.bin",
-   "buildings": 11,
-   "areas": 1392,
-   "props": 295,
+   "buildings": 10,
+   "areas": 1576,
+   "props": 337,
    "signs": 2,
-   "bytes": 75946
+   "bytes": 84620,
+   "ids": "t_-5_3.ids"
   },
   {
    "x": -4,
@@ -1478,9 +1676,10 @@
    "file": "t_-4_3.bin",
    "buildings": 120,
    "areas": 1264,
-   "props": 352,
+   "props": 349,
    "signs": 17,
-   "bytes": 84345
+   "bytes": 84297,
+   "ids": "t_-4_3.ids"
   },
   {
    "x": -3,
@@ -1488,19 +1687,21 @@
    "file": "t_-3_3.bin",
    "buildings": 144,
    "areas": 551,
-   "props": 236,
+   "props": 231,
    "signs": 11,
-   "bytes": 50348
+   "bytes": 50257,
+   "ids": "t_-3_3.ids"
   },
   {
    "x": -2,
    "z": 3,
    "file": "t_-2_3.bin",
    "buildings": 42,
-   "areas": 1065,
-   "props": 194,
+   "areas": 1061,
+   "props": 188,
    "signs": 22,
-   "bytes": 60941
+   "bytes": 60604,
+   "ids": "t_-2_3.ids"
   },
   {
    "x": -1,
@@ -1510,77 +1711,85 @@
    "areas": 717,
    "props": 146,
    "signs": 9,
-   "bytes": 45506
+   "bytes": 45490,
+   "ids": "t_-1_3.ids"
   },
   {
    "x": 0,
    "z": 3,
    "file": "t_0_3.bin",
    "buildings": 43,
-   "areas": 1120,
-   "props": 263,
+   "areas": 1275,
+   "props": 291,
    "signs": 20,
-   "bytes": 63883
+   "bytes": 71191,
+   "ids": "t_0_3.ids"
   },
   {
    "x": 1,
    "z": 3,
    "file": "t_1_3.bin",
-   "buildings": 15,
+   "buildings": 14,
    "areas": 550,
-   "props": 209,
+   "props": 204,
    "signs": 12,
-   "bytes": 36424
+   "bytes": 36239,
+   "ids": "t_1_3.ids"
   },
   {
    "x": 2,
    "z": 3,
    "file": "t_2_3.bin",
-   "buildings": 26,
-   "areas": 588,
-   "props": 142,
+   "buildings": 24,
+   "areas": 586,
+   "props": 137,
    "signs": 5,
-   "bytes": 36047
+   "bytes": 35707,
+   "ids": "t_2_3.ids"
   },
   {
    "x": 3,
    "z": 3,
    "file": "t_3_3.bin",
    "buildings": 51,
-   "areas": 789,
-   "props": 234,
+   "areas": 805,
+   "props": 241,
    "signs": 21,
-   "bytes": 54632
+   "bytes": 56276,
+   "ids": "t_3_3.ids"
   },
   {
    "x": 4,
    "z": 3,
    "file": "t_4_3.bin",
    "buildings": 103,
-   "areas": 878,
-   "props": 212,
+   "areas": 900,
+   "props": 205,
    "signs": 3,
-   "bytes": 60275
+   "bytes": 62267,
+   "ids": "t_4_3.ids"
   },
   {
    "x": 5,
    "z": 3,
    "file": "t_5_3.bin",
-   "buildings": 134,
-   "areas": 1077,
-   "props": 224,
+   "buildings": 132,
+   "areas": 1081,
+   "props": 223,
    "signs": 4,
-   "bytes": 72447
+   "bytes": 72467,
+   "ids": "t_5_3.ids"
   },
   {
    "x": 6,
    "z": 3,
    "file": "t_6_3.bin",
-   "buildings": 80,
+   "buildings": 79,
    "areas": 259,
    "props": 78,
    "signs": 0,
-   "bytes": 24320
+   "bytes": 24258,
+   "ids": "t_6_3.ids"
   },
   {
    "x": -8,
@@ -1617,30 +1826,33 @@
    "z": 4,
    "file": "t_-5_4.bin",
    "buildings": 7,
-   "areas": 1138,
-   "props": 322,
+   "areas": 1297,
+   "props": 345,
    "signs": 5,
-   "bytes": 69164
+   "bytes": 76168,
+   "ids": "t_-5_4.ids"
   },
   {
    "x": -4,
    "z": 4,
    "file": "t_-4_4.bin",
    "buildings": 237,
-   "areas": 58,
-   "props": 97,
+   "areas": 56,
+   "props": 91,
    "signs": 7,
-   "bytes": 40231
+   "bytes": 39975,
+   "ids": "t_-4_4.ids"
   },
   {
    "x": -3,
    "z": 4,
    "file": "t_-3_4.bin",
-   "buildings": 117,
+   "buildings": 116,
    "areas": 775,
-   "props": 204,
+   "props": 197,
    "signs": 2,
-   "bytes": 54510
+   "bytes": 54304,
+   "ids": "t_-3_4.ids"
   },
   {
    "x": -2,
@@ -1648,9 +1860,10 @@
    "file": "t_-2_4.bin",
    "buildings": 111,
    "areas": 308,
-   "props": 100,
+   "props": 97,
    "signs": 0,
-   "bytes": 30034
+   "bytes": 29826,
+   "ids": "t_-2_4.ids"
   },
   {
    "x": -1,
@@ -1658,39 +1871,43 @@
    "file": "t_-1_4.bin",
    "buildings": 115,
    "areas": 680,
-   "props": 234,
-   "signs": 16,
-   "bytes": 49224
+   "props": 235,
+   "signs": 17,
+   "bytes": 49274,
+   "ids": "t_-1_4.ids"
   },
   {
    "x": 0,
    "z": 4,
    "file": "t_0_4.bin",
    "buildings": 86,
-   "areas": 1110,
-   "props": 322,
-   "signs": 28,
-   "bytes": 69957
+   "areas": 1123,
+   "props": 325,
+   "signs": 29,
+   "bytes": 70682,
+   "ids": "t_0_4.ids"
   },
   {
    "x": 1,
    "z": 4,
    "file": "t_1_4.bin",
-   "buildings": 44,
-   "areas": 891,
-   "props": 298,
-   "signs": 39,
-   "bytes": 55592
+   "buildings": 45,
+   "areas": 894,
+   "props": 297,
+   "signs": 40,
+   "bytes": 55936,
+   "ids": "t_1_4.ids"
   },
   {
    "x": 2,
    "z": 4,
    "file": "t_2_4.bin",
-   "buildings": 60,
+   "buildings": 61,
    "areas": 733,
-   "props": 236,
-   "signs": 24,
-   "bytes": 49524
+   "props": 233,
+   "signs": 23,
+   "bytes": 49952,
+   "ids": "t_2_4.ids"
   },
   {
    "x": 3,
@@ -1698,19 +1915,21 @@
    "file": "t_3_4.bin",
    "buildings": 134,
    "areas": 537,
-   "props": 285,
-   "signs": 4,
-   "bytes": 47822
+   "props": 290,
+   "signs": 5,
+   "bytes": 47927,
+   "ids": "t_3_4.ids"
   },
   {
    "x": 4,
    "z": 4,
    "file": "t_4_4.bin",
-   "buildings": 260,
+   "buildings": 258,
    "areas": 82,
-   "props": 173,
+   "props": 159,
    "signs": 0,
-   "bytes": 41628
+   "bytes": 41008,
+   "ids": "t_4_4.ids"
   },
   {
    "x": 5,
@@ -1718,9 +1937,10 @@
    "file": "t_5_4.bin",
    "buildings": 240,
    "areas": 70,
-   "props": 133,
+   "props": 128,
    "signs": 0,
-   "bytes": 35948
+   "bytes": 35740,
+   "ids": "t_5_4.ids"
   },
   {
    "x": 6,
@@ -1730,7 +1950,8 @@
    "areas": 15,
    "props": 24,
    "signs": 0,
-   "bytes": 15440
+   "bytes": 15440,
+   "ids": "t_6_4.ids"
   },
   {
    "x": -8,
@@ -1767,20 +1988,20 @@
    "z": 5,
    "file": "t_-5_5.bin",
    "buildings": 0,
-   "areas": 18,
+   "areas": 16,
    "props": 61,
    "signs": 0,
-   "bytes": 3924
+   "bytes": 3764
   },
   {
    "x": -4,
    "z": 5,
    "file": "t_-4_5.bin",
    "buildings": 0,
-   "areas": 115,
-   "props": 27,
+   "areas": 112,
+   "props": 23,
    "signs": 0,
-   "bytes": 8324
+   "bytes": 7480
   },
   {
    "x": -3,
@@ -1788,9 +2009,10 @@
    "file": "t_-3_5.bin",
    "buildings": 7,
    "areas": 61,
-   "props": 19,
+   "props": 18,
    "signs": 1,
-   "bytes": 5626
+   "bytes": 5610,
+   "ids": "t_-3_5.ids"
   },
   {
    "x": -2,
@@ -1798,9 +2020,10 @@
    "file": "t_-2_5.bin",
    "buildings": 39,
    "areas": 215,
-   "props": 43,
+   "props": 40,
    "signs": 0,
-   "bytes": 14486
+   "bytes": 14406,
+   "ids": "t_-2_5.ids"
   },
   {
    "x": -1,
@@ -1810,7 +2033,8 @@
    "areas": 188,
    "props": 54,
    "signs": 5,
-   "bytes": 14309
+   "bytes": 14309,
+   "ids": "t_-1_5.ids"
   },
   {
    "x": 0,
@@ -1818,19 +2042,21 @@
    "file": "t_0_5.bin",
    "buildings": 25,
    "areas": 219,
-   "props": 44,
+   "props": 45,
    "signs": 2,
-   "bytes": 13907
+   "bytes": 13923,
+   "ids": "t_0_5.ids"
   },
   {
    "x": 1,
    "z": 5,
    "file": "t_1_5.bin",
    "buildings": 8,
-   "areas": 570,
-   "props": 183,
+   "areas": 574,
+   "props": 181,
    "signs": 2,
-   "bytes": 29843
+   "bytes": 30603,
+   "ids": "t_1_5.ids"
   },
   {
    "x": 2,
@@ -1838,9 +2064,10 @@
    "file": "t_2_5.bin",
    "buildings": 11,
    "areas": 228,
-   "props": 65,
+   "props": 67,
    "signs": 11,
-   "bytes": 13281
+   "bytes": 13313,
+   "ids": "t_2_5.ids"
   },
   {
    "x": 3,
@@ -1848,9 +2075,10 @@
    "file": "t_3_5.bin",
    "buildings": 13,
    "areas": 226,
-   "props": 113,
-   "signs": 4,
-   "bytes": 16648
+   "props": 111,
+   "signs": 5,
+   "bytes": 16669,
+   "ids": "t_3_5.ids"
   },
   {
    "x": 4,
@@ -1858,9 +2086,10 @@
    "file": "t_4_5.bin",
    "buildings": 30,
    "areas": 172,
-   "props": 95,
+   "props": 90,
    "signs": 5,
-   "bytes": 15435
+   "bytes": 15307,
+   "ids": "t_4_5.ids"
   },
   {
    "x": 5,
@@ -1868,9 +2097,10 @@
    "file": "t_5_5.bin",
    "buildings": 40,
    "areas": 158,
-   "props": 50,
+   "props": 49,
    "signs": 4,
-   "bytes": 13049
+   "bytes": 13033,
+   "ids": "t_5_5.ids"
   },
   {
    "x": 6,
@@ -1880,12 +2110,15 @@
    "areas": 8,
    "props": 3,
    "signs": 0,
-   "bytes": 2750
+   "bytes": 2750,
+   "ids": "t_6_5.ids"
   }
  ],
  "attribution": [
   "Buildings, roads, coastline and places: © OpenStreetMap contributors (ODbL 1.0)",
   "Building heights: FEMA / ORNL USA Structures (public domain)",
-  "Elevation: USGS 3DEP via AWS Terrain Tiles"
+  "Building ids (Overture GERS) and lidar heights: Garita (https://github.com/webgpu-demos/garita), from Overture Maps Foundation and USGS 3DEP",
+  "Elevation: USGS 3DEP via AWS Terrain Tiles",
+  "Elevation: USGS 3D Elevation Program, 1 m DEM from lidar (PR_PuertoRicoUSVI_D24)"
  ]
 }
