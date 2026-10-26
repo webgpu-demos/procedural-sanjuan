@@ -71,6 +71,14 @@ export class Streamer {
 
   // Terrain height, and the height of whatever one stands on (the terrain, or a bridge deck).
   ground(x, z) { return sampleGrid(this.grid, x, z); }
+  // How high the paving at (x, z) stands over the terrain (a sidewalk, a carriageway, an island), where its tile is
+  // loaded; 0 elsewhere
+  lift(x, z) {
+    const size = this.manifest.tileSize, t = this.tiles.get(tileKey(Math.floor(x / size), Math.floor(z / size)))?.lifts;
+    if (!t) return 0;
+    const i = Math.floor((x - t.x0) / t.cell), j = Math.floor((z - t.z0) / t.cell);
+    return i < 0 || j < 0 || i >= t.n || j >= t.n ? 0 : t.data[j * t.n + i] / 100;
+  }
 
   // focus: the point tiles are streamed around; eye: the camera position, for level of detail.
   update(focus, eye = focus) {
@@ -85,9 +93,10 @@ export class Streamer {
       const d = Math.hypot(dx, dy, dz);
       if (t.trees) {
         // a tile full of trees (a wood) keeps its detailed ones closer: thousands of them are too much to draw
-        const limit = this.props.constructor.lodDistance * (t.trees.count > 120 ? 0.5 : 1);
+        const limit = this.props.constructor.lodDistance * (t.trees.count > 120 ? 0.6 : 1);
         const near = t.trees.near.visible ? d < limit * 1.25 : d < limit;
         t.trees.near.visible = near; t.trees.far.visible = !near;
+        if (t.trees.lines) t.trees.lines.visible = d < this.props.constructor.wireDistance;
       }
       for (const a of t.atlases) {
         const want = d < a.dist * (a.full || a.loading ? 1.3 : 1);
@@ -126,6 +135,9 @@ export class Streamer {
       const d = dist(tl);
       if (d <= this.radius) wanted.push([d, key, tl]);
     }
+    // (nearest first, and those in front of the eye before those behind it: this.look, the way it looks)
+    const [lx, lz] = this.look ?? [0, 0];
+    for (const w of wanted) { const tl = w[2], vx = (tl.x + 0.5) * size - focus.x, vz = (tl.z + 0.5) * size - focus.z; w[0] *= 1 - 0.35 * ((vx * lx + vz * lz) / (Math.hypot(vx, vz) || 1)); }
     wanted.sort((a, b) => a[0] - b[0]);
     const url = (file) => new URL(`${this.base}/${file}`, location.href).href;
     for (const [, key, tl] of wanted) {
@@ -177,6 +189,7 @@ export class Streamer {
     const group = new THREE.Group();
     group.name = `tile ${msg.key}`;
     group.userData.solids = solidsOf(props); // (what a car or a walker runs into: collide.js)
+    t.lifts = msg.mesh.lifts; // (how high the paving stands: lift())
     const atlases = [];
 
     const ground = new THREE.Mesh(geometry(terrain, [['position', 3], ['normal', 3]]), this.materials.terrain);

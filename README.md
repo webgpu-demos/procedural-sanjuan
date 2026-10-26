@@ -112,6 +112,16 @@ mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
   furniture on the paved carriageway, or within reach of a car in a road's outer lane, is left out (a signal
   mast steps back along its approach instead); `node tools/audit/roadway.mjs` counts them (about 2,100 of
   460,000 props across San Juan).
+- **On the paving, not in it**: each tile's worker rasterises how high its surfaces stand over the terrain (a
+  sidewalk 20 cm, a carriageway 6, an island 22; `streamer.lift`), and the walker, the bike and the car stand on
+  that, up a kerb and down again.
+- **The expressway's height** (`src/shared/profile.js`): the elevation model has the overpasses crossing the
+  expressway in it, and the compiler lifts every expressway bridge a flyover's clearance even over its own
+  embankment; both made humps of walled ramp over a road that runs on the ground (PR-22 in the opening). As
+  roads.json loads, an expressway bridge on its embankment runs level from bank to bank, the rest of the
+  expressway takes its ground from a low percentile of the terrain round it, and the 6% grade is laid over again
+  (a ramp still climbs to every true flyover); the simulated cars driven over an old hump are put on the road.
+  Flyover and footbridge piers stand clear of the lanes below them (moved along or across the deck, or left out).
 - **Cameras** (`V`): chase, close, first person, cinematic.
 - **The time of day**: dawn, rush hour, noon, dusk, night (the simulated cars from 4:30 to 10:15; outside the
   run, the procedural traffic).

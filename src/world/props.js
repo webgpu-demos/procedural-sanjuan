@@ -10,7 +10,8 @@ import { LAMP_LAYER, lampMaterial, gridAware } from './lamplight.js';
 import { parkedVehicles } from './traffic.js';
 import { DECAL_COLS, DECAL_ROWS } from './decals.js';
 
-const TREE_LOD_DISTANCE = 160; // metres from the camera to the nearest point of a tile; beyond it trees are simple shapes
+const TREE_LOD_DISTANCE = 300; // metres from the camera to the nearest point of a tile; beyond it trees are simple shapes
+const WIRE_LOD_DISTANCE = 140; // and the power lines beyond this are left out
 
 // ---------------------------------------------------------------- geometry helpers
 function colored(geo, rgb) {
@@ -636,8 +637,8 @@ export class Props {
   // props: Float32Array of [kind, variant, rot, x, z, scale] rows; wires: Float32Array of [x1, z1, x2, z2] rows.
   // Returns { group, near, far, count } — `near` holds the full trees, `far` the simple ones; count = trees.
   build(props, wires, ground) {
-    const group = new THREE.Group(), near = new THREE.Group(), far = new THREE.Group();
-    group.add(near, far);
+    const group = new THREE.Group(), near = new THREE.Group(), far = new THREE.Group(), lines = new THREE.Group();
+    group.add(near, far, lines);
     const by = new Map();
     for (let i = 0; i < props.length; i += 6) {
       // one instanced mesh per kind and model; parked cars share a model per vehicle type (their variant also carries the colour)
@@ -726,10 +727,11 @@ export class Props {
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-      near.add(new THREE.LineSegments(g, this.mats.wire)); // hair-thin: only worth drawing close up
+      lines.add(new THREE.LineSegments(g, this.mats.wire)); // hair-thin: only worth drawing close up (a line is a pixel wide however far: six of them a black band)
     }
-    return { group, near, far, count: this.trees.reduce((n, _, v) => n + (by.get(PROP.TREE * 16 + v) ?? []).length, 0) };
+    return { group, near, far, lines, count: this.trees.reduce((n, _, v) => n + (by.get(PROP.TREE * 16 + v) ?? []).length, 0) };
   }
 
   static lodDistance = TREE_LOD_DISTANCE;
+  static wireDistance = WIRE_LOD_DISTANCE;
 }

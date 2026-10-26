@@ -7,8 +7,24 @@ const DECK_ABOVE = 2.0;   // road level this far above the ground gets a deck on
 const RAMP_ABOVE = 0.35;  // below this the road is the ordinary ground surface
 const PIER_SPACING = 27, STEP = 3;
 
-export async function buildFlyovers(url, ground) {
-  const { edges } = await (await fetch(url)).json();
+// depth(x, z): how far inside the lanes of a road at street level (x, z) is (src/shared/roadway.js laneDepth), or
+// null: no pier stands in them
+// The section at or near cs[i] (up to 4 on either side, nearest first) where a pier of half-size `foot` can stand
+// clear of the lanes below, moved `across` the deck if need be: a section-like { p, t, n, h }, or null
+export function clearSpot(cs, i, across, high, foot, depth, skip = null) {
+  for (const k of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+    const c = cs[i + k];
+    if (!c || c.h <= high) continue;
+    for (const l of across) {
+      const p = [c.p[0] + c.n[0] * l, c.p[1], c.p[2] + c.n[2] * l];
+      if (!depth || depth(p[0], p[2], skip) + foot <= 0) return { ...c, p };
+    }
+  }
+  return null;
+}
+
+export async function buildFlyovers(roads, ground, depth = null) { // (roads: roads.json, or its url)
+  const { edges } = typeof roads === 'string' ? await (await fetch(roads)).json() : roads;
   const concrete = [0.6, 0.6, 0.58], asphalt = [0.3, 0.3, 0.32], paint = [0.9, 0.9, 0.87], barrier = [0.7, 0.72, 0.72];
   const soup = new Soup();
   const at = (c, l, v) => [c.p[0] + c.n[0] * l, c.p[1] + v, c.p[2] + c.n[2] * l];
@@ -59,9 +75,13 @@ export async function buildFlyovers(url, ground) {
         sweep(a, b, (c) => [[w, -Math.max(c.h, 0) - 0.4], [w, 0.9]], concrete);
       }
     }
-    for (const c of cs) {
-      if (!e.span && c.h > DECK_ABOVE + 1.5 && Math.round(c.s / STEP) % Math.round(PIER_SPACING / STEP) === 1)
-        soup.box(c.p, c.t, c.n, 1.1, Math.min(1.5, w * 0.4), c.p[1] - c.h - 1.5, c.p[1] - 1.5, concrete);
+    // piers every 27 m where the deck stands high, each at the nearest place clear of the lanes of the roads
+    // under it (along the deck, or across it: a median, a sidewalk); none where there is no such place near
+    const slot = Math.round(PIER_SPACING / STEP), pw = Math.min(1.5, w * 0.4);
+    for (let i = 0; i < cs.length; i++) {
+      if (e.span || Math.round(cs[i].s / STEP) % slot !== 1 || cs[i].h <= DECK_ABOVE + 1.5) continue;
+      const spot = clearSpot(cs, i, [0, 0.45 * w, -0.45 * w, 0.8 * w - pw / 2, -(0.8 * w - pw / 2)], DECK_ABOVE + 1.5, 1.0, depth, e.way);
+      if (spot) soup.box(spot.p, spot.t, spot.n, 1.1, pw, spot.p[1] - spot.h - 1.5, spot.p[1] - 1.5, concrete);
     }
   }
   for (let i = 0; i < soup.col.length; i += 3) {
