@@ -167,16 +167,19 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     return best;
   };
   const heritageRing = heritage ? [heritage.map(([lon, lat]) => proj.project(lon, lat))] : null;
-  const stats = { osm: osm.length, parts: 0, outlinesWithParts: 0, fromHeight: 0, fromLidar: 0, fromLevels: 0, fromFema: 0, fromDefault: 0, femaOnly: 0, femaTotal: fema.length, withGers: 0 };
+  const stats = { osm: osm.length, parts: 0, outlinesWithParts: 0, outlinesCapped: 0, fromHeight: 0, fromLidar: 0, fromLevels: 0, fromFema: 0, fromDefault: 0, femaOnly: 0, femaTotal: fema.length, withGers: 0 };
 
   // building:part pieces replace the outline they stand in
   const parts = osm.filter((b) => b.part), whole = osm.filter((b) => !b.part);
   const usedFema = new Set();
   const out = [];
-  const add = (b, isPart, outline = null) => {
+  // parts: for an outline drawn with the parts inside it, their records (see below)
+  const add = (b, isPart, outline = null, parts = null) => {
     const t = b.tags, outer = b.polygons[0][0];
-    // Garita's record for it: the outline's for a part (Garita keeps outlines; a part's own height stays its own)
-    const g = garita?.byOsm.get((outline ?? b).id) ?? null, lidar = !isPart && g?.hsrc === 'lidar' && g.height > 0 ? g.height : null;
+    // Garita's record for it: the outline's for a part (Garita keeps outlines; a part's own height stays its own).
+    // Its lidar height is the roof over the whole outline, so not for an outline drawn with its parts: there it is
+    // mostly the parts' roofs (a tower's, over a podium), and the outline would be drawn as high as the tower.
+    const g = garita?.byOsm.get((outline ?? b).id) ?? null, lidar = !isPart && !parts?.length && g?.hsrc === 'lidar' && g.height > 0 ? g.height : null;
     const [cx, cz] = proj.project(...centroidLL(outer));
     const f = femaAt(cx, cz);
     if (f) usedFema.add(f.i);
@@ -197,7 +200,16 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     let minHeight = num(t.min_height) ?? (num(t['building:min_level']) != null ? num(t['building:min_level']) * fh : 0);
     if (!isPart) minHeight = 0;
     if (minHeight >= height) minHeight = 0;
-    const storeys = levels > 0 ? Math.round(levels) : Math.max(1, Math.round(height / fh));
+    // An outline drawn with its parts is what stands under the parts raised off the ground (building:min_level):
+    // no higher than the lowest of them, or it swallows them (OSM's levels on such an outline often count the
+    // whole tower).
+    const raised = parts?.map((p) => p.minHeight).filter((m) => m > 0.5) ?? [];
+    let capped = false;
+    if (raised.length && height > Math.min(...raised)) { height = Math.min(...raised); capped = true; stats.outlinesCapped++; }
+    // (the levels tag counts the floors, unless the height came from elsewhere and the two disagree: a lidar height
+    // over a podium's levels, an outline kept under its parts)
+    const fits = levels > 0 && !capped && (source !== 'fromLidar' || (height / levels >= 2.4 && height / levels <= 6));
+    const storeys = fits ? Math.round(levels) : Math.max(1, Math.round(height / fh));
     // the colonial city: painted plaster in its own colours (a mapped colour wins, see compile.mjs)
     let hint = 0;
     if (inHeritage && colonial?.length && ![421, 422, 431, 441, 452].includes(usage)) {
@@ -208,8 +220,10 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     const masonry = /^(castle|fort|fortress|bunker)$/.test(t.building) || /^(castle|fort|citywalls|fortress)$/.test(t.historic ?? '') || t.castle_type === 'fortress';
     if (masonry) hint = (0x80000000 | STONE[Math.floor(seed * STONE.length)] | (3 << 24)) >>> 0;
     if (g?.gers) stats.withGers++;
-    out.push({ id: b.id, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured, hint, heritage: inHeritage, masonry,
-      roof: t['roof:shape'] ?? null, name: t.name ?? null, gers: g?.gers ?? null });
+    const rec = { id: b.id, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured: measured && !capped, hint, heritage: inHeritage, masonry,
+      roof: t['roof:shape'] ?? null, name: t.name ?? null, gers: g?.gers ?? null };
+    out.push(rec);
+    return rec;
   };
   // parts by the cell of their middle, to find the ones inside an outline without trying them all
   const PCELL = 50, partCells = new Map();
@@ -230,10 +244,10 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     for (let i = Math.floor(x0 / PCELL); i <= Math.floor(x1 / PCELL) && partCells.size; i++)
       for (let k = Math.floor(z0 / PCELL); k <= Math.floor(z1 / PCELL); k++)
         for (const p of partCells.get(i + ',' + k) ?? []) if (!p.used && inRings(p.at[0], p.at[1], [ring])) mine.push(p);
-    for (const p of mine) { p.used = true; add(p, true, b); stats.parts++; }
+    const recs = mine.map((p) => { p.used = true; stats.parts++; return add(p, true, b); });
     if (mine.length) stats.outlinesWithParts++;
     if (mine.length && mine.reduce((s, p) => s + ringAreaLL(p.polygons[0][0], proj), 0) >= 0.6 * ringAreaLL(b.polygons[0][0], proj)) continue;
-    add(b, false);
+    add(b, false, null, recs);
   }
   for (const p of parts) if (!p.used) add(p, true); // a part without an outline around it
 

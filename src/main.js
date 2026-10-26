@@ -78,7 +78,7 @@ renderer.shadowMap.autoUpdate = false; // (redrawn when needed: see the frame lo
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 1, 60000);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight || 1, 1, 60000); // (a page opened without a size: fitView below)
 const controls = new MapControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.12;
@@ -364,13 +364,21 @@ let guiState, clockText, guiPanel;
   // one is off in the next. A URL that sets something itself (?time=, ?cars=, ...) is taken as it stands.
   const KEY = 'procedural-sanjuan:settings';
   // (a shared view link carries the camera and perhaps the hour: those do not count as settings)
-  const explicit = [...params.keys()].some((k) => !['area', 'cam', 'time'].includes(k));
-  const strip = (saved) => { delete saved.controllers?.city; return saved; }; // (the city is the page's, not a setting)
+  const explicit = [...params.keys()].some((k) => !['area', 'cam', 'time', 'debug'].includes(k));
+  // (the city is the page's, not a setting; nor is the hour: a city with a simulated morning sets its own, before
+  // dawn, and kept, that hour would open every other city in the dark with the clock stopped. Only the choice of the
+  // live clock is kept, and not from a page whose simulated morning made it.)
+  const strip = (saved) => {
+    delete saved.controllers?.city;
+    const time = saved.folders?.['Time (San Juan)']?.controllers;
+    if (time) { delete time.time; if (sim) delete time['live clock']; }
+    return saved;
+  };
   if (!explicit) {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) ?? 'null');
       if (saved) {
-        gui.load(strip(saved));
+        gui.load(strip(saved)); // (settings saved before the hour was left out still carry it: strip drops it)
         // (loading the time moved the slider, which stops the live clock: put the saved choice back)
         const live = saved.folders?.['Time (San Juan)']?.controllers?.['live clock'];
         if (live != null) clockTime.live = live;
@@ -752,12 +760,17 @@ function chaseCamera(dt) {
   atmosphere.blur(fast && cam !== 'orbit' ? Math.min(1.1, v.speed / 30) : 0); // (driving: the street rushes past)
 }
 
-addEventListener('resize', () => {
+// (also once now: a page loaded where it had no size yet, a hidden pane or tab, would otherwise keep a camera
+// without an aspect until the window next changes size, and draw nothing)
+const fitView = () => {
+  if (!innerWidth || !innerHeight) return;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   atmosphere.setSize(innerWidth, innerHeight);
-});
+};
+addEventListener('resize', fitView);
+fitView();
 
 // ---------------------------------------------------------------- the experience (the simulated morning to watch)
 const xp = sim && params.get('xp') !== '0' && !(llView && params.get('xp') == null) ? new Experience({
@@ -769,7 +782,7 @@ const xp = sim && params.get('xp') !== '0' && !(llView && params.get('xp') == nu
 }) : null;
 // the heads-up display of free roaming (hud.js)
 const hud = new Hud({
-  roads, proj,
+  roads, proj, name: manifest.name, simulated: !!sim, bounds: manifest.bounds,
   get mode() { return mode; },
   setMode: (m) => { if (!xp?.directing) setMode(m); },
   cycleCamera, cameraName: () => (active() ? CAMERAS[cameraIndex][1] : chase.on ? 'Siguiendo un carro' : 'Mapa'),
@@ -786,12 +799,14 @@ const hud = new Hud({
   mapOpen: (open) => { keys.clear(); },
   keys, // (the touch controls press them)
 });
-if (xp) {
-  // a clean picture: the settings panel and the readout come back with G
-  guiPanel?.hide(); document.getElementById('hud').style.display = 'none';
+// A clean picture, the city in any area: the settings panel and the technical readout come back with G (?debug=1
+// opens with them).
+{
+  const setDebug = (show) => { guiPanel?.show(show); document.getElementById('hud').style.display = show ? '' : 'none'; };
+  setDebug(params.get('debug') === '1');
   addEventListener('keydown', (e) => {
     if (e.code !== 'KeyG' || document.activeElement?.tagName === 'INPUT') return;
-    const show = guiPanel._hidden; guiPanel.show(show); document.getElementById('hud').style.display = show ? '' : 'none';
+    setDebug(!!guiPanel?._hidden);
   });
 }
 
