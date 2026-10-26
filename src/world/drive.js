@@ -114,8 +114,8 @@ export class Roofs {
 export class Driver {
   // scene; surface(x, z, -2): the terrain; sim(): the simulated traffic (decks, the cars round about), or null;
   // tiles(): the scene's tile groups (for the walls)
-  constructor({ scene, surface, sim, tiles }) {
-    this.surface = surface; this.sim = sim; this.tiles = tiles;
+  constructor({ scene, surface, sim, tiles, lift = () => 0 }) {
+    this.surface = surface; this.sim = sim; this.tiles = tiles; this.lift = lift; // (lift: the paving's height over the terrain)
     this.on = false; this.label = 'Sedán';
     this.spec = TYPES[1]; // a sedan
     const geo = vehicle(this.spec.spec, 2);
@@ -137,7 +137,7 @@ export class Driver {
   // car set down on a bridge starts on its deck).
   start(x, z, heading, y = null) {
     this.x = x; this.z = z; this.heading = heading; this.course = heading;
-    this.speed = 0; this.steer = 0; this.y = y ?? this.surface(x, z, -2); this.pitch = 0; this.roll = 0;
+    this.speed = 0; this.steer = 0; this.y = y ?? this.surface(x, z, -2) + this.lift(x, z); this.pitch = 0; this.roll = 0;
     this.bump = 0; this.on = true; this.mesh.visible = this.beams.visible = true; this.parked = null;
     this.ghost = 2; // (seconds: set down in a queue of traffic, it drives out of it before anything stops it)
   }
@@ -200,7 +200,7 @@ export class Driver {
     this.speed = v;
     // the ground, or the deck it is on: a deck near its height (a ramp grows out of the road a step at a time,
     // so the car climbs onto it; driving under a flyover, the deck is far above and the ground is the way)
-    const ground = this.surface(this.x, this.z, -2), deck = sim?.deckAt(this.x, this.z, this.y + 0.5) ?? null;
+    const ground = this.surface(this.x, this.z, -2) + this.lift(this.x, this.z), deck = sim?.deckAt(this.x, this.z, this.y + 0.5) ?? null; // (the asphalt, the kerb up onto a sidewalk)
     const want = deck != null && Math.abs(deck - this.y) < 2.4 ? deck : ground;
     // (no steeper than a road climbs: the elevation model has the odd bridge embankment in it, a wall to drive into)
     const moved = Math.hypot(nx - this.x, nz - this.z) + Math.abs(v) * dt, climb = 0.35 * moved + 0.02;
@@ -217,7 +217,7 @@ export class Driver {
     this.bump *= Math.exp(-dt * 6);
     const m = this.m;
     m.makeRotationY(this.heading).multiply(new THREE.Matrix4().makeRotationX(-this.pitch + dive)).multiply(new THREE.Matrix4().makeRotationZ(this.roll + lean));
-    m.setPosition(this.x, this.y + 0.07, this.z);
+    m.setPosition(this.x, this.y + 0.01, this.z);
     this.mesh.setMatrixAt(0, m); this.mesh.instanceMatrix.needsUpdate = true;
     this.brake.array[0] = brake && v > 0.3 ? 1 : 0; this.brake.needsUpdate = true;
     this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: Math.abs(v), kmh: Math.abs(v) * 3.6, bump: this.bump, reversing: v < -0.3 };

@@ -122,21 +122,21 @@ function person() {
 }
 
 export class Walker {
-  constructor({ scene, surface, sim, tiles }) {
-    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles);
+  constructor({ scene, surface, sim, tiles, lift = () => 0 }) {
+    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
     this.on = false; this.label = 'A pie'; this.unit = 'km/h';
     this.model = new THREE.Group(); this.figure = person(); this.model.add(this.figure); this.model.visible = false; scene.add(this.model);
     loadPerson().then((g) => { if (!g) return; this.rig = new Rig(g); this.model.remove(this.figure); this.model.add(this.rig.turn); });
     this.view = null;
   }
   start(x, z, heading, y = null) {
-    Object.assign(this, { x, z, heading, speed: 0, vy: 0, phase: 0, y: y ?? this.surface(x, z, -2), on: true });
+    Object.assign(this, { x, z, heading, speed: 0, vy: 0, phase: 0, y: y ?? this.surface(x, z, -2) + this.lift(x, z), on: true });
     this.model.visible = true;
   }
   stop() { this.on = false; this.model.visible = false; this.view = null; }
   // the ground under (x, z), or the deck at about this height (a walkway, a flyover)
   floor(x, z) {
-    const ground = this.surface(x, z, -2), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null;
+    const ground = this.surface(x, z, -2) + this.lift(x, z), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null; // (on the sidewalk, not in it)
     return deck != null && Math.abs(deck - this.y) < 1.2 ? deck : ground;
   }
   update(dt, keys) {
@@ -224,8 +224,8 @@ function bicycle() {
 }
 
 export class Cyclist {
-  constructor({ scene, surface, sim, tiles }) {
-    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles);
+  constructor({ scene, surface, sim, tiles, lift = () => 0 }) {
+    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
     this.on = false; this.label = 'Bicicleta'; this.unit = 'km/h';
     this.model = bicycle(); this.model.visible = false; scene.add(this.model);
     // the Rocketbox man in the saddle, when he has come (seated, his feet and hands put on the pedals and the bars)
@@ -258,12 +258,12 @@ export class Cyclist {
     }
   }
   start(x, z, heading, y = null) {
-    Object.assign(this, { x, z, heading, speed: 0, lean: 0, crank: 0, roll: 0, y: y ?? this.surface(x, z, -2), on: true });
+    Object.assign(this, { x, z, heading, speed: 0, lean: 0, crank: 0, roll: 0, y: y ?? this.surface(x, z, -2) + this.lift(x, z), on: true });
     this.model.visible = true;
   }
   stop() { this.on = false; this.model.visible = false; this.view = null; }
   floor(x, z) {
-    const ground = this.surface(x, z, -2), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null;
+    const ground = this.surface(x, z, -2) + this.lift(x, z), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null; // (on the sidewalk, not in it)
     return deck != null && Math.abs(deck - this.y) < 1.2 ? deck : ground;
   }
   update(dt, keys) {

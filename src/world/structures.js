@@ -1,6 +1,7 @@
 // Footbridges, station platforms and canopies (structures.json from tools/pipeline/extras.mjs), built once
 // for the whole area.
 import * as THREE from 'three';
+import { clearSpot } from './flyovers.js';
 import earcut from 'earcut';
 import { Soup, sections } from './rails.js';
 
@@ -19,7 +20,7 @@ function prism(soup, ring, y0, y1, top, side) {
   }
 }
 
-export async function buildStructures(url, ground) {
+export async function buildStructures(url, ground, depth = null) { // (depth: the lanes at street level, flyovers.js)
   const { footbridges = [], platforms = [], canopies = [] } = await (await fetch(url)).json();
   const soup = new Soup();
   const at = (c, l, v) => [c.p[0] + c.n[0] * l, c.p[1] + v, c.p[2] + c.n[2] * l];
@@ -36,7 +37,8 @@ export async function buildStructures(url, ground) {
       for (const s of [-1, 1]) sweep(a, b, [[s * w, 0], [s * w, 1.1]], STEEL); // railings (seen from both sides)
     }
     if (!f.steps) for (const c of cs) {
-      if (c.h > 3 && Math.round(c.s / 3) % 4 === 2) soup.box(c.p, c.t, c.n, 0.3, Math.min(0.5, w * 0.4), c.p[1] - c.h - 1, c.p[1] - 0.35, CONCRETE);
+      // (a pier where it is high, at the nearest place clear of the lanes it crosses: a footbridge spans a road)
+      if (c.h > 3 && Math.round(c.s / 3) % 4 === 2) { const q = clearSpot(cs, cs.indexOf(c), [0, w * 0.6, -w * 0.6], 3, 0.6, depth); if (q) soup.box(q.p, q.t, q.n, 0.3, Math.min(0.5, w * 0.4), q.p[1] - q.h - 1, q.p[1] - 0.35, CONCRETE); }
     }
   }
 

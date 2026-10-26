@@ -575,6 +575,35 @@ export function buildingMesh(buildings, tx, tz) {
   };
 }
 
+// How high each kind of ground surface stands over the terrain, in a 1 m raster of the tile (centimetres, the
+// highest where they overlap): a sidewalk 20 cm, a carriageway 6, an island 22. What walks or drives on the
+// ground stands on it (streamer.lift), not sunk into it.
+const LIFT_CELL = 1;
+function liftRaster(areas, tx, tz, tileSize) {
+  const n = Math.ceil(tileSize / LIFT_CELL), x0 = tx * tileSize, z0 = tz * tileSize, data = new Uint8Array(n * n), xs = [];
+  for (const a of areas) {
+    const cm = Math.round(styleOf(a).lift * 100);
+    if (!cm) continue;
+    for (const rings of a.polygons) {
+      for (let j = 0; j < n; j++) {
+        const z = z0 + (j + 0.5) * LIFT_CELL;
+        xs.length = 0;
+        for (const r of rings) for (let i = 0, k = r.length - 2; i < r.length; k = i, i += 2) {
+          const za = r[k + 1], zb = r[i + 1];
+          if ((za > z) !== (zb > z)) xs.push(r[k] + ((z - za) / (zb - za)) * (r[i] - r[k]));
+        }
+        if (xs.length < 2) continue;
+        xs.sort((p, q) => p - q);
+        for (let s = 0; s + 1 < xs.length; s += 2) {
+          const i0 = Math.max(0, Math.ceil((xs[s] - x0) / LIFT_CELL - 0.5)), i1 = Math.min(n - 1, Math.floor((xs[s + 1] - x0) / LIFT_CELL - 0.5));
+          for (let i = i0; i <= i1; i++) if (data[j * n + i] < cm) data[j * n + i] = cm;
+        }
+      }
+    }
+  }
+  return { data, n, x0, z0, cell: LIFT_CELL };
+}
+
 export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z)) {
   // (the default surface ignores decks: fine for tests, the worker passes makeSurface())
   const drape = createDraper(grid, surface, tileSize);
@@ -589,5 +618,6 @@ export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(g
     props: Float32Array.from(tile.props.flatMap((p) => [p.kind, p.variant, p.rot, p.x, p.z, p.scale])),
     wires: tile.wires,
     signs: tile.signs, // plain objects; the text is drawn on the main thread
+    lifts: liftRaster(tile.areas.filter((a) => !isPaint(a)), tile.tx, tile.tz, tileSize),
   };
 }

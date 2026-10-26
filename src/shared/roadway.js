@@ -75,22 +75,24 @@ export function corridorOf(e) {
   if (e.oneway) return ((Math.max(1, e.lanes || 1) - 1) / 2) * LANE_W + HALF_CAR;
   return (Math.max(1, Math.floor((e.lanes || 0) / 2)) - 0.5) * LANE_W + HALF_CAR;
 }
-// roads: roads.json. Returns (x, z) => how far inside the nearest corridor (x, z) is (negative: clear of it)
+// roads: roads.json. Returns (x, z, skip) => how far inside the nearest corridor (x, z) is (negative: clear of it),
+// leaving out the roads of OSM way `skip` (a deck's own)
 export function laneDepth(roads, cell = 32) {
   const grid = new Map();
   for (const e of roads.edges) {
     if (!DRIVEN.test(e.highway) || e.bridge || e.tunnel || e.flyover || e.span || e.layer) continue; // (raised, or under: not at the props' level)
     const c = corridorOf(e), p = e.pts;
     for (let i = 3; i < p.length; i += 3) {
-      const s = [p[i - 3], p[i - 1], p[i], p[i + 2], c];
+      const s = [p[i - 3], p[i - 1], p[i], p[i + 2], c, e.way];
       const x0 = Math.floor((Math.min(s[0], s[2]) - c - 2) / cell), x1 = Math.floor((Math.max(s[0], s[2]) + c + 2) / cell);
       const z0 = Math.floor((Math.min(s[1], s[3]) - c - 2) / cell), z1 = Math.floor((Math.max(s[1], s[3]) + c + 2) / cell);
       for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { const k = x + ',' + z; if (!grid.has(k)) grid.set(k, []); grid.get(k).push(s); }
     }
   }
-  return (x, z) => {
+  return (x, z, skip = null) => {
     let best = -Infinity;
-    for (const [ax, az, bx, bz, c] of grid.get(Math.floor(x / cell) + ',' + Math.floor(z / cell)) ?? []) {
+    for (const [ax, az, bx, bz, c, way] of grid.get(Math.floor(x / cell) + ',' + Math.floor(z / cell)) ?? []) {
+      if (skip != null && way === skip) continue;
       const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz, t = l2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
       best = Math.max(best, c - Math.hypot(x - ax - dx * t, z - az - dz * t));
     }

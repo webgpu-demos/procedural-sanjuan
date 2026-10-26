@@ -13,6 +13,7 @@ import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
 import { buildFlyovers } from './world/flyovers.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
+import { correctProfiles } from './shared/profile.js';
 import { laneDepth } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
@@ -104,6 +105,7 @@ const materials = createMaterials(await loadTextures(renderer));
 const props = new Props();
 const signs = new Signs();
 const streamer = new Streamer(scene, materials, props, signs, { base: `tiles/${AREA}`, radius: Number(params.get('radius')) || 1e5 });
+let baseRadius = 1e5; // (the area's streaming radius, before the governor's reach)
 const VIEW_RADIUS = 1000; // metres: full tiles around the focus, when the whole city is not loaded at once
 loader.set(0.08, 'terrain');
 const manifest = await streamer.init();
@@ -112,6 +114,7 @@ const manifest = await streamer.init();
 const LARGE = manifest.stream != null || manifest.tiles.length > 600;
 if (LARGE) {
   streamer.radius = Number(params.get('radius')) || manifest.stream || VIEW_RADIUS;
+  baseRadius = streamer.radius;
   streamer.blockRadius = manifest.blockRadius ?? 7000;
   controls.maxDistance = 9000;
 }
@@ -144,10 +147,12 @@ let orthoLoaded = false, orthoWanted = true; // (the photo fills in when the til
 if (params.get('ortho') !== '0') loadOrtho(`ortho/${AREA}`, proj, manifest.extent ?? manifest.bounds, renderer).then((ok) => { orthoLoaded = ok; shared.uOrthoOn.value = ok && orthoWanted ? 1 : 0; });
 const railways = await buildRailways(`tiles/${AREA}/${manifest.rails}`, (x, z) => streamer.ground(x, z), streamer.cover);
 scene.add(railways);
-scene.add(await buildFlyovers(`tiles/${AREA}/${manifest.roads}`, (x, z) => streamer.ground(x, z)));
-if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z)));
 const roads = await (await fetch(`tiles/${AREA}/${manifest.roads}`)).json();
-streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js)
+// (the expressway's height without the humps the elevation model's overpass ridges put in it: src/shared/profile.js)
+correctProfiles(roads, (x, z) => streamer.ground(x, z));
+streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
+scene.add(await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth));
+if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));
 const traffic = new Traffic(roads, streamer.surface);
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
@@ -205,12 +210,14 @@ controls.update();
 // back up that does not hold is tried again only after longer. ?quality=high keeps everything, low starts lean.
 const governor = (() => {
   const top = Math.min(devicePixelRatio, 1.5), lean = { ao: false, reflect: false, dof: false }; // (2x costs a quarter more for little)
-  const LEVELS = [ // (detail: how far off the small things are drawn, as a share of the full distance)
-    { ratio: top },
-    { ratio: top, clouds: 'low' },
-    { ratio: Math.min(top, 1.25), clouds: 'low' },
-    { ratio: Math.min(top, 1.25), clouds: 'low', ao: false, detail: 0.8 },
-    { ratio: Math.min(top, 1.25), clouds: 'low', ...lean, detail: 0.8 },
+  // (detail: how far off the small things are drawn, as a share of the full distance; reach: how far out the city
+  // is streamed in full, as a share of the area's radius: a machine that keeps up sees more of it)
+  const LEVELS = [
+    { ratio: top, reach: 1.4 },
+    { ratio: top, clouds: 'low', reach: 1.4 },
+    { ratio: Math.min(top, 1.25), clouds: 'low', reach: 1.3 },
+    { ratio: Math.min(top, 1.25), clouds: 'low', ao: false, detail: 0.8, reach: 1.2 },
+    { ratio: Math.min(top, 1.25), clouds: 'low', ...lean, detail: 0.8, reach: 1.15 },
     { ratio: 1, clouds: 'off', ...lean, detail: 0.6 },
     { ratio: 1, clouds: 'off', ...lean, shadow: 2048, detail: 0.5 },
     { ratio: 0.8, clouds: 'off', ...lean, shadow: 1024, detail: 0.4 },
@@ -221,6 +228,7 @@ const governor = (() => {
   g.apply = () => {
     const L = LEVELS[g.level];
     g.detail = L.detail ?? 1;
+    if (!params.get('radius')) streamer.radius = baseRadius * (L.reach ?? 1);
     if (renderer.getPixelRatio() !== L.ratio) { renderer.setPixelRatio(L.ratio); renderer.setSize(innerWidth, innerHeight); atmosphere.setSize(innerWidth, innerHeight); }
     atmosphere.limit({ clouds: L.clouds ?? 'ultra', reflect: L.reflect !== false, dof: L.dof !== false });
     ao.enabled = L.ao !== false;
@@ -464,8 +472,9 @@ function stopRiding() { setMode('explore'); if (!sim) return; sim.followed = nul
 // and out of it again, Esc back to exploring. Each way has its camera rigs (V cycles: chase, close, first person,
 // cinematic). Where you were, and how, is kept for the next visit.
 const tiles = () => scene.children.filter((o) => o.name.startsWith('tile '));
-const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles });
-const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
+const lift = (x, z) => streamer.lift(x, z); // (how high the paving stands: what stands on it is not sunk in it)
+const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift });
+const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
 // What you run into (collide.js): the street's things come with the tiles; the vehicles round you are gathered
 // each frame (the simulated cars near you, the traffic, the car you left). And what you are, to them: the
@@ -717,7 +726,10 @@ const clock = new THREE.Clock();
 let frames = 0, fpsTime = 0, fps = 0;
 
 let loading = true, shadowKey = '', shadowFrame = 0, detailFrame = 0;
-// Small things are not drawn far off: parked cars beyond 800 m and street furniture beyond 600 m are a pixel or
+const streamFocus = new THREE.Vector3(), STREAM_AHEAD = 450;
+// how far small things are drawn (m), times the governor's detail: parked cars, street furniture and lamps
+const FAR_PARKED = 1300, FAR_SMALL = 1000;
+// Small things are not drawn far off: parked cars beyond 1.3 km and street furniture beyond 1 km are a pixel or
 // two each, yet most of the draw calls of a wide view (the governor brings them nearer on a slow machine)
 function cullSmall() {
   const size = manifest.tileSize, c = camera.position, up = Math.max(0, c.y - streamer.ground(c.x, c.z));
@@ -728,8 +740,8 @@ function cullSmall() {
       tile.traverse((o) => {
         if (!o.isInstancedMesh) return;
         const key = String((Array.isArray(o.material) ? o.material[0] : o.material).customProgramCacheKey?.() ?? '');
-        if (key.startsWith('car-parked')) tile.userData.small.push([o, 800]);
-        else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, 600]);
+        if (key.startsWith('car-parked')) tile.userData.small.push([o, FAR_PARKED]);
+        else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, FAR_SMALL]);
       });
       const [x, z] = tile.name.slice(5).split('_').map(Number);
       tile.userData.centre = [(x + 0.5) * size, (z + 0.5) * size];
@@ -750,7 +762,15 @@ function frame(_, manual) {
   const floor = streamer.ground(camera.position.x, camera.position.z) + 2;
   if (camera.position.y < floor) camera.position.y = floor;
 
-  streamer.update(controls.target, camera.position);
+  // (streamed round a point ahead of what is looked at, the further the higher the camera: a wide view from
+  // above is a long way across, and what is in front of the eye matters more than what is behind it)
+  {
+    const t = controls.target, up = Math.max(0, camera.position.y - t.y), fx = t.x - camera.position.x, fz = t.z - camera.position.z, l = Math.hypot(fx, fz) || 1;
+    const ahead = Math.min(STREAM_AHEAD, up * 0.9);
+    streamFocus.set(t.x + (fx / l) * ahead, t.y, t.z + (fz / l) * ahead);
+    streamer.look = [fx / l, fz / l];
+  }
+  streamer.update(streamFocus, camera.position);
   if (++detailFrame % 15 === 0) cullSmall();
   // the loading screen stays until the tiles around the view are in
   if (loading) {
