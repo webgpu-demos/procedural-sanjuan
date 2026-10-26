@@ -139,17 +139,17 @@ const TIMES = [
   { id: 'dusk', label: 'Atardecer', hour: 18.45, icon: 'dusk' },
   { id: 'night', label: 'Noche', hour: 22.5, icon: 'moon' },
 ];
-// Places to go: [name, where, lon, lat] (or world [x, z] where it is a point of the simulated morning)
+// Places to go: [name, where, lon, lat] (an area offers those inside it)
 const PLACES = [
   ['Castillo San Felipe del Morro', 'Viejo San Juan', -66.1188, 18.4703],
   ['Plaza de Armas', 'Calle San Francisco · Viejo San Juan', -66.1168, 18.4655],
   ['El Capitolio', 'Avenida Ponce de León · Puerta de Tierra', -66.1056, 18.4632],
   ['Condado', 'Avenida Ashford', -66.0727, 18.4585],
   ['La Placita de Santurce', 'Santurce', -66.0701, 18.4497],
-  ['Milla de Oro', 'Ponce de León y Roosevelt · Hato Rey', { x: 6255, z: 4591 }],
+  ['Milla de Oro', 'Ponce de León y Roosevelt · Hato Rey', -66.05734, 18.42382],
   ['Plaza Las Américas', 'Avenida Roosevelt · Hato Rey', -66.0752, 18.4207],
   ['Universidad de Puerto Rico', 'Avenida Ponce de León · Río Piedras', -66.0505, 18.4038],
-  ['Avenida Piñero', 'el tapón del apagón · Río Piedras', { x: 5195, z: 6416 }],
+  ['Avenida Piñero', 'el tapón del apagón · Río Piedras', -66.06738, 18.40733],
   ['Ocean Park', 'Calle McLeary · Santurce', -66.0490, 18.4570],
 ];
 
@@ -174,31 +174,39 @@ function indexRoads(roads) {
 
 export class Hud {
   // app: { setMode(id), mode, cycleCamera(step), cameraName, view() -> {x, z, heading, kmh, altitude?} | null, focus()
-  //        -> {x, z}, teleport(x, z), setHour(h), hour(), soundOn(), toggleSound(), roads, proj, sim(), fps() }
+  //        -> {x, z}, teleport(x, z), setHour(h), hour(), soundOn(), toggleSound(), roads, proj, sim(), fps(), name (the
+  //        area's), simulated (it has a simulated morning), bounds (the area's, for the places offered) }
   constructor(app) {
     this.app = app;
     const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
     const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return document.body.appendChild(d.firstChild); };
-    this.tl = el(`<div id="hud-tl" class="hud"><div class="panel brand"><span class="bullet">SJ</span><div><h1>San Juan</h1>
-      <div class="sub">simulación SUMO · <b class="fps">60</b> fps</div></div></div></div>`);
+    // the area's name and initials (San Juan: SJ; Hato Rey (Milla de Oro): HR; Condado: CO)
+    const name = app.name ?? 'San Juan', words = name.replace(/\(.*\)/, '').trim().split(/\s+/);
+    const initials = (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toUpperCase();
+    this.tl = el(`<div id="hud-tl" class="hud"><div class="panel brand"><span class="bullet">${initials}</span><div><h1>${name}</h1>
+      <div class="sub">${app.simulated ? 'simulación SUMO' : 'explorar'} · <b class="fps">60</b> fps</div></div></div></div>`);
     this.tr = el(`<div id="hud-tr" class="hud"><div class="panel toolbar">
       ${TIMES.map((t) => `<button class="seg time" data-time="${t.id}" title="${t.label}">${icon(t.icon)}<span class="lbl">${t.label}</span></button>`).join('')}
       <span class="div"></span>
       <button class="seg tp" title="Ir a un lugar">${icon('pin')}<span class="lbl" style="display:inline">Ir a</span></button>
-      <button class="seg mapb" title="Mapa de San Juan [M]">${icon('map')}<span class="lbl" style="display:inline">Mapa</span><kbd>M</kbd></button>
+      <button class="seg mapb" title="Mapa de ${name} [M]">${icon('map')}<span class="lbl" style="display:inline">Mapa</span><kbd>M</kbd></button>
       <span class="div"></span>
       <button class="seg snd" title="Sonido [N]">${icon('sound')}</button>
       <button class="seg clean" title="Vista limpia: esconder [H]">${icon('eye')}</button></div></div>`);
-    this.pop = el(`<div class="hud-pop" hidden><div class="t">Ir a</div>${PLACES.map(([n, s], i) => `<button data-place="${i}"><span class="n">${n}</span><span class="s">${s}</span></button>`).join('')}</div>`);
-    this.bl = el(`<div id="hud-bl" class="hud"><div class="place"></div><div class="signs"></div><div class="panel radar" title="Mapa de San Juan [M]"><canvas></canvas><span class="north">N</span><kbd>M</kbd></div></div>`);
+    // the places inside the area (a smaller area than the municipality offers fewer; none: no button)
+    const bounds = app.bounds;
+    this.places = PLACES.map(([name, where, lon, lat]) => { const [x, z] = app.proj.project(lon, lat); return { name, where, x, z }; })
+      .filter((p) => !bounds || (p.x >= bounds.minX && p.x <= bounds.maxX && p.z >= bounds.minZ && p.z <= bounds.maxZ));
+    this.pop = el(`<div class="hud-pop" hidden><div class="t">Ir a</div>${this.places.map((p, i) => `<button data-place="${i}"><span class="n">${p.name}</span><span class="s">${p.where}</span></button>`).join('')}</div>`);
+    if (!this.places.length) this.tr.querySelector('.tp').hidden = true;
+    this.bl = el(`<div id="hud-bl" class="hud"><div class="place"></div><div class="signs"></div><div class="panel radar" title="Mapa de ${name} [M]"><canvas></canvas><span class="north">N</span><kbd>M</kbd></div></div>`);
     this.bc = el(`<div id="hud-bc" class="hud"><div class="hints"></div><nav class="panel modes"><span class="ind"></span>
       ${MODES.map((m) => `<button class="mode" data-mode="${m.id}" title="${m.label} [${m.key}]">${icon(m.icon)}<span class="l">${m.label}</span><kbd>${m.key}</kbd></button>`).join('')}</nav></div>`);
     this.br = el(`<div id="hud-br" class="hud"><div class="panel cluster"><div class="top"><span class="lbl">—</span><span class="alt"></span></div>
       <div class="speed"><b>0</b><span>km/h</span></div><div class="meter"><i></i></div>
       <div class="cams"><button class="arr prev" title="Cámara anterior">${icon('left')}</button><button class="cur" title="Cámara [V]">${icon('cam')}<span>Persecución</span><kbd>V</kbd></button><button class="arr next" title="Cámara siguiente [V]">${icon('right')}</button></div></div></div>`);
-    this.map = el(`<div id="hud-map" hidden><canvas></canvas><div class="head"><div><h2>San Juan</h2><span>Clic para ir · arrastra para mover · rueda para acercar</span></div><button class="close">Cerrar · M</button></div><div class="hover"></div></div>`);
+    this.map = el(`<div id="hud-map" hidden><canvas></canvas><div class="head"><div><h2>${name}</h2><span>Clic para ir · arrastra para mover · rueda para acercar</span></div><button class="close">Cerrar · M</button></div><div class="hover"></div></div>`);
     this.radar = this.bl.querySelector('canvas'); this.mapCanvas = this.map.querySelector('canvas');
-    this.places = PLACES.map(([name, where, a, b]) => { const p = typeof a === 'object' ? a : (([x, z]) => ({ x, z }))(app.proj.project(a, b)); return { name, where, ...p }; });
     this.index = indexRoads(app.roads);
     this.view = { x: 0, z: 0, scale: 0.06 }; // the full map: world point at the centre, pixels per metre
     // ---- wiring
