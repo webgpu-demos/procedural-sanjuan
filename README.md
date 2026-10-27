@@ -119,6 +119,11 @@ about 130 MB each: 2 for Condado, 6 for the municipality; `--no-lidar` skips the
 lies on the coastal plain in flat terraces at whole metres and carries the expressway's overpasses as ridges; the
 lidar ground is bare earth, buildings and bridges removed. The compiler logs the share of the grid it covered and the
 share of land cells sitting on a whole metre before and after, and the manifest says (`terrain.lidar`).
+An area compiled before that, whose simulated mornings were driven on its roads (San Juan), takes the lidar ground
+with `node tools/pipeline/reterrain.mjs --area=sanjuan`, without compiling it again: buildings rebased by the
+compiler's rule; signs, landmarks, roads, railways, footbridges and decks moved with the ground; roads keep the
+levels the simulation drove in `pts0` (the manifest says `terrain.lidar.applied` and `reterrained`). What stands
+or drives on the ground takes the same triangles the tiles draw it with (`src/shared/terrain.js` `meshHeight`).
 The terrain tiles carry bathymetry offshore; the compiler flattens the sea to 0 m inside the coastline,
 levels lagoons and ponds at their lowest shore, and keeps dry land above the sea.
 
