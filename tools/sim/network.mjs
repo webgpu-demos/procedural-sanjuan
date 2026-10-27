@@ -161,8 +161,9 @@ if (flag('merge')) {
 }
 
 // Nodes: lights (right on red, as Puerto Rico drives: after a stop, unless a sign says otherwise), and where two
-// expressway carriageways or a ramp join into fewer lanes than they bring, a zipper (each lane's drivers in turn: a
-// priority junction made the ramp wait for a gap that, at the rush hour, never came).
+// expressway carriageways join into fewer lanes than they bring, a zipper (each lane's drivers in turn: a priority
+// junction made one of them wait for a gap that, at the rush hour, never came). (A ramp is not: netconvert gives
+// it an acceleration lane, --ramps.guess; as a zipper, the expressway's own lanes took turns with the ramp's.)
 const used = new Map(); // node -> [in, out]
 for (const e of mergedEdges) {
   (used.get(e.from) ?? used.set(e.from, [[], []]).get(e.from))[1].push(e);
@@ -231,7 +232,7 @@ for (const [k, [ins, outs]] of used) {
   const [x, y, z] = roads.nodes[k];
   let type = '';
   if (signals.has(k)) { type = lightType; lights++; }
-  else if (flag('zipper') && ins.length >= 2 && outs.length === 1 && [...ins, ...outs].every((e) => e.fast && e.spread === 'center') &&
+  else if (flag('zipper') && ins.length >= 2 && outs.length === 1 && [...ins, ...outs].every((e) => e.fast && e.spread === 'center') && !ins.some((e) => e.link) &&
     ins.reduce((s, e) => s + e.lanes, 0) > outs[0].lanes) { type = 'zipper'; zips++; }
   nodeXml.push(`  <node id="n${k}" x="${f(x)}" y="${f(-z)}" z="${f(y)}"${type ? ` type="${type}"` : ''}/>`);
 }
