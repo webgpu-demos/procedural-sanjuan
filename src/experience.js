@@ -254,6 +254,7 @@ export class Experience {
     this.reel = this.apagonShots(at); this.reelName = 'apagon';
     this.directing = true; this.app.controls.enabled = false;
     this.bars.classList.add('on'); this.skip.style.display = 'block';
+    this.dock.classList.add('hidden'); // (the scene full frame: the clock's panel comes back when it ends)
     this.app.atmosphere.vignette.darkness = 0.55;
     this.shot = -1; this.cut(0);
     return true;

@@ -82,16 +82,76 @@ export function pavedHalf(e, lanes = e.lanes) {
 
 // paving: the tiles' road and paint materials (materials.js): a bridge at grade is paved with them, as the road up to
 // it is, so that it reads as the same road and not as a patch of another colour
+// A road's lanes; a bridge's as many as the road it carries on. OSM often tags the lanes on the road and not on the
+// bridge, which the compiler then gives its class's default, and a five-lane expressway crossed its creek on a
+// two-lane deck, the creek showing either side; so a bridge takes the lanes the road has at both its ends, if more.
+// edges: roads.json's. Returns (e) => lanes, or null where none are known.
+export function roadLanes(edges) {
+  const ends = new Map();
+  for (const e of edges) for (const n of [e.a, e.b]) { if (!ends.has(n)) ends.set(n, []); ends.get(n).push(e); }
+  const kind = (e) => (e.highway.startsWith('motorway') ? 'motorway' : e.highway.replace('_link', ''));
+  return (e) => {
+    if (!e.bridge) return e.lanes || null;
+    const at = [e.a, e.b].map((n) => Math.max(0, ...(ends.get(n) ?? []).filter((o) => o !== e && !o.bridge && kind(o) === kind(e)).map((o) => o.lanes || 0)));
+    const road = at[0] && at[1] ? Math.min(...at) : Math.max(...at);
+    return Math.max(e.lanes || 0, road) || null;
+  };
+}
+
+// The lines the tiles paint on a road (markings.mjs), across its measured carriageway: on the expressway the whole
+// paved width, shoulders and all, its lanes dividing it evenly (four-metre lanes on PR-22); on a street, the
+// carriageway between the kerbs. [{ o: offset to the right, dashed, yellow }]
+export function paintOf(e, lanes, width = pavedHalf(e, lanes)) {
+  const hw = e.highway.replace('_link', ''), expressway = hw === 'motorway';
+  const median = expressway ? 2 * width.half : width.carriage, n = Math.max(1, Math.min(lanes, Math.floor(median / 2.6))), lw = median / n;
+  const lines = [];
+  if (!e.oneway && n >= 2) for (const o of [-0.12, 0.12]) lines.push({ o, dashed: false, yellow: true });
+  for (let k = 1; k < n; k++) { const o = -median / 2 + k * lw; if (e.oneway || Math.abs(o) >= 0.4) lines.push({ o, dashed: true }); }
+  if (hw !== 'tertiary' && median > 6) for (const s of [-1, 1]) lines.push({ o: s * (median / 2 - 0.35), dashed: false, yellow: e.oneway && s < 0 && (hw === 'motorway' || hw === 'trunk') });
+  return Object.assign(lines, { lanes: n, lw, median });
+}
+
+// What would stand up through a deck: a tree, a pole, a street lamp or a signal on the ground under one, taller than
+// the room under it (a palm on the avenue beneath PR-22 grew out of the expressway's lanes). footprints: a
+// flyovers mesh's userData.footprints; deck(x, z) gives the deck's level over (x, z) by the sections it was drawn
+// with. Returns (kind, x, z, scale) => true for such a prop.
+const TALL = { tree: 12, pole: 9.5, light: 10.5, signal: 7 };
+export function overDecks(footprints, PROP) {
+  const CELL = 32, grid = new Map();
+  footprints.forEach((f, i) => {
+    const r = f[4] + 4;
+    for (let x = Math.floor((Math.min(f[0], f[2]) - r) / CELL); x <= Math.floor((Math.max(f[0], f[2]) + r) / CELL); x++)
+      for (let z = Math.floor((Math.min(f[1], f[3]) - r) / CELL); z <= Math.floor((Math.max(f[1], f[3]) + r) / CELL); z++) {
+        const k = x + ',' + z; if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i);
+      }
+  });
+  const height = { [PROP.TREE]: TALL.tree, [PROP.POLE]: TALL.pole, [PROP.LIGHT]: TALL.light, [PROP.SIGNAL]: TALL.signal };
+  return (kind, x, z, scale) => {
+    const tall = height[kind];
+    if (!tall) return false;
+    const top = tall * (kind === PROP.TREE ? Math.max(0.6, scale) : 1), reach = kind === PROP.TREE ? 3 * Math.max(0.6, scale) : 0.5;
+    for (const i of grid.get(Math.floor(x / CELL) + ',' + Math.floor(z / CELL)) ?? []) {
+      const [x0, z0, x1, z1, w, deck, ground] = footprints[i], dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
+      if (Math.hypot(x0 + dx * t - x, z0 + dz * t - z) > w + reach) continue;
+      if (top > deck - 1.6 - ground) return true; // (under the girder's depth)
+    }
+    return false;
+  };
+}
+
 export async function buildFlyovers(roads, ground, depth = null, paving = null) { // (roads: roads.json, or its url)
   const { edges } = typeof roads === 'string' ? await (await fetch(roads)).json() : roads;
   const concrete = [0.6, 0.6, 0.58], asphalt = [0.3, 0.3, 0.32], paint = [0.9, 0.9, 0.87], barrier = [0.7, 0.72, 0.72], sidewalk = [0.55, 0.55, 0.53];
   const soup = new Soup();
+  const footprints = []; // [x0, z0, x1, z1, half width, the deck's level, the ground's under it] of every deck drawn
   // the bridges at grade, paved as the tiles pave (meshing.js ROAD_STYLE): carriageway, sidewalk and paint
   const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const PAVE = { asphalt: [[0.36, 0.36, 0.38].map(lin), 0, 0.06], sidewalk: [[0.63, 0.61, 0.58].map(lin), 1, 0.2], paint: [[0.9, 0.9, 0.87].map(lin), 3, 0.15] };
+  const PAVE = { asphalt: [[0.36, 0.36, 0.38].map(lin), 0, 0.06], sidewalk: [[0.63, 0.61, 0.58].map(lin), 1, 0.2], paint: [[0.9, 0.9, 0.87].map(lin), 3, 0.15],
+    yellow: [[0.88, 0.66, 0.12].map(lin), 3, 0.15] };
   const paved = { road: { position: [], normal: [], color: [], aLayer: [] }, paint: { position: [], normal: [], color: [], aLayer: [] } };
   const pave = (a, b, l0, l1, kind) => { // a strip between offsets l0 and l1 across, from section a to b
-    const [color, layer, lift] = PAVE[kind], g = kind === 'paint' ? paved.paint : paved.road;
+    const [color, layer, lift] = PAVE[kind], g = kind === 'paint' || kind === 'yellow' ? paved.paint : paved.road;
     const P = [at(a, l0, lift), at(b, l0, lift), at(b, l1, lift), at(a, l0, lift), at(b, l1, lift), at(a, l1, lift)];
     // (wound so that its face is up whichever way the section's normal points)
     const cross = (P[1][0] - P[0][0]) * (P[2][2] - P[0][2]) - (P[1][2] - P[0][2]) * (P[2][0] - P[0][0]);
@@ -105,18 +165,7 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null) 
   };
 
   const built = structureEdges(edges, ground);
-  // (a bridge is as wide as the road it carries on: OSM often tags the lanes on the road and not on the bridge,
-  // which the compiler then gives its class's default, and a five-lane expressway crossed its creek on a two-lane
-  // deck, the creek showing either side; so a bridge takes the lanes the road has at both its ends, if more)
-  const ends = new Map();
-  for (const e of edges) for (const n of [e.a, e.b]) { if (!ends.has(n)) ends.set(n, []); ends.get(n).push(e); }
-  const kind = (e) => (e.highway.startsWith('motorway') ? 'motorway' : e.highway.replace('_link', ''));
-  const lanesOf = (e) => {
-    if (!e.bridge) return e.lanes || null;
-    const at = [e.a, e.b].map((n) => Math.max(0, ...ends.get(n).filter((o) => o !== e && !o.bridge && kind(o) === kind(e)).map((o) => o.lanes || 0)));
-    const road = at[0] && at[1] ? Math.min(...at) : Math.max(...at);
-    return Math.max(e.lanes || 0, road) || null;
-  };
+  const lanesOf = roadLanes(edges);
   for (const e of edges) {
     if (e.tunnel) continue;
     const expressway = e.highway.startsWith('motorway');
@@ -130,47 +179,33 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null) 
     // road polygons draped on the deck, so only the structure is built here
     // (a street's bridge at grade carries its sidewalks too, as the street up to it does)
     const mapped = lanesOf(e), lanes = Math.max(1, mapped || (e.grade && !e.oneway ? 2 : 1));
-    // a bridge at grade as wide as the tiles pave the road at its ends, its parapets just outside that
-    const width = e.grade ? pavedHalf(e, mapped) : 0;
-    const w = e.grade ? width.half + 0.25 : e.span ? lanes * 1.65 + 7 : (lanes * 3.3 + (expressway ? 2.2 : 1.4)) / 2;
+    // a deck as wide as the tiles pave the road onto it, its parapets just outside that; painted as they paint it
+    const width = pavedHalf(e, mapped), lines = paintOf(e, lanes, width);
+    const w = e.span ? lanes * 1.65 + 7 : width.half + 0.25;
     // a bridge at grade: its deck flush with the roads at its ends, never under the ground between
     if (e.grade) for (const c of cs) if (c.h < 0.02) { c.p = [c.p[0], c.p[1] + 0.02 - c.h, c.p[2]]; c.h = 0.02; }
     for (let i = 0; i + 1 < cs.length; i++) {
       const a = cs[i], b = cs[i + 1], h = Math.max(a.h, b.h);
       if ((h <= RAMP_ABOVE && !leftOut(e)) || b.s < from || a.s > to) continue;
+      if (!e.span) footprints.push([a.p[0], a.p[2], b.p[0], b.p[2], w, Math.min(a.p[1], b.p[1]), Math.min(a.p[1] - a.h, b.p[1] - b.h)]);
       if (e.span) {
         // girders seen from the tracks below; the road polygons above are single-sided
         if (Math.min(a.h, b.h) > DECK_ABOVE) sweep(a, b, [[-w, -0.3], [-w, -1.5], [w, -1.5], [w, -0.3]], concrete);
         continue;
       }
-      const line = (o) => sweep(a, b, [[o - 0.07, 0.015], [o + 0.07, 0.015]], paint);
-      const dashed = Math.floor(a.s / (STEP * 2)) % 2 === 0;
-      if (e.grade && paving) {
+      // (dashes 5 m on, 5 m off, as markings.mjs paints them)
+      const dashed = Math.floor(a.s / 5) % 2 === 0;
+      const c = width.carriage / 2, side = width.half - c > 0.3 && !expressway ? 'sidewalk' : 'asphalt';
+      if (paving) {
         // the carriageway and (a street's) sidewalks, as the tiles pave them either side, in their materials
-        const c = width.carriage / 2, side = width.half - c > 0.3 ? 'sidewalk' : 'asphalt';
         pave(a, b, -c, c, 'asphalt');
         for (const s of [-1, 1]) pave(a, b, s * c, s * width.half, side);
         if (side === 'sidewalk') for (const s of [-1, 1]) sweep(a, b, [[s * c, 0.06], [s * c, 0.2]], sidewalk); // (the kerb)
-        const mark = (o) => pave(a, b, o - 0.07, o + 0.07, 'paint');
-        mark(-c + 0.3); mark(c - 0.3);
-        if (expressway && dashed) for (let k = 1; k < lanes; k++) mark(-c + 0.5 + k * LANE);
-        else if (!expressway && !e.oneway && dashed) mark(0);
-      } else if (e.grade) {
-        const c = width.carriage / 2;
-        sweep(a, b, [[-c, 0], [c, 0]], asphalt);
-        for (const s of [-1, 1]) sweep(a, b, [[s * c, 0], [s * width.half, 0]], width.half - c > 0.3 ? sidewalk : asphalt);
-        line(-c + 0.3); line(c - 0.3);
-      } else if (paving) {
-        // (a flyover's deck in the streets' own asphalt and paint, as the road onto it)
-        pave(a, b, -w + 0.25, w - 0.25, 'asphalt');
-        const mark = (o) => pave(a, b, o - 0.07, o + 0.07, 'paint');
-        mark(-w + 0.75); mark(w - 0.75);
-        if (dashed) for (let k = 1; k < lanes; k++) mark(-w + 0.75 + (k * (2 * w - 1.5)) / lanes);
+        for (const l of lines) if (!l.dashed || dashed) pave(a, b, l.o - 0.075, l.o + 0.075, l.yellow ? 'yellow' : 'paint');
       } else {
-        sweep(a, b, [[-w + 0.25, 0], [w - 0.25, 0]], asphalt);
-        // lane paint: solid edges, dashed dividers
-        line(-w + 0.75); line(w - 0.75);
-        if (dashed) for (let k = 1; k < lanes; k++) line(-w + 0.75 + (k * (2 * w - 1.5)) / lanes);
+        sweep(a, b, [[-c, 0], [c, 0]], asphalt);
+        for (const s of [-1, 1]) sweep(a, b, [[s * c, 0], [s * width.half, 0]], side === 'sidewalk' ? sidewalk : asphalt);
+        for (const l of lines) if (!l.dashed || dashed) sweep(a, b, [[l.o - 0.075, 0.015], [l.o + 0.075, 0.015]], l.yellow ? [0.88, 0.66, 0.12] : paint);
       }
       // parapets, with a taller noise barrier on the expressway's flyovers
       const top = expressway && !e.grade ? 1.9 : 1.0;
@@ -226,6 +261,7 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null) 
   material.customProgramCacheKey = () => 'flyovers-v2';
   const mesh = soup.mesh(material);
   mesh.name = 'flyovers';
+  mesh.userData.footprints = footprints;
   for (const [g, m, name] of [[paved.road, paving?.road, 'bridge decks'], [paved.paint, paving?.paint, 'bridge deck paint']]) {
     if (!m || !g.position.length) continue;
     const geo = new THREE.BufferGeometry();

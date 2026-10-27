@@ -626,6 +626,10 @@ export function createMaterials(tex) {
     road: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     // lane lines and crossings: drawn over the road surface, with a stronger depth bias so they never flicker
     paint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -8 }),
+    // a bridge's deck paved like the road (flyovers.js): over whatever the tiles drape beneath it at about its height,
+    // a creek's water above all, which showed through it as a dark band across PR-22
+    deck: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -12 }),
+    deckPaint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -18 }),
     // static models of a tile (bridges, street furniture, trees): plain painted surfaces, seen from both sides
     models: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide }),
     blocks: blocksMaterial(),

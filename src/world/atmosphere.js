@@ -19,9 +19,11 @@ const UNITS = 0.1;              // scene radiance -> the radiance the atmosphere
 const FADE = 500;                // metres beyond the area over which the clouds thin out to nothing
 const SHADE = 0.42;             // what is left of a surface's light under a thick cloud: the sky still lights it
 
+// (capped: the frames are half floats, and the sun's disc, looked into on a clear morning, came back from the sky
+// pass bright enough that ten times it overflowed them; the bloom spread the overflow over the whole frame, black)
 class Scale extends Effect {
   constructor(k) {
-    super('Scale', 'uniform float k; void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) { outputColor = vec4(inputColor.rgb * k, inputColor.a); }',
+    super('Scale', 'uniform float k; void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) { vec3 c = inputColor.rgb * k; outputColor = vec4(any(isnan(c)) ? vec3(0.0) : min(c, vec3(2000.0)), inputColor.a); }',
       { uniforms: new Map([['k', new THREE.Uniform(k)]]) });
   }
 }

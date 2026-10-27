@@ -196,7 +196,7 @@ export class Streamer {
     let { props, wires } = msg.mesh;
     // nothing standing within reach of a car in a lane (src/shared/roadway.js: the worker has left out what stands
     // on the paved carriageway; this is the lanes the traffic keeps to, wherever they run)
-    if (this.laneDepth && props.length) ({ props, wires } = clearLanes(props, wires, this.laneDepth));
+    if ((this.laneDepth || this.under) && props.length) ({ props, wires } = clearLanes(props, wires, this.laneDepth ?? (() => -100), this.under));
     const group = new THREE.Group();
     group.name = `tile ${msg.key}`;
     group.userData.solids = solidsOf(props); // (what a car or a walker runs into: collide.js)

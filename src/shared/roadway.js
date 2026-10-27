@@ -110,12 +110,15 @@ export const FOOT = {
 // props: [kind, variant, rot, x, z, scale] flat; wires: [x1, z1, x2, z2] flat; depth: laneDepth(). What stands in a
 // corridor is left out (with the wires to a pole left out); a signal mast steps back along its approach till it is
 // clear (it shows the junction's lights). Returns { props, wires, gone: [[kind, x, z, depth], ...] }.
-export function clearLanes(props, wires, depth) {
+// over(kind, x, z, scale): true where the prop would stand up through a deck above it (flyovers.js footprints):
+// a palm on the avenue under PR-22 grew out of the expressway's lanes
+export function clearLanes(props, wires, depth, over = null) {
   const keep = [], gone = [], poles = [];
   for (let i = 0; i < props.length; i += 6) {
     const kind = props[i], rot = props[i + 2];
     let x = props[i + 3], z = props[i + 4];
     if (kind === PROP.DECAL) { keep.push(...props.subarray(i, i + 6)); continue; }
+    if (over && over(kind, x, z, props[i + 5])) { gone.push([kind, x, z, 0]); if (kind === PROP.POLE) poles.push([x, z]); continue; }
     const r = (FOOT[kind] ?? 0.3) * (kind === PROP.TREE || kind === PROP.STATUE ? props[i + 5] : 1), d = depth(x, z) + r;
     if (d > 0 && kind === PROP.SIGNAL) {
       const fx = Math.sin(rot), fz = Math.cos(rot); // (it faces the traffic coming: back along the approach is that way)
