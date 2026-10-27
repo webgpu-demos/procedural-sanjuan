@@ -23,6 +23,43 @@ export function clearSpot(cs, i, across, high, foot, depth, skip = null) {
   return null;
 }
 
+// The roads a structure is built for (and simtraffic.js drives on), each with the stretch of it, [from, to] in
+// metres along it: a flyover that stands RAMP_ABOVE off the ground somewhere, an expressway that climbs 1.5 m off it
+// somewhere (whole), and from the end of either that stands off the ground, the expressway beyond it as far as it
+// takes to come down to the ground. A structure that ended there, the road beyond on the ground surface, would leave
+// a step: cars dropping off its end.
+export function structureEdges(edges, ground) {
+  const at = new Map(), built = new Map(), cs = new Map();
+  const sec = (e) => { if (!cs.has(e)) cs.set(e, sections(e.pts, ground)); return cs.get(e); };
+  for (const e of edges) {
+    if (e.tunnel || e.span || (!e.flyover && !e.highway.startsWith('motorway'))) continue;
+    for (const n of [e.a, e.b]) { if (!at.has(n)) at.set(n, []); at.get(n).push(e); }
+    const c = sec(e);
+    if (c.some((x) => x.h > (e.flyover ? RAMP_ABOVE : 1.5))) built.set(e, [0, Infinity]);
+  }
+  const queue = [...built.keys()];
+  while (queue.length) {
+    const e = queue.pop(), c = sec(e), [from, to] = built.get(e);
+    for (const [n, end] of [[e.a, c[0]], [e.b, c.at(-1)]]) {
+      if (!end || end.s < from - 0.01 || end.s > to + 0.01 || end.h <= RAMP_ABOVE) continue;
+      for (const o of at.get(n) ?? []) {
+        if (o === e) continue;
+        const oc = sec(o), fromA = o.a === n, L = oc.at(-1)?.s ?? 0, had = built.get(o);
+        if (had && had[0] === 0 && had[1] >= L) continue;
+        // as far along it as its level stands off the ground, and a step on
+        let k = 0;
+        while (k < oc.length && oc[fromA ? k : oc.length - 1 - k].h > RAMP_ABOVE) k++;
+        const reach = k >= oc.length ? L : oc[fromA ? Math.min(k, oc.length - 1) : Math.max(oc.length - 1 - k, 0)].s;
+        let span = fromA ? [0, reach] : [reach, L];
+        if (had) span = [Math.min(had[0], span[0]), Math.max(had[1], span[1])];
+        built.set(o, span);
+        if (k >= oc.length) queue.push(o); // (off the ground all the way: on through its other end)
+      }
+    }
+  }
+  return built;
+}
+
 export async function buildFlyovers(roads, ground, depth = null) { // (roads: roads.json, or its url)
   const { edges } = typeof roads === 'string' ? await (await fetch(roads)).json() : roads;
   const concrete = [0.6, 0.6, 0.58], asphalt = [0.3, 0.3, 0.32], paint = [0.9, 0.9, 0.87], barrier = [0.7, 0.72, 0.72];
@@ -33,21 +70,22 @@ export async function buildFlyovers(roads, ground, depth = null) { // (roads: ro
     for (let j = 0; j + 1 < pa.length; j++) soup.quad(at(a, ...pa[j]), at(b, ...pb[j]), at(b, ...pb[j + 1]), at(a, ...pa[j + 1]), color);
   };
 
+  const built = structureEdges(edges, ground);
   for (const e of edges) {
     if (e.tunnel) continue;
     const expressway = e.highway.startsWith('motorway');
-    // Structures are built for flyovers, for the expressway ramps that climb up to them, and (underside
-    // only) for street-level spans. Every other road is the ground surface from the tiles, even where its
-    // level and the terrain disagree by a little.
-    if (!e.flyover && !e.span && !expressway) continue;
-    const cs = sections(e.pts, ground);
-    if (!cs.some((c) => c.h > (e.flyover || e.span ? RAMP_ABOVE : 1.5))) continue;
+    // Structures are built for flyovers, for the expressway ramps that climb up to them (structureEdges), and
+    // (underside only) for street-level spans. Every other road is the ground surface from the tiles, even where
+    // its level and the terrain disagree by a little.
+    if (!e.span && !built.has(e)) continue;
+    const cs = sections(e.pts, ground), [from, to] = built.get(e) ?? [0, Infinity];
+    if (e.span && !cs.some((c) => c.h > RAMP_ABOVE)) continue;
     // half width; a street-level span (e.span) also carries the sidewalks, and its surface is the ordinary
     // road polygons draped on the deck, so only the structure is built here
     const lanes = Math.max(1, e.lanes), w = e.span ? lanes * 1.65 + 7 : (lanes * 3.3 + (expressway ? 2.2 : 1.4)) / 2;
     for (let i = 0; i + 1 < cs.length; i++) {
       const a = cs[i], b = cs[i + 1], h = Math.max(a.h, b.h);
-      if (h <= RAMP_ABOVE) continue;
+      if (h <= RAMP_ABOVE || b.s < from || a.s > to) continue;
       if (e.span) {
         // girders seen from the tracks below; the road polygons above are single-sided
         if (Math.min(a.h, b.h) > DECK_ABOVE) sweep(a, b, [[-w, -0.3], [-w, -1.5], [w, -1.5], [w, -0.3]], concrete);
