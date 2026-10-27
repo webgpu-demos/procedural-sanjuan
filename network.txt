@@ -1,0 +1,5 @@
+   0.2s 16 expressway stretches narrowed to the lanes beyond them
+   0.3s 2250 junctions joined from 5656 nodes
+   0.6s plain network: 26130 nodes (421 with lights, 195 zippers), 59404 directed edges from 36830 roads
+Success.
+  14.6s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (18.2 MB)
