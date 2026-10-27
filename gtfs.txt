@@ -1,0 +1,2 @@
+520 bus trips on 28 routes, 941 stops in the area (of 941 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
