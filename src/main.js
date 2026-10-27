@@ -160,11 +160,15 @@ if (params.get('reflect') === '0') atmosphere.reflect = false;
 if (Number(params.get('clouds')) > 0) { atmosphere.coverage = Number(params.get('clouds')); atmosphere.cloudsOn = true; }
 let orthoLoaded = false, orthoWanted = true; // (the photo fills in when the tiles arrive; the panel may have switched it off by then)
 if (params.get('ortho') !== '0') loadOrtho(`ortho/${AREA}`, proj, manifest.extent ?? manifest.bounds, renderer).then((ok) => { orthoLoaded = ok; shared.uOrthoOn.value = ok && orthoWanted ? 1 : 0; });
-const roads = await (await fetch(`tiles/${AREA}/${manifest.roads}`)).json();
-// (the expressway's height without the humps the elevation model's overpass ridges put in it: src/shared/profile.js)
-correctProfiles(roads, (x, z) => streamer.ground(x, z));
+const [roads, rails] = await Promise.all([
+  fetch(`tiles/${AREA}/${manifest.roads}`).then((r) => r.json()),
+  manifest.rails ? fetch(`tiles/${AREA}/${manifest.rails}`).then((r) => (r.ok ? r.json() : [])).catch(() => []) : [],
+]);
+// (the expressway's height without the humps the elevation model's overpass ridges put in it, and the bridges that
+// cross no road or railway flush with their roads: src/shared/profile.js)
+correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
-const railways = await buildRailways(`tiles/${AREA}/${manifest.rails}`, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
+const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
 scene.add(railways);
 scene.add(await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth));
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));

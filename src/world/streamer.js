@@ -14,6 +14,7 @@ import { shared } from './materials.js';
 
 const WORKERS = Math.min(4, Math.max(2, (navigator.hardwareConcurrency || 4) >> 1));
 const MAX_IN_FLIGHT = WORKERS * 2;
+const NEAR_EYE = 600; // metres round the camera always streamed in full, however far ahead it looks
 // Distance (m) from the eye within which a tile shows its full-size photo atlas instead of the small one.
 const ROOFS_FULL = 600, WALLS_FULL = 900;
 
@@ -117,7 +118,13 @@ export class Streamer {
         if (near !== t.signNear) { t.signNear = near; t.signs.setNear(near); }
       }
     }
-    const dist = (tl) => Math.hypot((tl.x + 0.5) * size - focus.x, (tl.z + 0.5) * size - focus.z);
+    // (round the focus, and round the eye too: a low view down a long street looks a kilometre ahead, and the
+    // ground under the camera was left out, the cars driving on the bare terrain in the foreground)
+    const eyeScale = this.radius / Math.min(this.radius, NEAR_EYE);
+    const dist = (tl) => {
+      const x = (tl.x + 0.5) * size, z = (tl.z + 0.5) * size;
+      return Math.min(Math.hypot(x - focus.x, z - focus.z), Math.hypot(x - eye.x, z - eye.z) * eyeScale);
+    };
     // unload
     for (const [key, t] of this.tiles) {
       if (t.state === 'ready' && dist(this.available.get(key)) > this.radius + this.hysteresis) this.unload(key);

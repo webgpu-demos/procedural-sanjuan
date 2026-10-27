@@ -155,6 +155,7 @@ export class SimTraffic {
   // with nothing drawn under it, a hump the old elevation model put in it, is driven on the ground.)
   raise(roads, ground) {
     this.decks = new Map();
+    this.flush = new Map(); // (the bridges at grade where they lie on the ground: the deck a few centimetres up)
     // (where the expressway's height was corrected, src/shared/profile.js: the simulation drove the old levels,
     // pts0; a car on one is put at the new: fixAt)
     this.fixes = new Map();
@@ -200,13 +201,17 @@ export class SimTraffic {
           x0 = ax + (bx - ax) * f0; y0 = ay + (by - ay) * f0; z0 = az + (bz - az) * f0;
           x1 = ax + (bx - ax) * f1; y1 = ay + (by - ay) * f1; z1 = az + (bz - az) * f1;
         }
-        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-        if (Math.max(y0 - ground(x0, z0), y1 - ground(x1, z1)) <= RAMP_ABOVE && (y0 + y1) / 2 < ground(mx, mz) + RAMP_ABOVE) continue;
-        const len = Math.hypot(x1 - x0, z1 - z0); if (len < 0.1) continue;
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, len = Math.hypot(x1 - x0, z1 - z0);
+        if (len < 0.1) continue;
+        const low = Math.max(y0 - ground(x0, z0), y1 - ground(x1, z1)) <= RAMP_ABOVE && (y0 + y1) / 2 < ground(mx, mz) + RAMP_ABOVE;
+        // (a bridge at grade, low as it is, is driven on its deck: flush, below)
+        const into = low ? (e.grade ? this.flush : null) : this.decks;
+        if (!into) continue;
+        const seg = [x0, y0, z0, x1, y1, z1];
         for (let s = 0; s <= len; s += 12) {
           const f = s / len, key = Math.floor((x0 + (x1 - x0) * f) / 24) + ',' + Math.floor((z0 + (z1 - z0) * f) / 24);
-          if (!this.decks.has(key)) this.decks.set(key, []);
-          const cell = this.decks.get(key); if (cell.at(-1)?.[6] !== k + e.pts.length) cell.push([x0, y0, z0, x1, y1, z1, k + e.pts.length]);
+          if (!into.has(key)) into.set(key, []);
+          const cell = into.get(key); if (cell.at(-1) !== seg) cell.push(seg);
         }
       }
     }
@@ -227,13 +232,13 @@ export class SimTraffic {
   }
   // the deck under (x, z) near height y, or null (the cells round about too: a wide deck's centreline can run
   // through the next cell, and a car on its outer lane is well off the line)
-  deckAt(x, z, y) {
-    if (!this.decks) return null;
+  deckAt(x, z, y, decks = this.decks) {
+    if (!decks) return null;
     const cx = Math.floor(x / 24), cz = Math.floor(z / 24);
     // (the deck at the car's own height: a ramp under a flyover is a different deck from the flyover)
     let best = null, score = Infinity;
     for (let i = cx - 1; i <= cx + 1; i++) for (let j = cz - 1; j <= cz + 1; j++) {
-      for (const [x0, y0, z0, x1, y1, z1] of this.decks.get(i + ',' + j) ?? []) {
+      for (const [x0, y0, z0, x1, y1, z1] of decks.get(i + ',' + j) ?? []) {
         const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
         const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f, s = d + 4 * Math.abs(h - y);
         if (d < 14 && Math.abs(h - y) < 2.0 && s < score) { score = s; best = h; }
@@ -356,6 +361,8 @@ export class SimTraffic {
       const ground = seen ? streetAt(this.surface, p[0], p[2], sy) : sy;
       const deck = seen && sy > ground + 0.25 ? this.deckAt(p[0], p[2], sy) : null, raised = deck != null && deck > ground + 0.1;
       let y = seen ? (raised ? deck : ground) : sy;
+      // on a bridge at grade: on its deck, which flyovers.js lays just clear of the ground
+      if (seen && !raised && this.flush?.size) { const f = this.deckAt(p[0], p[2], sy, this.flush); if (f != null && f < ground + 0.5) y = Math.max(f, ground + 0.08); }
       if (seen) {
         const h = this.heights.get(vid);
         if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12 && Math.abs(y - h[0]) > 0.5) y = h[0] + (y - h[0]) * ease; // (a step: onto a deck, off it)

@@ -90,8 +90,8 @@ export function sections(pts, ground) {
 // bridge deck (makeCover in src/shared/decks.js).
 // depth(x, z): how far inside the lanes of a road at street level (x, z) is (src/shared/roadway.js laneDepth), for
 // the viaduct's piers to stand clear of them; null: anywhere
-export async function buildRailways(url, ground, cover = ground, depth = null) {
-  const lines = await (await fetch(url)).json();
+export async function buildRailways(url, ground, cover = ground, depth = null) { // (url: rails.json's, or its lines)
+  const lines = typeof url === 'string' ? await (await fetch(url)).json() : url;
   const concrete = [0.64, 0.64, 0.62], steel = [0.33, 0.31, 0.3], white = [1, 1, 1];
   const bed = new Soup(), structure = new Soup(), wires = [];
   // point at lateral offset l and height v above the rail bed of a section

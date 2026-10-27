@@ -24,18 +24,20 @@ export function clearSpot(cs, i, across, high, foot, depth, skip = null) {
 }
 
 // The roads a structure is built for (and simtraffic.js drives on), each with the stretch of it, [from, to] in
-// metres along it: a flyover that stands RAMP_ABOVE off the ground somewhere, an expressway that climbs 1.5 m off it
-// somewhere (whole), and from the end of either that stands off the ground, the expressway beyond it as far as it
+// metres along it: a bridge at grade, a flyover that stands RAMP_ABOVE off the ground somewhere, an expressway that
+// climbs 1.5 m off it somewhere (whole), and from the end of any of them that stands off the ground, the expressway
+// beyond it as far as it
 // takes to come down to the ground. A structure that ended there, the road beyond on the ground surface, would leave
 // a step: cars dropping off its end.
 export function structureEdges(edges, ground) {
   const at = new Map(), built = new Map(), cs = new Map();
   const sec = (e) => { if (!cs.has(e)) cs.set(e, sections(e.pts, ground)); return cs.get(e); };
   for (const e of edges) {
-    if (e.tunnel || e.span || (!e.flyover && !e.highway.startsWith('motorway'))) continue;
+    if (e.tunnel || e.span || (!e.flyover && !e.grade && !e.highway.startsWith('motorway'))) continue;
     for (const n of [e.a, e.b]) { if (!at.has(n)) at.set(n, []); at.get(n).push(e); }
     const c = sec(e);
-    if (c.some((x) => x.h > (e.flyover ? RAMP_ABOVE : 1.5))) built.set(e, [0, Infinity]);
+    // (a bridge at grade, src/shared/profile.js, whole: the tiles leave its road out)
+    if (e.grade || c.some((x) => x.h > (e.flyover ? RAMP_ABOVE : 1.5))) built.set(e, [0, Infinity]);
   }
   const queue = [...built.keys()];
   while (queue.length) {
@@ -82,10 +84,14 @@ export async function buildFlyovers(roads, ground, depth = null) { // (roads: ro
     if (e.span && !cs.some((c) => c.h > RAMP_ABOVE)) continue;
     // half width; a street-level span (e.span) also carries the sidewalks, and its surface is the ordinary
     // road polygons draped on the deck, so only the structure is built here
-    const lanes = Math.max(1, e.lanes), w = e.span ? lanes * 1.65 + 7 : (lanes * 3.3 + (expressway ? 2.2 : 1.4)) / 2;
+    // (a street's bridge at grade carries its sidewalks too, as the street up to it does)
+    const lanes = Math.max(1, e.lanes || (e.grade && !e.oneway ? 2 : 1));
+    const w = e.span ? lanes * 1.65 + 7 : e.grade && !expressway ? lanes * 1.65 + 1.9 : (lanes * 3.3 + (expressway ? 2.2 : 1.4)) / 2;
+    // a bridge at grade: its deck flush with the roads at its ends, never under the ground between
+    if (e.grade) for (const c of cs) if (c.h < 0.08) { c.p = [c.p[0], c.p[1] + 0.08 - c.h, c.p[2]]; c.h = 0.08; }
     for (let i = 0; i + 1 < cs.length; i++) {
       const a = cs[i], b = cs[i + 1], h = Math.max(a.h, b.h);
-      if (h <= RAMP_ABOVE || b.s < from || a.s > to) continue;
+      if ((h <= RAMP_ABOVE && !e.grade) || b.s < from || a.s > to) continue;
       if (e.span) {
         // girders seen from the tracks below; the road polygons above are single-sided
         if (Math.min(a.h, b.h) > DECK_ABOVE) sweep(a, b, [[-w, -0.3], [-w, -1.5], [w, -1.5], [w, -0.3]], concrete);
@@ -98,13 +104,16 @@ export async function buildFlyovers(roads, ground, depth = null) { // (roads: ro
         line(-w + 0.75); line(w - 0.75);
         if (Math.floor(a.s / (STEP * 2)) % 2 === 0) for (let k = 1; k < lanes; k++) line(-w + 0.75 + (k * (2 * w - 1.5)) / lanes);
       }
-      // parapets, with a taller noise barrier on the expressway
-      const top = expressway ? 1.9 : 1.0;
+      // parapets, with a taller noise barrier on the expressway's flyovers
+      const top = expressway && !e.grade ? 1.9 : 1.0;
       for (const s of [-1, 1]) {
         sweep(a, b, [[s * (w - 0.25), 0], [s * (w - 0.25), 0.9], [s * w, 0.9]], concrete);
-        if (expressway) sweep(a, b, [[s * (w - 0.1), 0.9], [s * (w - 0.1), top]], barrier);
+        if (top > 1) sweep(a, b, [[s * (w - 0.1), 0.9], [s * (w - 0.1), top]], barrier);
       }
-      if (Math.min(a.h, b.h) > DECK_ABOVE) {
+      if (e.grade) {
+        // a slab on its abutments: its edge and underside show over the creek or the dip it crosses
+        sweep(a, b, [[-w, 0.9], [-w, -0.4], [-w * 0.8, -1.1], [w * 0.8, -1.1], [w, -0.4], [w, 0.9]], concrete);
+      } else if (Math.min(a.h, b.h) > DECK_ABOVE) {
         // box girder: outer faces and the underside
         sweep(a, b, [[-w, 0.9], [-w, -0.5], [-w * 0.55, -1.5], [w * 0.55, -1.5], [w, -0.5], [w, 0.9]], concrete);
       } else {
