@@ -14,7 +14,7 @@
 //
 // Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, merged.json, lanes.json, inside.json} and runs netconvert to
 // data/sim/<area>/<area>.net.xml.gz.
-// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--join=18]
+// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--join=18]
 //        [--cluster=20] [--reach=45] [--netconvert=--opt,value,...]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,9 +42,13 @@ const f = (v) => Math.round(v * 100) / 100;
 const fast = (e) => /^(motorway|trunk)(_link)?$/.test(e.highway);
 const lanesOf = roadLanes(roads.edges);
 
+// Driveways, car parks, a petrol station's forecourt (OSM's unnamed service ways: 430 km of them) are left out: where
+// one met a signalled crossing, the lights gave it a phase of its own, and the avenue waited for an empty car park.
+// (Named ones stay: the airport's departures and arrivals levels, a hospital's streets, a frontage road.)
+const driveway = (e) => flag('service') && e.highway === 'service' && !e.name;
 const edges = [];
 roads.edges.forEach((e, i) => {
-  if (e.a === e.b) return;
+  if (e.a === e.b || driveway(e)) return;
   const pts = [];
   for (let k = 0; k < e.pts.length; k += 3) pts.push([e.pts[k], -e.pts[k + 2], e.pts[k + 1]]);
   let len = 0;
