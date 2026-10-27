@@ -1,0 +1,159 @@
+   0.2s 16 expressway stretches narrowed to the lanes beyond them
+   0.3s 7072 joins: 42907 edges
+   0.3s 1030 junctions joined from 2382 nodes
+   0.6s plain network: 17442 nodes (427 with lights, 8 zippers), 40491 directed edges from 36830 roads
+Success.
+  10.5s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.1 MB)
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39268 of 39942 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+223976 trips: {'work': 157988, 'through': 13029, 'school': 20946, 'errand': 19975, 'airport': 5230, 'delivery': 9656} (scale 0.5)
+departures by half hour: 4.5h 2484 5.0h 7776 5.5h 10079 6.0h 20273 6.5h 25180 7.0h 48187 7.5h 34731 8.0h 26836 8.5h 18628 9.0h 14586 9.5h 15216
+-> data/sim/sanjuan/morning
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+> Executing step 0
+>> Running router on /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/trips.xml
+>>> Begin time: 2026-10-27 21:59:22.992679
+>>> End time: 2026-10-27 21:59:57.551495
+>>> Duration: 0:00:34.558816
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 21:59:57.551575
+>>> End time: 2026-10-27 22:01:43.908386
+>>> Duration: 0:01:46.356811
+<<
+< Step 0 ended (duration: 0:02:20.915771)
+------------------
+
+> Executing step 1
+>> Running router on 000/trips_000.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:01:43.909659
+>>> End time: 2026-10-27 22:03:57.794799
+>>> Duration: 0:02:13.885140
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:03:57.794844
+>>> End time: 2026-10-27 22:06:07.121855
+>>> Duration: 0:02:09.327011
+<<
+< Step 1 ended (duration: 0:04:23.212263)
+------------------
+
+> Executing step 2
+>> Running router on 001/trips_001.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:06:07.123114
+>>> End time: 2026-10-27 22:08:28.529762
+>>> Duration: 0:02:21.406648
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:08:28.529807
+>>> End time: 2026-10-27 22:10:41.715967
+>>> Duration: 0:02:13.186160
+<<
+< Step 2 ended (duration: 0:04:34.592919)
+------------------
+
+> Executing step 3
+>> Running router on 002/trips_002.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:10:41.716981
+>>> End time: 2026-10-27 22:13:18.776239
+>>> Duration: 0:02:37.059258
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:13:18.776280
+>>> End time: 2026-10-27 22:15:41.289827
+>>> Duration: 0:02:22.513547
+<<
+< Step 3 ended (duration: 0:04:59.572909)
+------------------
+
+> Executing step 4
+>> Running router on 003/trips_003.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:15:41.290960
+>>> End time: 2026-10-27 22:18:23.476492
+>>> Duration: 0:02:42.185532
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:18:23.476570
+>>> End time: 2026-10-27 22:20:39.370279
+>>> Duration: 0:02:15.893709
+<<
+< Step 4 ended (duration: 0:04:58.079382)
+------------------
+
+> Executing step 5
+>> Running router on 004/trips_004.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:20:39.371291
+>>> End time: 2026-10-27 22:23:26.168161
+>>> Duration: 0:02:46.796870
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:23:26.168202
+>>> End time: 2026-10-27 22:25:50.403903
+>>> Duration: 0:02:24.235701
+<<
+< Step 5 ended (duration: 0:05:11.032675)
+------------------
+
+> Executing step 6
+>> Running router on 005/trips_005.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:25:50.405199
+>>> End time: 2026-10-27 22:28:48.138142
+>>> Duration: 0:02:57.732943
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:28:48.138184
+>>> End time: 2026-10-27 22:31:16.534303
+>>> Duration: 0:02:28.396119
+<<
+< Step 6 ended (duration: 0:05:26.129166)
+------------------
+
+> Executing step 7
+>> Running router on 006/trips_006.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:31:16.535581
+>>> End time: 2026-10-27 22:34:12.487751
+>>> Duration: 0:02:55.952170
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:34:12.487792
+>>> End time: 2026-10-27 22:36:20.990455
+>>> Duration: 0:02:08.502663
+<<
+< Step 7 ended (duration: 0:05:04.454962)
+------------------
+
+> Executing step 8
+>> Running router on 007/trips_007.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:36:20.991763
+>>> End time: 2026-10-27 22:39:18.192027
+>>> Duration: 0:02:57.200264
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:39:18.192070
+>>> End time: 2026-10-27 22:41:30.812046
+>>> Duration: 0:02:12.619976
+<<
+< Step 8 ended (duration: 0:05:09.820350)
+------------------
+
+> Executing step 9
+>> Running router on 008/trips_008.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:41:30.813022
+>>> End time: 2026-10-27 22:44:30.983680
+>>> Duration: 0:03:00.170658
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:44:30.983720

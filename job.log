@@ -1,0 +1,6 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
+++ SCALE=0.5
+++ ITER=10
+++ RUNARGS=
+++ sh tools/sim/all.sh sanjuan
