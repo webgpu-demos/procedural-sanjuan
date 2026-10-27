@@ -622,7 +622,9 @@ export function createMaterials(tex) {
     facade: facadeMaterial(tex),
     facadeFor: () => facadeMaterial(tex), // a tile's own instance, for its wall photos
     // Ground not covered by roads or buildings: private lots, car parks, yards.
-    terrain: groundMaterial(tex, { fixedLayer: 3, color: new THREE.Color().setRGB(0.2, 0.2, 0.185) }),
+    // (the open ground takes less of the street lamps' light than the street: their pools bleached the photo it
+    // wears, lots and yards, near white, and from above at dawn the land beside PR-22 read as snow)
+    terrain: Object.assign(groundMaterial(tex, { fixedLayer: 3, color: new THREE.Color().setRGB(0.2, 0.2, 0.185) }), { defines: { LAMP_GAIN: '0.4' } }),
     road: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     // lane lines and crossings: drawn over the road surface, with a stronger depth bias so they never flicker
     paint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -8 }),

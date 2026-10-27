@@ -70,6 +70,10 @@ export class Streamer {
     return this.manifest;
   }
 
+  // segs: the approaches to the expressway's merges and forks, whose turn arrows the workers leave out (roadway.js
+  // mergeApproaches); before the first tile.
+  merges(segs) { for (const w of this.workers) w.postMessage({ type: 'merges', segs: segs.buffer.slice(0) }); }
+
   // Terrain height, and the height of whatever one stands on (the terrain, or a bridge deck).
   ground(x, z) { return meshHeight(this.grid, x, z); } // (the terrain as its mesh draws it: src/shared/terrain.js)
   // How high the paving at (x, z) stands over the terrain (a sidewalk, a carriageway, an island), where its tile is

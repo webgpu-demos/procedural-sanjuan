@@ -16,7 +16,7 @@ import { buildFlyovers, overDecks } from './world/flyovers.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
-import { laneDepth } from './shared/roadway.js';
+import { laneDepth, mergeApproaches } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad } from './world/drive.js';
@@ -171,6 +171,7 @@ roads.lanes = lanes;
 // (the expressway's height without the humps the elevation model's overpass ridges put in it, and the bridges that
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
+streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
 scene.add(railways);

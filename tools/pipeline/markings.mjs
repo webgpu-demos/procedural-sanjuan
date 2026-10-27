@@ -127,7 +127,10 @@ export function buildMarkings({ edges, pos, idx, land, inBounds }) {
       };
       // arrows before a junction
       const end = fwd ? e.ids.at(-1) : e.ids[0];
-      if (lanesDir >= 2 && (degree.get(end) ?? 0) >= 3) {
+      // (not where the expressway merges or forks: a junction of expressway and ramps only, where no one turns;
+      // src/shared/roadway.js mergeApproaches leaves these out of tiles compiled before)
+      const merge = (at.get(end) ?? []).every(({ e: o, i }) => (i === 0 || i === o.ids.length - 1) && /^(motorway|trunk)(_link)?$/.test(o.highway));
+      if (lanesDir >= 2 && (degree.get(end) ?? 0) >= 3 && !merge) {
         const tagged = (e.oneway ? e.turnLanes : fwd ? e.turnLanesForward : e.turnLanesBackward)?.split('|').map((t) => TURN[t.trim()]);
         const turns = tagged?.length === lanesDir ? tagged : defaultTurns(lanesDir);
         for (const back of [26, 56]) {

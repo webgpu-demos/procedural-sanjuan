@@ -247,14 +247,19 @@ export class SimTraffic {
         const u = (p[0] - g.x0) * g.tx + (p[2] - g.z0) * g.tz;
         if (u < -0.5 || u > g.len + 0.5) continue;
         const d = (p[0] - g.x0) * -g.tz + (p[2] - g.z0) * g.tx; // (to the right of the way)
-        if (Math.abs(d) > g.sumo * 1.5 + 1.2 || Math.abs(d) >= bd) continue;
+        // (out of its lanes: on another road where two meet or part, a ramp alongside; left as SUMO drove it)
+        if (Math.abs(d) > g.sumo * 1.5 + 0.5 || Math.abs(d) >= bd) continue;
         bd = Math.abs(d); best = [g, u, d];
       }
     }
     if (!best) return null;
     const [g, u, d] = best;
     const fromRight = g.sumo / 2 - 0.5 - d / 3.0;                 // SUMO's lane, counted from the right
-    const lane = Math.min(g.painted - 0.55, Math.max(-0.45, fromRight + Math.max(0, g.painted - g.sumo)));
+    // (more lanes in SUMO than painted, where the paint is narrower than OSM's count: SUMO's lanes share the painted
+    // width evenly, so that two cars side by side in SUMO do not ride in one painted lane, the one through the other)
+    const lane = g.sumo > g.painted
+      ? Math.min(g.painted - 0.55, Math.max(-0.45, (fromRight + 0.5) * (g.painted / g.sumo) - 0.5))
+      : Math.min(g.painted - 0.55, Math.max(-0.45, fromRight + g.painted - g.sumo));
     const at = g.s0 + u;
     // (the painted centre's offset from the OSM line, to the right of the way travelled)
     let centre = 0;
@@ -263,7 +268,8 @@ export class SimTraffic {
       const c = g.off[k] + (g.off[Math.min(k + 1, g.off.length - 1)] - g.off[k]) * (f - k);
       centre = g.rev ? -c : c;
     }
-    const shift = centre + (g.painted / 2 - 0.5 - lane) * g.lw - d;
+    // (one lane: kept as far off its middle as SUMO had it, in metres; a ramp seven metres wide does not spread it)
+    const shift = g.painted === 1 && g.sumo === 1 ? centre : centre + (g.painted / 2 - 0.5 - lane) * g.lw - d;
     return [-g.tz * shift, g.tx * shift];
   }
 

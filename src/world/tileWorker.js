@@ -2,8 +2,9 @@
 import { decodeTile } from '../shared/tileformat.js';
 import { buildTile, blockMesh } from './meshing.js';
 import { makeSurface } from '../shared/decks.js';
+import { mergeArrows } from '../shared/roadway.js';
 
-let grid = null, surface = null;
+let grid = null, surface = null, merging = null; // merging: the turn arrows painted where nothing turns (roadway.js)
 
 // All typed arrays in a result, so they are transferred rather than copied.
 function buffers(o, out = []) {
@@ -65,12 +66,14 @@ self.onmessage = async ({ data: m }) => {
     surface = makeSurface(grid, m.decks);
     return;
   }
+  if (m.type === 'merges') { merging = mergeArrows(new Float32Array(m.segs)); return; }
   if (m.type === 'tile' || m.type === 'blocks') {
     try {
       const res = await fetch(m.url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       if (m.type === 'blocks') { const mesh = blockChunk(await res.arrayBuffer()); self.postMessage({ type: 'blocks', key: m.key, mesh }, buffers(mesh)); return; }
       const tile = decodeTile(await res.arrayBuffer());
+      if (merging) tile.props = tile.props.filter((p) => !merging(p));
       const mesh = buildTile(tile, grid, m.tileSize, surface);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
       self.postMessage({ type: 'tile', key: m.key, mesh }, buffers(mesh));
