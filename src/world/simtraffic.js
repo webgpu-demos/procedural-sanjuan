@@ -286,8 +286,16 @@ export class SimTraffic {
     this.decks = new Map();
     this.flush = new Map(); // (the bridges at grade where they lie on the ground: the deck a few centimetres up)
     // (where the expressway's height was corrected, src/shared/profile.js: the simulation drove the old levels,
-    // pts0; a car on one is put at the new: fixAt)
+    // pts0; a car on one is put at the new: fixAt. A run whose network was built on the roads' levels as they are,
+    // index.levels 'roads', drove those: nothing to fix)
     this.fixes = new Map();
+    if (this.index?.levels !== 'roads') this.fixLevels(roads);
+    // (the roads flyovers.js builds a structure for; a span's surface is the tiles' own, draped on its deck: the
+    // surface)
+    const built = structureEdges(roads.edges, ground);
+    this.deckSegments(roads, ground, built);
+  }
+  fixLevels(roads) {
     const keep = [];
     const file = (seg, only) => {
       const len = Math.hypot(seg[3] - seg[0], seg[5] - seg[2]);
@@ -312,9 +320,8 @@ export class SimTraffic {
     const fixed = new Set(this.fixes.keys());
     const near = (key) => { for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (fixed.has(key + a * CELLS + b)) return true; return false; };
     for (const seg of keep) file(seg, near);
-    // (the roads flyovers.js builds a structure for; a span's surface is the tiles' own, draped on its deck: the
-    // surface)
-    const built = structureEdges(roads.edges, ground);
+  }
+  deckSegments(roads, ground, built) {
     for (const e of roads.edges) {
       if (!built.has(e)) continue;
       const p = e.pts, [from, to] = built.get(e);

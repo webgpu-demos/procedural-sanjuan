@@ -343,6 +343,7 @@ json.dump({'version': 1, 'scenario': SCEN, 'begin': BEGIN, 'end': END, 'window':
            'types': TYPES, 'kinds': KINDS, 'municipios': munis, 'edges': ids, 'speedInterval': 300, 'speedBegin': speed_begin,
            'apagon': APAGON_AT if apagon else None, 'stats': stats, 'peak': peak,
            'lanes': netjson('lanes.json'),  # (each one-way expressway road: SUMO's lanes on it and their width; simtraffic.js relane)
+           'levels': 'roads',  # (network.mjs built the network on roads.json's levels as they are: simtraffic.js raise)
            'tripinfo': {'count': len(ti), 'meanDuration': float(np.mean([v[0] for v in ti.values()])) if ti else 0,
                         'meanTimeLoss': float(np.mean([v[1] for v in ti.values()])) if ti else 0}},
           open(os.path.join(OUT, 'index.json'), 'w'))
