@@ -1,0 +1,17 @@
+> Executing step 0
+>> Running router on /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/trips.xml
+>>> Begin time: 2026-10-27 19:24:12.318716
+>>> End time: 2026-10-27 19:50:14.403163
+>>> Duration: 0:26:02.084447
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 19:50:14.403205
+>>> End time: 2026-10-27 19:53:48.385589
+>>> Duration: 0:03:33.982384
+<<
+< Step 0 ended (duration: 0:29:36.066950)
+------------------
+
+> Executing step 1
+>> Running router on 000/trips_000.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 19:53:48.386654

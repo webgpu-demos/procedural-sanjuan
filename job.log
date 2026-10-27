@@ -1,0 +1,15 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ D=/mnt/sim/diag
+++ mkdir -p /mnt/sim/diag
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
++++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python -c 'import sumo; print(sumo.SUMO_HOME)'
+++ export SUMO_HOME=/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo
+++ SUMO_HOME=/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo
+++ node tools/sim/network.mjs
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=1 --scenario=lab '--vtype=jmIgnoreFoeProb=0.3;jmIgnoreFoeSpeed=5;jmTimegapMinor=0.6'
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan --demand=lab
+++ '[' -n 8 ']'
+++ A=/mnt/sim/assign
+++ mkdir -p /mnt/sim/assign
+++ cd /mnt/sim/assign
+++ /usr/bin/time -v /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo/tools/assign/duaIterate.py -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -t /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/trips.xml -l 8 -b 16200 -e 36900 --mesosim -j --meso-recheck 10 --time-to-teleport 300 --routing-algorithm astar -T -E -a 900 duarouter--routing-threads 4 sumo--ignore-route-errors true sumo--max-depart-delay 900
