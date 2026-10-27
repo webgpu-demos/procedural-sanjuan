@@ -160,7 +160,10 @@ def profile(name):
     d = DEP.get(name) or {k: sum(v[k] for v in DEP.values()) for k in ['total'] + LABELS}
     w = np.array([d[l] for l in LABELS], float); w[0] *= 0.35  # (of those leaving before 5, the ones still on the road after 4:30)
     return w
-AM_SHARE = {n: profile(n).sum() / (DEP.get(n) or DEP['San Juan'])['total'] for n in MUNI}
+# (the departures are tabled for the six municipios round the area; any other leaves home as all six together do. The
+# share had been their sum over San Juan's workers alone, 2.4 for 0.83: Toa Baja and Toa Alta drove in three times over)
+ALL = {k: sum(v[k] for v in DEP.values()) for k in ['total'] + LABELS}
+AM_SHARE = {n: profile(n).sum() / (DEP.get(n) or ALL)['total'] for n in MUNI}
 def depart_time(name):
     w = profile(name); i = np.searchsorted(np.cumsum(w), rng.random() * w.sum())
     lo, hi = BINS[i]; lo = max(lo, 4.5)
