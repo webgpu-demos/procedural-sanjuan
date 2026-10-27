@@ -266,6 +266,12 @@ for w0 in np.arange(begin, END, WINDOW):
 log(f'{len(windows)} windows, {total / 1e6:.1f} MB (gzipped)')
 
 # ---------------------------------------------------------------- edge speeds every 5 min
+# (a SUMO edge joining a run of roads, end to end, is named after its last: each road of it gets its speeds;
+# network.mjs net/merged.json)
+def netjson(name):
+    p = os.path.join(SIM, 'net', name)
+    return json.load(open(p)) if os.path.exists(p) else {}
+MERGED = netjson('merged.json')
 edges = {}  # edge id -> index (the client maps them to roads: "e<i>" / "r<i>")
 intervals = []
 for ev, el in ET.iterparse('edgedata.xml', events=('end',)):
@@ -273,13 +279,14 @@ for ev, el in ET.iterparse('edgedata.xml', events=('end',)):
         row = {}
         for e in el.findall('edge'):
             if e.get('speed') is None: continue
-            row[e.get('id')] = float(e.get('speed'))
+            for k in MERGED.get(e.get('id'), [e.get('id')]): row[k] = float(e.get('speed'))
         intervals.append((float(el.get('begin')), row)); el.clear()
 free = {}
 for e in net.iter('edge'):
     if e.get('function') == 'internal': continue
     ln = e.find('lane')
-    if ln is not None: free[e.get('id')] = float(ln.get('speed'))
+    if ln is not None:
+        for k in MERGED.get(e.get('id'), [e.get('id')]): free[k] = float(ln.get('speed'))
 ids = sorted(free); index = {k: i for i, k in enumerate(ids)}
 grid = np.full((len(intervals), len(ids)), 255, np.uint8)  # 255: no cars in that interval
 for r, (_, row) in enumerate(intervals):
@@ -299,6 +306,9 @@ links = collections.defaultdict(list)  # incoming edge -> [(tls, link index, dir
 for c in net.iter('connection'):
     if c.get('tl') and not c.get('from').startswith(':'):
         links[c.get('from')].append([c.get('tl'), int(c.get('linkIndex')), c.get('dir')])
+# (a road inside a joined junction: the lights of the way in that carries on along it; network.mjs net/inside.json)
+for k, via in netjson('inside.json').items():
+    if via in links and k not in links: links[k] = links[via]
 # what each signal showed, as it changed: states numbered per signal ([time, state index] pairs)
 if begin != BEGIN:  # (the apagón: the normal morning's lights until the failure)
     m = json.load(open(os.path.join(os.path.join(ROOT, 'public/tiles', AREA, 'sim', 'morning'), 'signals.json')))['timeline']
@@ -326,6 +336,7 @@ json.dump({'version': 1, 'scenario': SCEN, 'begin': BEGIN, 'end': END, 'window':
            'share': float(args['share']) if 'share' in args else None,  # (of the estimated demand: --share)
            'types': TYPES, 'kinds': KINDS, 'municipios': munis, 'edges': ids, 'speedInterval': 300, 'speedBegin': speed_begin,
            'apagon': APAGON_AT if apagon else None, 'stats': stats, 'peak': peak,
+           'lanes': netjson('lanes.json'),  # (each one-way expressway road: SUMO's lanes on it and their width; simtraffic.js relane)
            'tripinfo': {'count': len(ti), 'meanDuration': float(np.mean([v[0] for v in ti.values()])) if ti else 0,
                         'meanTimeLoss': float(np.mean([v[1] for v in ti.values()])) if ti else 0}},
           open(os.path.join(OUT, 'index.json'), 'w'))

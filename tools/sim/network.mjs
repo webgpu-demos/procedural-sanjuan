@@ -12,7 +12,7 @@
 // junctions' shapes, and a piece between two close ones was left a metre or none long: a car could not stop on it,
 // so it waited across the junction behind, and the streets locked one another.)
 //
-// Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, merged.json, lanes.json} and runs netconvert to
+// Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, merged.json, lanes.json, inside.json} and runs netconvert to
 // data/sim/<area>/<area>.net.xml.gz.
 // Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--join=18]
 //        [--cluster=20] [--reach=45] [--netconvert=--opt,value,...]
@@ -186,6 +186,24 @@ if (CLUSTER > 0) {
 const clusters = [...members.values()].filter((m) => m.length > 1);
 log(`${clusters.length} junctions joined from ${clusters.reduce((s, m) => s + m.length, 0)} nodes`);
 const inCluster = new Set(clusters.flat());
+// The pieces inside a joined junction are no longer SUMO's edges (its internal lanes drive them): a signal head
+// over one shows the lights of the way in that carries straight on along it (run.py: signals.json links)
+const inside = {};
+{
+  const root = (k) => (parent.has(k) ? find(k) : k);
+  const heading = (p, end) => { const [a, b] = end ? [p.at(-2), p.at(-1)] : [p[0], p[1]]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; };
+  for (const e of mergedEdges) {
+    if (!inCluster.has(e.from) || root(e.from) !== root(e.to)) continue;
+    const h = heading(e.pts, false);
+    let best = null, bd = -2;
+    for (const o of used.get(e.from)[0]) {
+      if (inCluster.has(o.from) && root(o.from) === root(e.from)) continue; // (another piece inside)
+      const g = heading(o.pts, true), d = g[0] * h[0] + g[1] * h[1];
+      if (d > bd) { bd = d; best = o; }
+    }
+    if (best) for (const id of merged[e.id] ?? [e.id]) inside[id] = best.id;
+  }
+}
 
 let zips = 0;
 const nodeXml = ['<nodes>'];
@@ -210,6 +228,7 @@ fs.writeFileSync(path.join(out, 'net/plain.nod.xml'), nodeXml.join('\n'));
 fs.writeFileSync(path.join(out, 'net/plain.edg.xml'), edgeXml.join('\n'));
 fs.writeFileSync(path.join(out, 'net/merged.json'), JSON.stringify(merged));
 fs.writeFileSync(path.join(out, 'net/lanes.json'), JSON.stringify(laneTable));
+fs.writeFileSync(path.join(out, 'net/inside.json'), JSON.stringify(inside));
 log(`plain network: ${used.size} nodes (${[...used.keys()].filter((k) => signals.has(k)).length} with lights, ${zips} zippers), ` +
   `${mergedEdges.length} directed edges from ${roads.edges.length} roads`);
 
