@@ -147,8 +147,10 @@ export class Streamer {
     for (const w of wanted) { const tl = w[2], vx = (tl.x + 0.5) * size - focus.x, vz = (tl.z + 0.5) * size - focus.z; w[0] *= 1 - 0.35 * ((vx * lx + vz * lz) / (Math.hypot(vx, vz) || 1)); }
     wanted.sort((a, b) => a[0] - b[0]);
     const url = (file) => new URL(`${this.base}/${file}`, location.href).href;
+    this.backlog = wanted.length; // (not asked for yet: pending counts them)
     for (const [, key, tl] of wanted) {
       if (this.inFlight >= MAX_IN_FLIGHT) break;
+      this.backlog--;
       this.tiles.set(key, { state: 'loading' });
       this.inFlight++;
       const w = this.workers[this.nextWorker++ % this.workers.length];
@@ -156,8 +158,10 @@ export class Streamer {
     }
     if (!chunks.length || this.inFlight >= MAX_IN_FLIGHT) return;
     const far = chunks.filter((c) => !this.blocks.has(c[2]) && chunkDist(c) <= this.blockRadius).map((c) => [chunkDist(c), c]).sort((a, b) => a[0] - b[0]);
+    this.backlog += far.length;
     for (const [, c] of far) {
       if (this.inFlight >= MAX_IN_FLIGHT) break;
+      this.backlog--;
       this.blocks.set(c[2], { state: 'loading', mesh: null, chunk: c });
       this.inFlight++;
       this.workers[this.nextWorker++ % this.workers.length].postMessage({ type: 'blocks', key: c[2], url: url(c[2]) });
@@ -356,5 +360,6 @@ export class Streamer {
     return null;
   }
 
-  get pending() { return this.inFlight; }
+  // tiles and blocks on their way, and those wanted but not yet asked for (as of the last update)
+  get pending() { return this.inFlight + (this.backlog ?? 0); }
 }

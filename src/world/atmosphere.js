@@ -46,8 +46,13 @@ class TwilightSky extends Effect {
           // the far ground and sea melt into the twilight horizon (the physical haze stays bright after dusk)
           // (lights shine through: only what is dim is darkened)
           float lum = dot(inputColor.rgb, vec3(0.3, 0.59, 0.11));
-          float far = smoothstep(1500.0, 20000.0, distance(hit, uCam)) * uDark * 0.9 * (1.0 - smoothstep(0.35, 1.2, lum));
-          outputColor.rgb = mix(inputColor.rgb, vec3(0.03, 0.05, 0.11) * 0.6, far);
+          // (by the angle down from the horizon as well as the distance: the depth of the last kilometres of sea is
+          // too coarse to tell, and their haze stood as a bright seam along the horizon, stepped where the mesh is)
+          float dist = distance(hit, uCam);
+          if (dist > 4000.0) dist = max(dist, 2e4 * (1.0 - smoothstep(0.012, 0.05, -dir.y)));
+          float far = smoothstep(1500.0, 20000.0, dist) * uDark * (1.0 - smoothstep(0.35, 1.2, lum));
+          vec3 horizon = mix(vec3(0.035, 0.06, 0.13), vec3(0.05, 0.1, 0.24), smoothstep(0.3, 0.6, uDark) * (1.0 - smoothstep(0.72, 0.94, uDark))) * 0.6;
+          outputColor.rgb = mix(inputColor.rgb, mix(vec3(0.03, 0.05, 0.11) * 0.6, horizon, smoothstep(8000.0, 30000.0, dist)), far * 0.95);
           return;
         }
         // navy overhead, a paler blue at the horizon, warmer towards where the sun will rise; in the blue hour (the
@@ -57,10 +62,13 @@ class TwilightSky extends Effect {
         sky = mix(sky, mix(vec3(0.05, 0.1, 0.24), vec3(0.018, 0.04, 0.12), smoothstep(0.0, 0.6, up)), blue);
         float east = max(0.0, dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(uSunDir.x, 0.0, uSunDir.z))));
         sky += vec3(0.09, 0.045, 0.03) * pow(east, 3.0) * (1.0 - smoothstep(0.0, 0.25, up)) * smoothstep(-0.35, -0.02, uSunDir.y);
-        // stars: the brightest, coming out once the blue hour is over
-        vec3 cell = floor(dir * 420.0);
-        float star = step(0.9975, hash(cell)) * smoothstep(0.05, 0.3, up) * smoothstep(0.74, 0.97, uDark);
-        sky += vec3(star * (0.4 + 0.6 * hash(cell + 7.0)));
+        // stars: the brightest, coming out once the blue hour is over; each a round point at a place of its own in
+        // its cell of the sky (the cells themselves, lit whole, read as dashes and streaks)
+        vec3 cell = floor(dir * 150.0);
+        vec3 at = normalize((cell + 0.5 + 0.5 * (vec3(hash(cell + 1.0), hash(cell + 2.0), hash(cell + 3.0)) - 0.5)) / 150.0);
+        float px = max(length(fwidth(dir)), 1e-5), ang = length(dir - at);
+        float star = step(0.982, hash(cell)) * (1.0 - smoothstep(0.5 * px, 1.3 * px, ang)) * smoothstep(0.05, 0.3, up) * smoothstep(0.74, 0.97, uDark);
+        sky += vec3(star * (0.35 + 0.65 * hash(cell + 7.0)));
         outputColor.rgb = inputColor.rgb + sky * uDark * 0.6;
       }`, {
       attributes: EffectAttribute.DEPTH,

@@ -229,6 +229,8 @@ const PALETTE = {
 const PITCHED_ROOFS = [[0.55, 0.56, 0.57], [0.42, 0.44, 0.46], [0.62, 0.24, 0.2], [0.24, 0.42, 0.32], [0.66, 0.64, 0.6], [0.3, 0.36, 0.5]];
 // Flat roofs as San Juan's are from the air: most coated against the sun and the rain in white or a pale grey
 // elastomeric, others bare grey concrete, some painted the red of tile, a few green or a weathered blue.
+// a flat roof's tone, the same for a building near (its full mesh) and far (blockMesh): no change as it comes in
+const roofRnd = (i, tx, tz) => { let k = 0; return () => hash3(i * 31 + 517 + k++, tx * 13 + 5, tz * 17 + 3); };
 function flatRoofColour(r) {
   const k = r();
   if (k < 0.42) { const g = 0.74 + 0.14 * r(); return [g, g, g * 0.98]; }       // coated: white, off-white
@@ -309,7 +311,9 @@ export function blockMesh(buildings, tx, tz) {
   const pos = new Buf(1 << 14), nor = new Buf(1 << 14), col = new Buf(1 << 14), idx = [];
   let v = 0;
   buildings.forEach((b, i) => {
-    const { wallCol } = finishOf(b, i, tx, tz), roofCol = wallCol.map((c) => c * 0.62 + 0.12);
+    // (its roof as near: coated white, bare concrete, now and then red or green; it was its walls' colour, lightened,
+    // and from the air the low city was confetti of lilac, mint and pink)
+    const { wallCol } = finishOf(b, i, tx, tz), roofCol = b.flags & BFLAG.MASONRY ? wallCol.map((c) => c * 0.82) : lin(flatRoofColour(roofRnd(i, tx, tz)));
     const top = b.base + b.height, bottom = b.base - SINK;
     for (const rings of b.polygons) {
       for (const r of rings) {
@@ -462,7 +466,7 @@ export function buildingMesh(buildings, tx, tz) {
     // ---- walls, parapet, flat roof
     const inner = wallCol.map((c) => c * 0.8);
     // (a fortress's top is its own stonework, a little darker than the walls)
-    const flatRoof = masonry ? wallCol.map((c) => c * 0.82) : lin(flatRoofColour(rnd));
+    const flatRoof = masonry ? wallCol.map((c) => c * 0.82) : lin(flatRoofColour(roofRnd(i, tx, tz)));
     let longest = { len: 0, dx: 1, dz: 0 };
     const fronts = []; // candidate balcony edges
     for (const rings of b.polygons) {
