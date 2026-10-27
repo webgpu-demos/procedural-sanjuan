@@ -78,7 +78,9 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
 
   // Two rays, half a step apart, for glass (one alone left a pane speckled where neighbouring pixels found and
   // missed what it mirrors); one does for water, whose own blur hides the speckle.
-  float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  // (on glass the same for every pixel: jittered pixel by pixel, a pane where some found what it mirrors and some
+  // missed was a speckle, like a QR code, from a few hundred metres)
+  float jitter = level ? fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) : 0.25;
   vec2 hit = traceMirror(P, R, jitter), hit2 = level ? vec2(-1.0) : traceMirror(P, R, fract(jitter + 0.5));
   if (hit.x < 0.0) { hit = hit2; hit2 = vec2(-1.0); }
   if (hit.x < 0.0) return;

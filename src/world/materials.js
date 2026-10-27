@@ -516,8 +516,12 @@ const GROUND_MAIN = /* glsl */ `
     slope *= calm;
     // The colour of the water itself: a deep Atlantic blue offshore, turquoise over the sand of the shallows;
     // lagoons and rivers darker and greener, pools their own blue
-    float shallow = sea * (1.0 - smoothstep(4.0, 120.0, shore + 30.0 * (vnoise(p * 0.02) - 0.5)));
+    // (the turquoise only where the shallows are open to the ocean: the bay, a harbour, its water greener and
+    // darker; it had been a lagoon's turquoise beside the navy Atlantic)
+    float harbour = sea * (1.0 - smoothstep(0.15, 0.6, sh.g));
+    float shallow = sea * (1.0 - harbour) * (1.0 - smoothstep(4.0, 120.0, shore + 30.0 * (vnoise(p * 0.02) - 0.5)));
     vec3 body = mix(vec3(0.0035, 0.026, 0.07), vec3(0.02, 0.16, 0.18), shallow * shallow);
+    body = mix(body, vec3(0.007, 0.04, 0.05), harbour * 0.8);
     body = mix(body, mix(tint * vec3(0.5, 0.6, 0.55), tint, pool), 1.0 - sea);
     // The surf, where the ocean reaches the shore (the north coast takes the Atlantic swell; the bay and the
     // lagoons lie still): broken lines of white water rolling in, and the wash at the edge

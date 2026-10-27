@@ -200,7 +200,7 @@ function category(usage, height, seed, area = 0, storeys = 1) {
   if (usage === 412) return CAT.APARTMENT;
   if (usage === 413 || usage === 414) return CAT.MIXED;
   if ((usage === 431 || usage === 441 || usage === 452) && storeys <= 2 && height < 15) return CAT.INDUSTRIAL;
-  if (usage >= 401 && usage <= 404 && area > 5000 && height < 22 && storeys <= 3) return CAT.INDUSTRIAL;
+  if (usage >= 401 && usage <= 404 && area > 5000 && height < 22 && (storeys <= 3 || area > 20000)) return CAT.INDUSTRIAL;
   if (usage >= 401 && usage <= 404) return height > 45 || (height > 24 && seed < 0.25) ? CAT.GLASS : CAT.COMMERCIAL;
   if (usage >= 421 && usage <= 454) return CAT.PUBLIC;
   // unknown (461): low buildings read as houses, taller ones as apartments or offices
