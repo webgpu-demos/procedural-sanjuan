@@ -1,0 +1,4 @@
+   0.3s 21 expressway stretches narrowed to the lanes beyond them
+   0.5s plain network: 29536 nodes (658 with lights), 65784 directed edges from 36830 roads
+Success.
+  15.0s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (18.6 MB)
