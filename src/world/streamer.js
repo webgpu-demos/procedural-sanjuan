@@ -70,6 +70,10 @@ export class Streamer {
     return this.manifest;
   }
 
+  // segs: the approaches to the expressway's merges and forks, whose turn arrows the workers leave out (roadway.js
+  // mergeApproaches); before the first tile.
+  merges(segs) { for (const w of this.workers) w.postMessage({ type: 'merges', segs: segs.buffer.slice(0) }); }
+
   // Terrain height, and the height of whatever one stands on (the terrain, or a bridge deck).
   ground(x, z) { return meshHeight(this.grid, x, z); } // (the terrain as its mesh draws it: src/shared/terrain.js)
   // How high the paving at (x, z) stands over the terrain (a sidewalk, a carriageway, an island), where its tile is
@@ -196,7 +200,7 @@ export class Streamer {
     let { props, wires } = msg.mesh;
     // nothing standing within reach of a car in a lane (src/shared/roadway.js: the worker has left out what stands
     // on the paved carriageway; this is the lanes the traffic keeps to, wherever they run)
-    if (this.laneDepth && props.length) ({ props, wires } = clearLanes(props, wires, this.laneDepth));
+    if ((this.laneDepth || this.under) && props.length) ({ props, wires } = clearLanes(props, wires, this.laneDepth ?? (() => -100), this.under));
     const group = new THREE.Group();
     group.name = `tile ${msg.key}`;
     group.userData.solids = solidsOf(props); // (what a car or a walker runs into: collide.js)

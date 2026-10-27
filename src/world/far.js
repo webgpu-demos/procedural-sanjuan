@@ -91,7 +91,7 @@ export async function buildSurroundings(base, orthoBase, manifest, proj) {
         float built = smoothstep(0.42, 0.72, dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)));
         diffuseColor.rgb *= 1.0 - 0.6 * uNight;
         // (an apagón: the island goes dark as the failure spreads, but for a few generators)
-        float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.12, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vFarPos.xz, uGrid.xy)));
+        float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.0, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vFarPos.xz, uGrid.xy)));
         vec2 ruv = (vFarPos.xz - uRoadsRect.xy) / max(uRoadsRect.zw, vec2(1.0));
         float inArea = step(0.0, ruv.x) * step(ruv.x, 1.0) * step(0.0, ruv.y) * step(ruv.y, 1.0);
         float road = inArea * texture2D(uRoads, ruv).r;

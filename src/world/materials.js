@@ -89,11 +89,12 @@ varying vec4 vFacade;
 varying vec4 vBldg;
 varying vec3 vWPos;
 varying vec3 vWNrm;
-// the power at this building: 1 on, 0 cut by the apagón; one building in seven runs on a generator, dimmer
+// the power at this building: 1 on, 0 cut by the apagón; one building in twenty runs on a generator, dimmer
+// (one in seven had the far city still lit end to end when the grid was down)
 float gridPower(float seed) {
   if (uGrid.z < 0.0) return 1.0;
   float dark = 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy));
-  return mix(1.0, step(0.86, fract(seed * 29.37)) * 0.55, dark);
+  return mix(1.0, step(0.95, fract(seed * 29.37)) * 0.55, dark);
 }
 float gRough, gMetal;
 vec3 gGlint = vec3(0.0); // the sun mirrored in a pane (added to the specular light where the sun reaches it)
@@ -447,8 +448,17 @@ const GROUND_MAIN = /* glsl */ `
       // texture's grain and relief under its colour make it ground)
       vec2 gst = st / uGroundScale[2];
       float grain = dot(texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0, vec3(0.333)) * 0.6 + dot(mix(a, b, 0.4), vec3(0.333)) * 0.4;
-      diffuseColor.rgb = photo * clamp(0.62 + 0.55 * grain, 0.6, 1.25);
-      gNm = texture(uGroundNor, vec3(gst, 2.0)).xyz * 2.0 - 1.0;
+      // Close up, the photo's five-metre pixels are smooth blots of colour, a car park's grey under the dawn sky
+      // as blue as a lagoon: there the ground is what the photo shows it to be, grass where it is green and
+      // bare, trodden ground elsewhere, in that texture, the photo's colour only its tint, and half as strong.
+      float near = 1.0 - smoothstep(60.0, 320.0, distance(vWPos, cameraPosition));
+      float veg = smoothstep(-0.005, 0.04, photo.g - max(photo.r, photo.b));
+      float pl = dot(photo, vec3(0.3, 0.59, 0.11));
+      vec2 dst = st / uGroundScale[3];
+      vec3 bare = texture(uGroundAlb, vec3(dst, 3.0)).rgb * 2.0, grass = texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0;
+      vec3 closeUp = mix(vec3(pl), photo, 0.5) * mix(bare, grass, veg) * (0.9 + 0.2 * blotch);
+      diffuseColor.rgb = mix(photo * clamp(0.62 + 0.55 * grain, 0.6, 1.25), closeUp, near);
+      gNm = mix(texture(uGroundNor, vec3(gst, 2.0)).xyz, texture(uGroundNor, vec3(dst, 3.0)).xyz, near * (1.0 - veg)) * 2.0 - 1.0;
       gNm = normalize(vec3(gNm.xy * 0.55, gNm.z));
     }
   }
@@ -540,7 +550,7 @@ const FAR_STREETS = /* glsl */ `
   vec2 ruv = (vWPos.xz - uNightRoadsRect.xy) / max(uNightRoadsRect.zw, vec2(1.0));
   float inArea = step(0.0, ruv.x) * step(ruv.x, 1.0) * step(0.0, ruv.y) * step(ruv.y, 1.0);
   float road = inArea * texture2D(uNightRoads, ruv).r;
-  float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.12, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
+  float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.0, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
   vec3 sodium = mix(vec3(1.0, 0.85, 0.68), vec3(1.0, 0.6, 0.28), smoothstep(0.3, 0.75, road));
   totalEmissiveRadiance += (1.0 - le.x * le.y) * road * 0.22 * sodium * uNight * power * smoothstep(0.5, 0.8, vWNrm.y);
 }
@@ -567,10 +577,13 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + APPLY_NORMAL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gSheen * (1.0 - smoothstep(15000.0, 40000.0, length(vWPos - cameraPosition)));\n' + FAR_STREETS)
       // (the direct diffuse light is zero in shadow: it tells whether the sun reaches the water there)
-      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));' +
+        // (open ground: grass, scrub and dirt mask their own sheen. Seen at a grazing angle from the air, the
+        // Fresnel sheen of a rough plane mirrored the bright horizon, and every lot round PR-22 lay like satin)
+        '\n#ifdef MATTE\nreflectedLight.indirectSpecular *= MATTE; reflectedLight.directSpecular *= MATTE;\n#endif')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v9';
+  m.customProgramCacheKey = () => 'ground-v10';
   return m;
 }
 
@@ -608,7 +621,7 @@ function blocksMaterial() {
           vec3 tube = mix(vec3(1.0, 0.72, 0.42), vec3(0.82, 0.9, 1.0), step(0.6, hash12(bld + 11.0)));
           diffuseColor.rgb *= 0.9 - 0.5 * win; // (as dark as a detailed facade is with its glass, from afar)
           // (an apagón: dark inside the spreading edge, but for the odd generator)
-          float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, step(0.88, hash12(floor(vWPos.xz / 37.0))) * 0.5,
+          float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, step(0.95, hash12(floor(vWPos.xz / 37.0))) * 0.5,
             1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
           totalEmissiveRadiance += win * lit * uNight * tube * 1.3 * power;
         }`);
@@ -622,10 +635,16 @@ export function createMaterials(tex) {
     facade: facadeMaterial(tex),
     facadeFor: () => facadeMaterial(tex), // a tile's own instance, for its wall photos
     // Ground not covered by roads or buildings: private lots, car parks, yards.
-    terrain: groundMaterial(tex, { fixedLayer: 3, color: new THREE.Color().setRGB(0.2, 0.2, 0.185) }),
+    // (the open ground takes less of the street lamps' light than the street: their pools bleached the photo it
+    // wears, lots and yards, near white, and from above at dawn the land beside PR-22 read as snow)
+    terrain: Object.assign(groundMaterial(tex, { fixedLayer: 3, color: new THREE.Color().setRGB(0.2, 0.2, 0.185) }), { defines: { LAMP_GAIN: '0.4', MATTE: '0.3' } }),
     road: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     // lane lines and crossings: drawn over the road surface, with a stronger depth bias so they never flicker
     paint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -8 }),
+    // a bridge's deck paved like the road (flyovers.js): over whatever the tiles drape beneath it at about its height,
+    // a creek's water above all, which showed through it as a dark band across PR-22
+    deck: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -12 }),
+    deckPaint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -18 }),
     // static models of a tile (bridges, street furniture, trees): plain painted surfaces, seen from both sides
     models: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide }),
     blocks: blocksMaterial(),

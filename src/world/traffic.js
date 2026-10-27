@@ -87,9 +87,13 @@ export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31
     return y;
   };
   // ---- the body: rings of M points round a rounded box, from the tail to the nose
+  // (a box truck's body is its cab: behind it the cargo box stands on a bare chassis. Lofted the whole length, a
+  // car's rounded tail and its wrap-round lamps showed under the box, a sedan carrying a crate)
+  const boxFront = box ? (box.z - 0.5) * L + (box.len * L) / 2 : zr, boxRear = box ? (box.z - 0.5) * L - (box.len * L) / 2 : zr;
+  const bodyFrom = box ? boxFront - 0.25 : zr;
   const N = hi ? 44 : lo ? 10 : 18, M = hi ? 28 : lo ? 10 : 14, ring = [];
   for (let i = 0; i <= N; i++) {
-    const t = i / N, z = zr + (zf - zr) * (0.5 - 0.5 * Math.cos(Math.PI * t)); // (closer together at the ends, where it curves)
+    const t = i / N, z = bodyFrom + (zf - bodyFrom) * (box ? t : 0.5 - 0.5 * Math.cos(Math.PI * t)); // (closer together at the ends, where it curves)
     const w = halfW(z), top = deck(z), bot = Math.min(bottom(z), top - 0.05), mid = (top + bot) / 2, hh = (top - bot) / 2, pts = [];
     for (let j = 0; j < M; j++) {
       const a = (j / M) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), n = 4.2;
@@ -126,13 +130,19 @@ export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31
     const z = (c0 + c1) / 2 + 0.1;
     for (const sx of [-1, 1]) parts.push(bar([sx * halfW(z) * 0.925, belt, z], [sx * halfW(z) * 0.93 * 0.81, roof - 0.02, z], 0.06, TRIM, 4, 0.03));
   }
-  if (box) parts.push(part(W, box.h, box.len * L, 0, belt + box.h / 2, (box.z - 0.5) * L, [0.92, 0.92, 0.9])); // cargo body
+  if (box) {
+    parts.push(part(W, box.h, box.len * L, 0, belt + box.h / 2, (box.z - 0.5) * L, [0.92, 0.92, 0.9])); // cargo body
+    parts.push(part(W * 0.62, 0.26, boxFront - boxRear, 0, belt - 0.32, (boxFront + boxRear) / 2, TRIM, 4)); // the chassis under it
+    parts.push(part(W * 0.97, belt - sill, 0.05, 0, (belt + sill) / 2, bodyFrom + 0.03, PAINT, 0));         // the back of the cab
+    parts.push(part(W * 0.9, 0.1, 0.08, 0, 0.52, boxRear + 0.06, TRIM, 4));                                // the underride bar
+    for (const sx of [-1, 1]) parts.push(part(0.2, 0.16, 0.04, sx * (W / 2 - 0.18), belt + 0.12, boxRear - 0.025, LAMP, 2)); // tail lamps, low on the doors
+  }
   if (!box && z0 >= 0.28 && L > 5.2) parts.push(part(W * 0.86, 0.04, c0 - zr - 0.25, 0, deck(c0 - 0.6) + 0.005, (zr + c0) / 2, TRIM, 4)); // a pickup's bed
   // ---- the face and the tail: grille, lamps wrapping the corners, plates
   const yl = deck(zf - 0.15) - 0.14, yt = deck(zr + 0.15) - 0.1;
   parts.push(part(W * 0.42, 0.13, 0.05, 0, yl - 0.06, zf - 0.03, TRIM, 4));                                // grille
   parts.push(part(W * 0.6, 0.1, 0.05, 0, sill + 0.12, zf - 0.02, TRIM, 4));                                // lower intake
-  for (const z of [zf - 0.005, zr + 0.005]) parts.push(part(0.34, 0.12, 0.02, 0, sill + 0.24, z, [0.9, 0.9, 0.86], 4)); // plates
+  for (const z of [zf - 0.005, box ? boxRear - 0.03 : zr + 0.005]) parts.push(part(0.34, 0.12, 0.02, 0, z < 0 && box ? 0.72 : sill + 0.24, z, [0.9, 0.9, 0.86], 4)); // plates
   // Lamps and trim that hug the rounded nose and tail: strips of short bars laid along the body's own outline at
   // their height, from near the middle round the corner onto the flank (flat boxes stood out at the corners).
   // (at the lamps' height and down at the bumper the rounded section is some 6 per cent narrower than its widest)
@@ -149,14 +159,14 @@ export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31
       prev = p;
     }
   };
-  if (!lo) {
+  if (!lo && !box) {
     hug(-W * 0.2, W * 0.2, yt, 0.08, TRIM, 4, true);               // the band between the tail lamps
     hug(-W * 0.42, W * 0.42, sill + 0.09, 0.07, TRIM, 4, true);    // the bumper's lower edge
   }
   for (const sx of [-1, 1]) {
     for (const wz of [wheelZ, -wheelZ]) parts.push(...wheel(tyre, sx * (W / 2 - 0.12), wz, hi, lo));
     hug(sx * W * 0.19, sx * W * 0.45, yl, 0.1, LAMP, 1, false);     // headlamps, round the front corners
-    hug(sx * W * 0.2, sx * W * 0.455, yt, 0.15, LAMP, 2, true);     // tail lamps, across the tail and round onto the flank
+    if (!box) hug(sx * W * 0.2, sx * W * 0.455, yt, 0.15, LAMP, 2, true); // tail lamps, across the tail and round onto the flank
     // the mirror on its stalk
     parts.push(part(0.13, 0.11, 0.2, sx * (halfW(c1) * 0.93 + 0.08), belt + 0.08, c1 - rake * 0.35, PAINT));
   }

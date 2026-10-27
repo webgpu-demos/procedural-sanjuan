@@ -55,7 +55,7 @@ export function gridAware(m, key) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vGridXZ;\nuniform vec4 uGrid;')
       .replace('#include <opaque_fragment>', `#include <opaque_fragment>
-        if (uGrid.z >= 0.0) gl_FragColor.rgb *= mix(0.12, 1.0, smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vGridXZ, uGrid.xy)));`);
+        if (uGrid.z >= 0.0) gl_FragColor.rgb *= smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vGridXZ, uGrid.xy));`);
   };
   m.customProgramCacheKey = () => key;
   return m;
@@ -81,7 +81,11 @@ if (uLampOn > 0.5) {
   #endif
   vec4 lampTexel = texture2D(uLampMap, lampUv);
   float lampLevel = 1.0 - smoothstep(2.5, 5.0, abs(lampAt.y - (lampTexel.a * ${YSPAN}.0 - ${Y0}.0)));   // only light lying at this height
+  #ifdef LAMP_GAIN
+  reflectedLight.directDiffuse += lampTexel.rgb * lampEdge.x * lampEdge.y * lampUp * lampLevel * material.diffuseColor * LAMP_GAIN;
+  #else
   reflectedLight.directDiffuse += lampTexel.rgb * lampEdge.x * lampEdge.y * lampUp * lampLevel * material.diffuseColor;
+  #endif
 }
 `;
   // Plain materials get the uniforms here. A material with a hook of its own sets them itself: lampUniforms

@@ -110,12 +110,15 @@ export const FOOT = {
 // props: [kind, variant, rot, x, z, scale] flat; wires: [x1, z1, x2, z2] flat; depth: laneDepth(). What stands in a
 // corridor is left out (with the wires to a pole left out); a signal mast steps back along its approach till it is
 // clear (it shows the junction's lights). Returns { props, wires, gone: [[kind, x, z, depth], ...] }.
-export function clearLanes(props, wires, depth) {
+// over(kind, x, z, scale): true where the prop would stand up through a deck above it (flyovers.js footprints):
+// a palm on the avenue under PR-22 grew out of the expressway's lanes
+export function clearLanes(props, wires, depth, over = null) {
   const keep = [], gone = [], poles = [];
   for (let i = 0; i < props.length; i += 6) {
     const kind = props[i], rot = props[i + 2];
     let x = props[i + 3], z = props[i + 4];
     if (kind === PROP.DECAL) { keep.push(...props.subarray(i, i + 6)); continue; }
+    if (over && over(kind, x, z, props[i + 5])) { gone.push([kind, x, z, 0]); if (kind === PROP.POLE) poles.push([x, z]); continue; }
     const r = (FOOT[kind] ?? 0.3) * (kind === PROP.TREE || kind === PROP.STATUE ? props[i + 5] : 1), d = depth(x, z) + r;
     if (d > 0 && kind === PROP.SIGNAL) {
       const fx = Math.sin(rot), fz = Math.cos(rot); // (it faces the traffic coming: back along the approach is that way)
@@ -128,4 +131,53 @@ export function clearLanes(props, wires, depth) {
   const at = (x, z) => poles.some(([px, pz]) => Math.abs(px - x) < 0.05 && Math.abs(pz - z) < 0.05), w = [];
   for (let i = 0; i < wires.length; i += 4) if (!poles.length || (!at(wires[i], wires[i + 1]) && !at(wires[i + 2], wires[i + 3]))) w.push(...wires.subarray(i, i + 4));
   return { props: Float32Array.from(keep), wires: Float32Array.from(w), gone };
+}
+
+// ---------------------------------------------------------------- no turn arrows where nothing turns
+// The compiler paints turn arrows on every approach of two lanes or more to a junction (tools/pipeline/markings.mjs),
+// and on the expressway a junction is a ramp leaving or joining it: no one turns there, and the lanes carry no
+// arrows. The approaches to a junction of expressway and ramps only (motorway, trunk and their links; a crossing
+// street makes it a junction like any other), over the 70 m before it: [x0, z0, x1, z1, half] per segment, in the
+// way travelled. roads: roads.json.
+const FREE_FLOW = /^(motorway|trunk)(_link)?$/;
+export function mergeApproaches(roads, back = 70) {
+  const at = new Map();
+  for (const e of roads.edges) for (const n of [e.a, e.b]) (at.get(n) ?? at.set(n, []).get(n)).push(e);
+  const merge = (n) => { const es = at.get(n) ?? []; return es.length >= 3 && es.every((e) => FREE_FLOW.test(e.highway)); };
+  const out = [];
+  for (const e of roads.edges) {
+    const n = e.pts.length / 3, half = Math.max(1, e.lanes || 1) * 2.2 + 2;
+    for (const fwd of [true, false]) {
+      if ((fwd ? e.oneway === -1 : e.oneway === 1) || !merge(fwd ? e.b : e.a)) continue;
+      let left = back;
+      for (let k = n - 1; k > 0 && left > 0; k--) {
+        const i1 = fwd ? k : n - 1 - k, i0 = fwd ? k - 1 : n - k;
+        const x0 = e.pts[i0 * 3], z0 = e.pts[i0 * 3 + 2], x1 = e.pts[i1 * 3], z1 = e.pts[i1 * 3 + 2];
+        out.push(x0, z0, x1, z1, half);
+        left -= Math.hypot(x1 - x0, z1 - z0);
+      }
+    }
+  }
+  return Float32Array.from(out);
+}
+// segs: mergeApproaches(). (p) => whether prop p is a turn arrow on one of those approaches, read the way it runs
+export function mergeArrows(segs, cell = 64) {
+  const grid = new Map();
+  for (let i = 0; i < segs.length; i += 5) {
+    const [x0, z0, x1, z1, h] = segs.subarray(i, i + 5);
+    for (let a = Math.floor((Math.min(x0, x1) - h) / cell); a <= Math.floor((Math.max(x0, x1) + h) / cell); a++)
+      for (let b = Math.floor((Math.min(z0, z1) - h) / cell); b <= Math.floor((Math.max(z0, z1) + h) / cell); b++)
+        (grid.get(a * 100003 + b) ?? grid.set(a * 100003 + b, []).get(a * 100003 + b)).push(i);
+  }
+  return (p) => {
+    if (p.kind !== PROP.DECAL || p.variant > 4) return false; // (the arrows: DECAL.THROUGH .. THROUGH_RIGHT)
+    const hx = Math.sin(p.rot), hz = Math.cos(p.rot);
+    for (const i of grid.get(Math.floor(p.x / cell) * 100003 + Math.floor(p.z / cell)) ?? []) {
+      const x0 = segs[i], z0 = segs[i + 1], dx = segs[i + 2] - x0, dz = segs[i + 3] - z0, len = Math.hypot(dx, dz);
+      if (len < 0.1 || (dx * hx + dz * hz) / len < 0.7) continue;
+      const u = ((p.x - x0) * dx + (p.z - z0) * dz) / len, d = Math.abs((p.x - x0) * -dz + (p.z - z0) * dx) / len;
+      if (u >= -2 && u <= len + 2 && d <= segs[i + 4]) return true;
+    }
+    return false;
+  };
 }

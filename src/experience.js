@@ -110,6 +110,10 @@ const clockLabel = (hour) => {
   return { t: `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}`, ap: h < 12 ? 'a.m.' : 'p.m.' };
 };
 
+// The morning the opening shows, whatever the day it is watched: a Tuesday in late October, when the sun rises at
+// 6:25. The shots are timed to its light (in January it is still dark at 6:30; in June the sun is up by 5:50).
+const MORNING = Date.UTC(2026, 9, 27, 4); // (midnight in San Juan, AST)
+
 // Where the grid failed in the apagón: the Monacillos transmission centre, Río Piedras (lon -66.075, lat 18.39)
 const GRID_ORIGIN = [4390, 8330];
 
@@ -183,11 +187,18 @@ export class Experience {
     if (!roads) return cells;
     for (const e of roads.edges) {
       const name = e.name ?? e.ref; if (!name) continue;
-      const p = e.pts;
-      for (let i = 0; i < p.length; i += 3) {
-        const k = Math.floor(p[i] / 60) + ',' + Math.floor(p[i + 2] / 60);
+      const p = e.pts, label = e.ref && e.name ? `${e.name} (${e.ref})` : name;
+      const put = (x, z) => {
+        const k = Math.floor(x / 60) + ',' + Math.floor(z / 60);
         if (!cells.has(k)) cells.set(k, []);
-        cells.get(k).push([p[i], p[i + 2], e.ref && e.name ? `${e.name} (${e.ref})` : name]);
+        cells.get(k).push([x, z, label]);
+      };
+      // (every 20 m along it: on a long straight the next mapped point can be 200 m off, and the name came and went)
+      for (let i = 0; i < p.length; i += 3) {
+        put(p[i], p[i + 2]);
+        if (i + 3 >= p.length) break;
+        const n = Math.floor(Math.hypot(p[i + 3] - p[i], p[i + 5] - p[i + 2]) / 20);
+        for (let j = 1; j <= n; j++) put(p[i] + ((p[i + 3] - p[i]) * j) / (n + 1), p[i + 2] + ((p[i + 5] - p[i + 2]) * j) / (n + 1));
       }
     }
     return cells;
@@ -214,9 +225,10 @@ export class Experience {
   }
   hideTitle() { this.titleUp = false; this.start?.classList.add('gone'); setTimeout(() => this.start?.remove(), 1100); }
 
-  // The opening: dark (5:28), blue hour over the expressway into the city (5:58), a ride with the headlights on
-  // (6:06), the sun coming up behind the towers of the Milla de Oro, looking east (it rises about 6:19 in late
-  // October, a little south of east)
+  // The opening: dark (5:28), the blue hour over the expressway into the city (6:14), a ride with the headlights on
+  // (6:16), the sun a degree up behind the towers of the Milla de Oro, looking east (6:28; it rises about 6:25 in
+  // late October, a little south of east: at 6:19 it was still below the horizon, and its glitter on the sea had
+  // stood in for it)
   get shots() {
     return [
       { hour: 5.47, rate: 1, dur: 13, eye: [[1300, 520, 7700], [1950, 470, 7050]], at: [[5400, 40, 3000], [5600, 40, 3150]],
@@ -224,7 +236,7 @@ export class Experience {
       { hour: 6.24, rate: 1, dur: 13, eye: [[1700, 46, 5330], [2010, 38, 5192]], at: [[2900, 3, 5193], [3250, 3, 5100]],
         cap: ['138,000 personas entran a San Juan cada mañana', 'commuters driving in every weekday · U.S. Census ACS'] },
       { hour: 6.28, rate: 1, dur: 18, ride: [2700, 5273, 420] },
-      { hour: 6.322, rate: 1, dur: 16, eye: [[4974, 75, 4153], [5084, 170, 4243]], at: [[6274, 80, 4503], [6284, 60, 4523]],
+      { hour: 6.465, rate: 1, dur: 16, eye: [[4974, 75, 4153], [5084, 170, 4243]], at: [[6274, 80, 4503], [6284, 60, 4523]],
         cap: ['Puerto Rico en movimiento', 'Cada carro es un viaje simulado · every car is a simulated trip'] },
     ];
   }
@@ -251,16 +263,17 @@ export class Experience {
   }
   playApagon(at) {
     if (innerWidth < 700) return false; // (a phone: just the clock and the caption)
-    this.reel = this.apagonShots(at); this.reelName = 'apagon';
+    this.reel = this.apagonShots(at); this.reelName = 'apagon'; this.app.clockTime.day = MORNING;
     this.directing = true; this.app.controls.enabled = false;
     this.bars.classList.add('on'); this.skip.style.display = 'block';
+    this.dock.classList.add('hidden'); // (the scene full frame: the clock's panel comes back when it ends)
     this.app.atmosphere.vignette.darkness = 0.55;
     this.shot = -1; this.cut(0);
     return true;
   }
   beginIntro() {
     this.clouds();
-    this.reel = this.shots; this.reelName = 'intro';
+    this.reel = this.shots; this.reelName = 'intro'; this.app.clockTime.day = MORNING;
     this.directing = true; this.app.controls.enabled = false;
     this.bars.classList.add('on'); this.skip.style.display = 'block';
     this.app.atmosphere.vignette.darkness = 0.55; this.app.atmosphere.grain.blendMode.opacity.value = 0.08;
@@ -455,7 +468,7 @@ export class Experience {
       if (!this.wave) { this.wave = { start: performance.now(), late: T - at > 30 }; if (!this.wave.late) this.sound.blackout(); }
       // the grid stumbles (the lights flicker, the whole city at once) for a second, then the dark spreads
       const age = (performance.now() - this.wave.start) / 1000, FLICKER = 1.3;
-      let r = this.wave.late ? 1e6 : Math.max(0, age - FLICKER) * 650;
+      let r = this.wave.late ? 1e6 : Math.max(0, age - FLICKER) * 1600; // (across the metro area within the shot: at 650 m/s the far city was still lit when it cut)
       if (!this.wave.late && age < FLICKER) r = Math.sin(age * 37) * Math.sin(age * 23) > 0.15 ? 1e6 : -1;
       uGrid.set(GRID_ORIGIN[0], GRID_ORIGIN[1], r, 450);
     } else { this.wave = null; uGrid.set(GRID_ORIGIN[0], GRID_ORIGIN[1], -1, 450); }
@@ -483,7 +496,9 @@ export class Experience {
       }
       this.story.querySelector('.spd').textContent = `${Math.round(v.speed * 3.6)} km/h`;
       this.story.querySelector('.typ').textContent = TYPE_NAME[v.type] ?? '';
-      const street = this.streetAt(v.x, v.z);
+      // (the last one named, until another is: the line does not blink out between mapped points or at a node)
+      const named = this.streetAt(v.x, v.z), street = named ?? (this.lastStreet?.[0] === v.vid ? this.lastStreet[1] : null);
+      if (named) this.lastStreet = [v.vid, named];
       this.story.querySelector('.st').textContent = street ? `por ${street}` : '';
     } else this.story.classList.remove('on');
     // the sound

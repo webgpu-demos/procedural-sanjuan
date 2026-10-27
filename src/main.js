@@ -12,10 +12,11 @@ import { Streamer } from './world/streamer.js';
 import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
-import { buildFlyovers } from './world/flyovers.js';
+import { buildFlyovers, overDecks, landDecks } from './world/flyovers.js';
+import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
-import { laneDepth } from './shared/roadway.js';
+import { laneDepth, mergeApproaches } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad } from './world/drive.js';
@@ -92,11 +93,13 @@ const env = new Environment(scene, renderer);
 const clockTime = {
   live: params.get('time') == null && params.get('night') !== '1',
   hour: params.get('time') != null ? Number(params.get('time')) : params.get('night') === '1' ? 22 : 12,
-  // the moment on today's San Juan date at which its clock shows `hour`
+  // a San Juan date to keep to instead of today's (its midnight, ms): the opening's morning (experience.js)
+  day: null,
+  // the moment on today's San Juan date (or `day`) at which its clock shows `hour`
   date() {
     const AST = -4 * 3600e3, now = Date.now();
     if (this.live) { const t = new Date(now + AST); this.hour = t.getUTCHours() + t.getUTCMinutes() / 60 + t.getUTCSeconds() / 3600; return new Date(now); }
-    const midnight = Math.floor((now + AST) / 864e5) * 864e5 - AST;
+    const midnight = this.day ?? Math.floor((now + AST) / 864e5) * 864e5 - AST;
     return new Date(midnight + this.hour * 3600e3);
   },
   // the hour and the minute on their own, for the panel; setting either stops the live clock
@@ -160,17 +163,26 @@ if (params.get('reflect') === '0') atmosphere.reflect = false;
 if (Number(params.get('clouds')) > 0) { atmosphere.coverage = Number(params.get('clouds')); atmosphere.cloudsOn = true; }
 let orthoLoaded = false, orthoWanted = true; // (the photo fills in when the tiles arrive; the panel may have switched it off by then)
 if (params.get('ortho') !== '0') loadOrtho(`ortho/${AREA}`, proj, manifest.extent ?? manifest.bounds, renderer).then((ok) => { orthoLoaded = ok; shared.uOrthoOn.value = ok && orthoWanted ? 1 : 0; });
-const [roads, rails] = await Promise.all([
+const [roads, rails, lanes] = await Promise.all([
   fetch(`tiles/${AREA}/${manifest.roads}`).then((r) => r.json()),
   manifest.rails ? fetch(`tiles/${AREA}/${manifest.rails}`).then((r) => (r.ok ? r.json() : [])).catch(() => []) : [],
+  // (the expressway's painted lanes, measured from the tiles: tools/pipeline/lanetable.mjs; simtraffic.js relane)
+  fetch(`tiles/${AREA}/lanes.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
 ]);
+roads.lanes = lanes;
 // (the expressway's height without the humps the elevation model's overpass ridges put in it, and the bridges that
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
+landDecks(roads, (x, z) => streamer.ground(x, z)); // (decks flush with the streets they meet: world/flyovers.js)
+streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
 scene.add(railways);
-scene.add(await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.road, paint: materials.paint }));
+{
+  const flyovers = await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint });
+  scene.add(flyovers);
+  streamer.under = overDecks(flyovers.userData.footprints, PROP); // (nothing on the ground standing up through a deck)
+}
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));
 if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
 const traffic = new Traffic(roads, streamer.surface);
