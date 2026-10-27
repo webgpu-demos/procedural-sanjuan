@@ -129,66 +129,93 @@ for (const f of fs.readdirSync(dir).filter((f) => /^x_-?\d+_-?\d+\.bin$/.test(f)
 }
 
 // ---------------------------------------------------------------- lines: roads, railways, footbridges, decks
-// The change for each point of a line [x, y, z, ...]: the ground's under a point on the ground; along a stretch up
-// on a structure, the change at the ground points either side of it, interpolated by distance (one end alone at a
-// line's end; none on the ground at all: the change under the line's ends, interpolated).
-function shiftLine(p, raised = (i) => Math.abs(p[i * 3 + 1] - g0(p[i * 3], p[i * 3 + 2])) > RAISED) {
-  const n = p.length / 3, d = new Float64Array(n), up = Array.from({ length: n }, (_, i) => raised(i)), s = [0];
-  for (let i = 1; i < n; i++) s.push(s[i - 1] + Math.hypot(p[i * 3] - p[i * 3 - 3], p[i * 3 + 2] - p[i * 3 - 1]));
-  for (let i = 0; i < n; i++) if (!up[i]) d[i] = dz(p[i * 3], p[i * 3 + 2]);
-  const ground = [...Array(n).keys()].filter((i) => !up[i]);
-  if (!ground.length) { const a = dz(p[0], p[2]), b = dz(p[n * 3 - 3], p[n * 3 - 1]); for (let i = 0; i < n; i++) d[i] = a + (b - a) * (s[i] / (s[n - 1] || 1)); }
-  else for (let i = 0; i < n; i++) {
-    if (!up[i]) continue;
-    const L = ground.filter((k) => k < i).at(-1), R = ground.find((k) => k > i);
-    d[i] = L == null ? d[R] : R == null ? d[L] : d[L] + (d[R] - d[L]) * ((s[i] - s[L]) / (s[R] - s[L] || 1));
+// Lines meet: a road's edges at the graph's nodes, a railway's or a footbridge's pieces end to end. Each point of a
+// network takes one change, so that where pieces met they still meet. A point on the ground takes the change of the
+// ground under it. A point up on a structure (a bridge, a flyover, a viaduct: more than 1.5 m off the old ground, or
+// inside a bridge's or a tunnel's way) takes the change at the ground round it, carried along the network: each such
+// point the distance-weighted mean of its neighbours' (a harmonic fill), so a deck keeps its line from bank to bank
+// and a ramp still meets the bridge it climbs to.
+// lines: [{ pts, a, b, inner }]: a, b the keys of the line's ends (lines sharing a key meet there; null: its own),
+// inner: the inside of the line is a structure whatever its height. Returns the changes, per line.
+function shiftNetwork(lines) {
+  const id = new Map(), X = [], Z = [], up = [], nb = [];
+  const point = (key, x, z, raised) => {
+    let i = key != null ? id.get(key) : undefined;
+    if (i === undefined) { i = X.length; X.push(x); Z.push(z); up.push(raised); nb.push([]); if (key != null) id.set(key, i); }
+    return i;
+  };
+  const idx = lines.map(({ pts, a, b, inner }) => {
+    const n = pts.length / 3, out = [];
+    for (let k = 0; k < n; k++) {
+      const x = pts[k * 3], z = pts[k * 3 + 2], raised = (inner && k > 0 && k < n - 1) || Math.abs(pts[k * 3 + 1] - g0(x, z)) > RAISED;
+      out.push(point(k === 0 ? a : k === n - 1 ? b : null, x, z, raised));
+    }
+    for (let k = 1; k < n; k++) {
+      const w = 1 / Math.max(0.5, Math.hypot(X[out[k]] - X[out[k - 1]], Z[out[k]] - Z[out[k - 1]]));
+      nb[out[k]].push(out[k - 1], w); nb[out[k - 1]].push(out[k], w);
+    }
+    return out;
+  });
+  const d = Float64Array.from(X, (x, i) => dz(x, Z[i]));
+  const free = [...up.keys()].filter((i) => up[i] && nb[i].length);
+  for (let it = 0; it < 4000; it++) {
+    let moved = 0;
+    for (const i of free) {
+      let sw = 0, sd = 0;
+      for (let k = 0; k < nb[i].length; k += 2) { sw += nb[i][k + 1]; sd += nb[i][k + 1] * d[nb[i][k]]; }
+      const v = sd / sw; moved = Math.max(moved, Math.abs(v - d[i])); d[i] = v;
+    }
+    if (moved < 0.002) break;
   }
-  for (let i = 0; i < n; i++) p[i * 3 + 1] = Math.round((p[i * 3 + 1] + d[i]) * 100) / 100;
-  return up.filter(Boolean).length;
+  stats.raisedPoints += free.length;
+  return { per: idx.map((out) => out.map((i) => d[i])), at: (key) => (id.has(key) ? d[id.get(key)] : null) };
 }
+const apply = (pts, ds) => { for (let k = 0; k < ds.length; k++) pts[k * 3 + 1] = Math.round((pts[k * 3 + 1] + ds[k]) * 100) / 100; };
+const end = (pts, k) => `${pts[k * 3].toFixed(1)},${pts[k * 3 + 2].toFixed(1)}`; // (pieces of a railway or a footbridge meet end to end)
 
 const roads = JSON.parse(fs.readFileSync(path.join(dir, manifest.roads), 'utf8'));
-for (const e of roads.edges) {
-  const before = [];
-  for (let i = 1; i < e.pts.length; i += 3) before.push(e.pts[i]);
+{
   // (a bridge, a flyover or a street-level span is a structure from end to end; a tunnel's whole length too)
-  const whole = e.bridge || e.flyover || e.span || e.tunnel;
-  stats.raisedPoints += shiftLine(e.pts, whole ? (i) => i > 0 && i < e.pts.length / 3 - 1 : undefined);
-  stats.roadPoints += before.length;
-  let moved = 0;
-  for (let i = 0; i < before.length; i++) moved = Math.max(moved, Math.abs(e.pts[i * 3 + 1] - before[i]));
-  if (moved > 0.5) { e.pts0 ??= before; stats.edgesWithPts0++; }
+  const net = shiftNetwork(roads.edges.map((e) => ({ pts: e.pts, a: 'n' + e.a, b: 'n' + e.b, inner: !!(e.bridge || e.flyover || e.span || e.tunnel) })));
+  roads.edges.forEach((e, i) => {
+    const before = [];
+    for (let k = 1; k < e.pts.length; k += 3) before.push(e.pts[k]);
+    apply(e.pts, net.per[i]); stats.roadPoints += before.length;
+    if (net.per[i].some((v) => Math.abs(v) > 0.5)) { e.pts0 ??= before; stats.edgesWithPts0++; }
+  });
+  roads.nodes.forEach((nd, i) => { nd[1] = Math.round((nd[1] + (net.at('n' + i) ?? dz(nd[0], nd[2]))) * 100) / 100; });
 }
-// the nodes: the level of the edges' ends at them
-const nodeY = new Map();
-for (const e of roads.edges) { nodeY.set(e.a, e.pts[1]); nodeY.set(e.b, e.pts[e.pts.length - 2]); }
-roads.nodes.forEach((nd, i) => { if (nodeY.has(i)) nd[1] = nodeY.get(i); else nd[1] = Math.round((nd[1] + dz(nd[0], nd[2])) * 100) / 100; });
 fs.writeFileSync(path.join(dir, manifest.roads), JSON.stringify(roads));
 
 if (manifest.rails) {
-  const rails = JSON.parse(fs.readFileSync(path.join(dir, manifest.rails), 'utf8'));
-  for (const line of rails.lines ?? rails) {
-    const p = line.pts, before = Float64Array.from({ length: p.length / 3 }, (_, i) => p[i * 3 + 1]);
-    shiftLine(p); stats.railPoints += p.length / 3;
+  const rails = JSON.parse(fs.readFileSync(path.join(dir, manifest.rails), 'utf8')), lines = rails.lines ?? rails;
+  const net = shiftNetwork(lines.map((l) => ({ pts: l.pts, a: end(l.pts, 0), b: end(l.pts, l.pts.length / 3 - 1), inner: false })));
+  lines.forEach((line, i) => {
+    const p = line.pts, ds = net.per[i];
     // a portal (a tunnel's mouth) moves with the line's point nearest it
     for (const q of line.portals ?? []) {
       let best = 0, bd = Infinity;
-      for (let i = 0; i < p.length / 3; i++) { const d = Math.hypot(p[i * 3] - q[0], p[i * 3 + 2] - q[2]); if (d < bd) { bd = d; best = i; } }
-      q[1] = Math.round((q[1] + p[best * 3 + 1] - before[best]) * 100) / 100;
+      for (let k = 0; k < p.length / 3; k++) { const dd = Math.hypot(p[k * 3] - q[0], p[k * 3 + 2] - q[2]); if (dd < bd) { bd = dd; best = k; } }
+      q[1] = Math.round((q[1] + ds[best]) * 100) / 100;
     }
-  }
+    apply(p, ds); stats.railPoints += p.length / 3;
+  });
   fs.writeFileSync(path.join(dir, manifest.rails), JSON.stringify(rails));
 }
 if (manifest.structures) {
-  const st = JSON.parse(fs.readFileSync(path.join(dir, manifest.structures), 'utf8'));
-  for (const f of st.footbridges ?? []) shiftLine(f.pts, f.steps ? undefined : (i) => i > 0 && i < f.pts.length / 3 - 1);
+  const st = JSON.parse(fs.readFileSync(path.join(dir, manifest.structures), 'utf8')), fb = st.footbridges ?? [];
+  const net = shiftNetwork(fb.map((f) => ({ pts: f.pts, a: end(f.pts, 0), b: end(f.pts, f.pts.length / 3 - 1), inner: !f.steps })));
+  fb.forEach((f, i) => apply(f.pts, net.per[i]));
   const mid = (ring) => ring.reduce((s, q) => [s[0] + q[0] / ring.length, s[1] + q[1] / ring.length], [0, 0]);
   for (const p of st.platforms ?? []) p.y = Math.round((p.y + dz(...mid(p.ring))) * 100) / 100;
   for (const c of st.canopies ?? []) c.y = Math.round((c.y + dz(...mid(c.ring))) * 100) / 100;
   fs.writeFileSync(path.join(dir, manifest.structures), JSON.stringify(st));
 }
 // the bridges at street level: from bank to bank
-for (const d of manifest.decks ?? []) { shiftLine(d.pts, (i) => i > 0 && i < d.pts.length / 3 - 1); stats.decks++; }
+{
+  const decks = manifest.decks ?? [], net = shiftNetwork(decks.map((d) => ({ pts: d.pts, a: null, b: null, inner: true })));
+  decks.forEach((d, i) => { apply(d.pts, net.per[i]); stats.decks++; });
+}
 
 // ---------------------------------------------------------------- the grid and the manifest
 fs.writeFileSync(path.join(dir, t.file), Buffer.from(G1.data.buffer));
