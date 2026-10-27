@@ -1,0 +1,467 @@
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (4637ms).
+Loading additional-files from '/mnt/sim/diag/ed.add.xml' ... done (45ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml' ... done (11ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml' ... done (5ms).
+Warning: At actuated tlLogic 'c11137', linkIndex 8,9 has no controlling detector.
+Warning: At actuated tlLogic 'c12908', actuated phase 4 has no controlling detector.
+Warning: Program '0' at tlLogic 'c13280' is incompatible with logic at junction 'c13280' (mutual conflict between link indices 12,17 tl indices 12,17 phase 4).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c13280', actuated phase 2 has no controlling detector.
+Warning: At actuated tlLogic 'c13280', linkIndex 6,7,8,17,18,19,20,21 has no controlling detector.
+Warning: Program '0' at tlLogic 'c14252' is incompatible with logic at junction 'c14252' (mutual conflict between link indices 4,30 tl indices 4,30 phase 0).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c14279', actuated phase 2 has no controlling detector.
+Warning: At actuated tlLogic 'c14279', linkIndex 5,6,12,13,14 has no controlling detector.
+Warning: At actuated tlLogic 'c15476', linkIndex 4,5 has no controlling detector.
+Warning: At actuated tlLogic 'c15567', linkIndex 3,4 has no controlling detector.
+Warning: Program '0' at tlLogic 'c16044' is incompatible with logic at junction 'c16044' (mutual conflict between link indices 0,21 tl indices 0,21 phase 7).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c16044', actuated phase 2 has no controlling detector.
+Warning: At actuated tlLogic 'c16044', linkIndex 6,7,8,24,25 has no controlling detector.
+Warning: Program '0' at tlLogic 'c18179' is incompatible with logic at junction 'c18179' (mutual conflict between link indices 2,5 tl indices 2,5 phase 0).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: Program '0' at tlLogic 'c18404' is incompatible with logic at junction 'c18404' (mutual conflict between link indices 0,9 tl indices 0,9 phase 4).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c18404', linkIndex 9,10,11 has no controlling detector.
+Warning: Program '0' at tlLogic 'c18790' is incompatible with logic at junction 'c18790' (mutual conflict between link indices 2,3 tl indices 2,3 phase 2).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: Program '0' at tlLogic 'c19305' is incompatible with logic at junction 'c19305' (mutual conflict between link indices 6,11 tl indices 6,11 phase 2).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c19305', actuated phase 4 has no controlling detector.
+Warning: Program '0' at tlLogic 'c20292' is incompatible with logic at junction 'c20292' (mutual conflict between link indices 6,10 tl indices 6,10 phase 2).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: Program '0' at tlLogic 'c21501' is incompatible with logic at junction 'c21501' (mutual conflict between link indices 2,5 tl indices 2,5 phase 0).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: Program '0' at tlLogic 'c2418' is incompatible with logic at junction 'c2418' (mutual conflict between link indices 6,31 tl indices 6,31 phase 0).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c2418', linkIndex 0,1,2,3 has no controlling detector.
+Warning: At actuated tlLogic 'c2455', actuated phase 2 has no controlling detector.
+Warning: At actuated tlLogic 'c2455', linkIndex 8,9,17,18,19 has no controlling detector.
+Warning: Program '0' at tlLogic 'c3530' is incompatible with logic at junction 'c3530' (mutual conflict between link indices 4,10 tl indices 4,10 phase 5).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c3530', linkIndex 9,10 has no controlling detector.
+Warning: Program '0' at tlLogic 'c436' is incompatible with logic at junction 'c436' (mutual conflict between link indices 12,17 tl indices 12,17 phase 4).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c436', linkIndex 6,7,8 has no controlling detector.
+Warning: At actuated tlLogic 'c44', linkIndex 6,7 has no controlling detector.
+Warning: Program '0' at tlLogic 'c5914' is incompatible with logic at junction 'c5914' (mutual conflict between link indices 8,48 tl indices 8,48 phase 0).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c5914', linkIndex 2,3,24 has no controlling detector.
+Warning: Program '0' at tlLogic 'c6747' is incompatible with logic at junction 'c6747' (mutual conflict between link indices 5,29 tl indices 5,29 phase 8).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c6747', actuated phase 0 has no controlling detector.
+Warning: At actuated tlLogic 'c6747', linkIndex 15,17,18,19,25,26,27 has no controlling detector.
+Warning: Program '0' at tlLogic 'c6807' is incompatible with logic at junction 'c6807' (mutual conflict between link indices 3,5 tl indices 3,5 phase 0).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c6852', linkIndex 5,6 has no controlling detector.
+Warning: At actuated tlLogic 'c7629', linkIndex 5,6 has no controlling detector.
+Warning: At actuated tlLogic 'c7776', linkIndex 12,13 has no controlling detector.
+Warning: Program '0' at tlLogic 'c8188' is incompatible with logic at junction 'c8188' (mutual conflict between link indices 5,30 tl indices 5,30 phase 0).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'c8361', linkIndex 2,3 has no controlling detector.
+Warning: At actuated tlLogic 'c9020', actuated phase 4 has no controlling detector.
+Warning: At actuated tlLogic 'c9020', linkIndex 7,8,15,16,17 has no controlling detector.
+Warning: At actuated tlLogic 'c9225', linkIndex 2,3 has no controlling detector.
+Warning: At actuated tlLogic 'c9977', actuated phase 2 has no controlling detector.
+Warning: At actuated tlLogic 'c9977', linkIndex 3,4,7,8 has no controlling detector.
+Warning: At actuated tlLogic 'cluster_c14000_n13335_n23028', actuated phase 2 has no controlling detector.
+Warning: At actuated tlLogic 'cluster_c14000_n13335_n23028', linkIndex 11,12,19,20,21 has no controlling detector.
+Warning: At actuated tlLogic 'cluster_c18118_n24846', actuated phase 4 has no controlling detector.
+Warning: At actuated tlLogic 'cluster_c18118_n24846', linkIndex 3,4,5,8,9,10 has no controlling detector.
+Warning: Program '0' at tlLogic 'cluster_c5418_n5421' is incompatible with logic at junction 'cluster_c5418_n5421' (mutual conflict between link indices 8,9 tl indices 8,9 phase 2).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'cluster_n11685_n12384', actuated phase 2 has no controlling detector.
+Warning: At actuated tlLogic 'cluster_n11685_n12384', linkIndex 11,12,19,20,21 has no controlling detector.
+Warning: Program '0' at tlLogic 'cluster_n11911_n12586' is incompatible with logic at junction 'cluster_n11911_n12586' (mutual conflict between link indices 7,8 tl indices 7,8 phase 3).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'cluster_n18824_n18837', linkIndex 11,12 has no controlling detector.
+Warning: At actuated tlLogic 'cluster_n19582_n22279_n22280', linkIndex 13,14 has no controlling detector.
+Warning: At actuated tlLogic 'joinedS_c10301_cluster_c5284_n19186', linkIndex 5,6,7 has no controlling detector.
+Warning: At actuated tlLogic 'joinedS_c12564_n13820', linkIndex 5,6,19,20 has no controlling detector.
+Warning: Program '0' at tlLogic 'joinedS_c18995_cluster_c18973_c22925_n22922_n24810' is incompatible with logic at junction 'c18995' (mutual conflict between link indices 0,7 tl indices 0,7 phase 9).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'joinedS_c18995_cluster_c18973_c22925_n22922_n24810', actuated phase 0 has no controlling detector.
+Warning: At actuated tlLogic 'joinedS_c18995_cluster_c18973_c22925_n22922_n24810', actuated phase 3 has no controlling detector.
+Warning: At actuated tlLogic 'joinedS_c18995_cluster_c18973_c22925_n22922_n24810', linkIndex 0,1,2,3,10,11,12,13,17,18,19,20,21,22,23,24 has no controlling detector.
+Warning: Program '0' at tlLogic 'joinedS_c19575_c9628' is incompatible with logic at junction 'c9628' (mutual conflict between link indices 3,7 tl indices 14,18 phase 5).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'joinedS_c19575_c9628', linkIndex 6,7,16,17 has no controlling detector.
+Warning: Program '0' at tlLogic 'joinedS_c6733_n6029' is incompatible with logic at junction 'c6733' (mutual conflict between link indices 7,12 tl indices 7,12 phase 3).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: At actuated tlLogic 'joinedS_c6733_n6029', linkIndex 16,17,22,23 has no controlling detector.
+Warning: At actuated tlLogic 'joinedS_n10765_n21965', actuated phase 2 has no controlling detector.
+Warning: At actuated tlLogic 'joinedS_n10765_n21965', linkIndex 0,1,2,9,10,11 has no controlling detector.
+Warning: At actuated tlLogic 'joinedS_n14137_n18758', linkIndex 8 has no controlling detector.
+Warning: Program '0' at tlLogic 'n1959' is incompatible with logic at junction 'n1959' (mutual conflict between link indices 4,10 tl indices 4,10 phase 6).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: Program '0' at tlLogic 'n6183' is incompatible with logic at junction 'n6183' (mutual conflict between link indices 11,16 tl indices 11,16 phase 2).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Warning: Program '0' at tlLogic 'n8799' is incompatible with logic at junction 'n8799' (mutual conflict between link indices 3,8 tl indices 3,8 phase 2).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Loading route-files incrementally from '/mnt/sim/assign/009/trips_009.rou.alt.xml.gz'
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+Step #16200.00 (164ms ~= 6.10*RT, ~6.10UPS, vehicles TOT 1 ACT 1 BUF 0)                   Warning: Vehicle '82' could not finish continuous lane change (turn lane) time=16357.00.
+Step #17100.00 (14ms ~= 71.43*RT, ~46500.00UPS, vehicles TOT 895 ACT 651 BUF 0)           Warning: Vehicle '592' could not finish continuous lane change (turn lane) time=17210.00.
+Warning: Vehicle '721' could not finish continuous lane change (lane disappeared) time=17235.00.
+Warning: Vehicle '480' could not finish continuous lane change (turn lane) time=17262.00.
+Warning: Vehicle '705' could not finish continuous lane change (turn lane) time=17356.00.
+Warning: Vehicle '1092' could not finish continuous lane change (lane disappeared) time=17403.00.
+Warning: Vehicle '728' could not finish continuous lane change (lane disappeared) time=17450.00.
+Warning: Vehicle '1005' could not finish continuous lane change (lane disappeared) time=17545.00.
+Warning: Vehicle '647' could not finish continuous lane change (turn lane) time=17556.00.
+Warning: Vehicle '1264' could not finish continuous lane change (turn lane) time=17837.00.
+Warning: Vehicle '986' could not finish continuous lane change (lane disappeared) time=17856.00.
+Warning: Vehicle '154' could not finish continuous lane change (turn lane) time=17866.00.
+Warning: Vehicle '1047' could not finish continuous lane change (lane disappeared) time=17870.00.
+Warning: Vehicle '962' could not finish continuous lane change (lane disappeared) time=17893.00.
+Warning: Vehicle '1033' could not finish continuous lane change (turn lane) time=17898.00.
+Warning: Vehicle '1306' could not finish continuous lane change (turn lane) time=17958.00.
+Warning: Vehicle '2093' could not finish continuous lane change (lane disappeared) time=17962.00.
+Warning: No connection between edge 'e20306' and edge 'e12549' found.
+Warning: Vehicle '10000002' has no valid route from edge 'e20306' to stop edge 'e12549'.
+Warning: No connection between edge 'e20306' and edge 'e12549' found.
+Warning: Vehicle '10000012' has no valid route from edge 'e20306' to stop edge 'e12549'.
+Step #18000.00 (23ms ~= 43.48*RT, ~52652.17UPS, vehicles TOT 2498 ACT 1211 BUF 6)         Warning: Vehicle '10000004' could not finish continuous lane change (turn lane) time=18005.00.
+Warning: Vehicle '999' could not finish continuous lane change (turn lane) time=18025.00.
+Warning: Vehicle '1144' could not finish continuous lane change (turn lane) time=18028.00.
+Warning: No connection between edge 'e834' and edge 'e30343' found.
+Warning: Vehicle '10000013' has no valid route from edge 'e834' to stop edge 'e30343'.
+Warning: busStop 's334' for vehicle '10000013' on lane 'e30343_0' is not downstream the current route.
+Warning: Vehicle '1944' could not finish continuous lane change (lane disappeared) time=18036.00.
+Warning: Vehicle '976' could not finish continuous lane change (turn lane) time=18054.00.
+Warning: Vehicle '1360' could not finish continuous lane change (turn lane) time=18065.00.
+Warning: Vehicle '2455' could not finish continuous lane change (turn lane) time=18085.00.
+Warning: Vehicle '1971' could not finish continuous lane change (lane disappeared) time=18108.00.
+Warning: Vehicle '1071' could not finish continuous lane change (lane disappeared) time=18174.00.
+Warning: Vehicle '1521' could not finish continuous lane change (lane disappeared) time=18179.00.
+Warning: Vehicle '1607' could not finish continuous lane change (lane disappeared) time=18181.00.
+Warning: Vehicle '1696' could not finish continuous lane change (lane disappeared) time=18186.00.
+Warning: Vehicle '1248' could not finish continuous lane change (lane disappeared) time=18229.00.
+Warning: Vehicle '3190' could not finish continuous lane change (turn lane) time=18241.00.
+Warning: Vehicle '1444' could not finish continuous lane change (turn lane) time=18264.00.
+Warning: Vehicle '517' could not finish continuous lane change (turn lane) time=18264.00.
+Warning: Vehicle '971' could not finish continuous lane change (lane disappeared) time=18326.00.
+Warning: Vehicle '1890' could not finish continuous lane change (turn lane) time=18331.00.
+Warning: Vehicle '1104' could not finish continuous lane change (turn lane) time=18356.00.
+Warning: Vehicle '3600' could not finish continuous lane change (turn lane) time=18362.00.
+Warning: Vehicle '2585' could not finish continuous lane change (turn lane) time=18369.00.
+Warning: Teleporting vehicle '10000013'; waited too long (wrong lane), lane='e834_0', time=18377.00.
+Warning: Vehicle '10000013' ends teleporting on edge 'e834', time=18377.00.
+Warning: Vehicle '3276' could not finish continuous lane change (lane disappeared) time=18410.00.
+Warning: Vehicle '2865' could not finish continuous lane change (lane disappeared) time=18410.00.
+Warning: Vehicle '3353' could not finish continuous lane change (lane disappeared) time=18415.00.
+Warning: Vehicle '2640' could not finish continuous lane change (lane disappeared) time=18426.00.
+Warning: Vehicle '3169' could not finish continuous lane change (turn lane) time=18443.00.
+Warning: Vehicle '3205' could not finish continuous lane change (lane disappeared) time=18453.00.
+Warning: Vehicle '1302' could not finish continuous lane change (turn lane) time=18465.00.
+Warning: Vehicle '2978' could not finish continuous lane change (lane disappeared) time=18468.00.
+Warning: Vehicle '2839' could not finish continuous lane change (turn lane) time=18531.00.
+Warning: Vehicle '2158' could not finish continuous lane change (lane disappeared) time=18531.00.
+Warning: Vehicle '1477' could not finish continuous lane change (turn lane) time=18547.00.
+Warning: Vehicle '3861' could not finish continuous lane change (lane disappeared) time=18551.00.
+Warning: Vehicle '2179' could not finish continuous lane change (turn lane) time=18564.00.
+Warning: Vehicle '2021' could not finish continuous lane change (lane disappeared) time=18573.00.
+Warning: Vehicle '3062' could not finish continuous lane change (lane disappeared) time=18587.00.
+Warning: Vehicle '2376' could not finish continuous lane change (lane disappeared) time=18592.00.
+Warning: Vehicle '585' could not finish continuous lane change (turn lane) time=18613.00.
+Warning: Vehicle '2417' could not finish continuous lane change (turn lane) time=18619.00.
+Warning: Vehicle '4537' could not finish continuous lane change (lane disappeared) time=18620.00.
+Warning: Vehicle '4462' could not finish continuous lane change (turn lane) time=18632.00.
+Warning: Vehicle '3775' could not finish continuous lane change (lane disappeared) time=18638.00.
+Warning: Vehicle '2412' could not finish continuous lane change (lane disappeared) time=18650.00.
+Warning: Vehicle '2508' could not finish continuous lane change (lane disappeared) time=18660.00.
+Warning: Vehicle '2460' could not finish continuous lane change (lane disappeared) time=18670.00.
+Warning: Vehicle '3438' could not finish continuous lane change (lane disappeared) time=18676.00.
+Warning: Vehicle '4432' could not finish continuous lane change (lane disappeared) time=18702.00.
+Warning: Vehicle '4260' could not finish continuous lane change (lane disappeared) time=18729.00.
+Warning: Teleporting vehicle '10000012'; waited too long (wrong lane), lane='e20306_0', time=18757.00.
+Warning: Vehicle '10000012' ends teleporting on edge 'e12549', time=18757.00.
+Warning: Vehicle '3344' could not finish continuous lane change (turn lane) time=18762.00.
+Warning: Vehicle '2302' could not finish continuous lane change (lane disappeared) time=18778.00.
+Warning: Vehicle '3903' could not finish continuous lane change (lane disappeared) time=18786.00.
+Warning: Vehicle '4444' could not finish continuous lane change (turn lane) time=18791.00.
+Warning: Vehicle '3709' could not finish continuous lane change (lane disappeared) time=18791.00.
+Warning: Vehicle '1611' could not finish continuous lane change (lane disappeared) time=18796.00.
+Warning: Vehicle '3440' could not finish continuous lane change (lane disappeared) time=18799.00.
+Warning: Vehicle '809' could not finish continuous lane change (turn lane) time=18801.00.
+Warning: Vehicle '3677' could not finish continuous lane change (lane disappeared) time=18804.00.
+Warning: Vehicle '4796' could not finish continuous lane change (lane disappeared) time=18824.00.
+Warning: Vehicle '3926' could not finish continuous lane change (lane disappeared) time=18831.00.
+Warning: Vehicle '4035' could not finish continuous lane change (lane disappeared) time=18835.00.
+Warning: Vehicle '3984' could not finish continuous lane change (lane disappeared) time=18838.00.
+Warning: Vehicle '4331' could not finish continuous lane change (lane disappeared) time=18843.00.
+Warning: Vehicle '4179' could not finish continuous lane change (lane disappeared) time=18860.00.
+Warning: Vehicle '5639' could not finish continuous lane change (turn lane) time=18879.00.
+Warning: Vehicle '2998' could not finish continuous lane change (lane disappeared) time=18892.00.
+Warning: Vehicle '3506' could not finish continuous lane change (lane disappeared) time=18893.00.
+Step #18900.00 (47ms ~= 21.28*RT, ~55085.11UPS, vehicles TOT 5925 ACT 2589 BUF 0)         Warning: Vehicle '4855' could not finish continuous lane change (lane disappeared) time=18922.00.
+Warning: Vehicle '4967' could not finish continuous lane change (lane disappeared) time=18945.00.
+Warning: Vehicle '4983' could not finish continuous lane change (lane disappeared) time=18953.00.
+Warning: Vehicle '5415' could not finish continuous lane change (lane disappeared) time=18960.00.
+Warning: Vehicle '5372' could not finish continuous lane change (turn lane) time=18970.00.
+Warning: Teleporting vehicle '2326'; waited too long (blocked), lane='e554_0', time=18974.00.
+Warning: Vehicle '2326' ends teleporting on edge 'e30914', time=18974.00.
+Warning: Vehicle '1354' could not finish continuous lane change (turn lane) time=18976.00.
+Warning: Vehicle '4903' could not finish continuous lane change (lane disappeared) time=18984.00.
+Warning: Vehicle '5263' could not finish continuous lane change (lane disappeared) time=18991.00.
+Warning: Vehicle '4298' could not finish continuous lane change (turn lane) time=19015.00.
+Warning: Vehicle '3301' could not finish continuous lane change (lane disappeared) time=19021.00.
+Warning: Vehicle '2767' could not finish continuous lane change (turn lane) time=19029.00.
+Warning: Vehicle '3170' could not finish continuous lane change (lane disappeared) time=19054.00.
+Warning: Vehicle '5801' could not finish continuous lane change (lane disappeared) time=19055.00.
+Warning: Vehicle '3115' could not finish continuous lane change (lane disappeared) time=19055.00.
+Warning: Vehicle '6221' could not finish continuous lane change (turn lane) time=19057.00.
+Warning: Vehicle '6045' could not finish continuous lane change (lane disappeared) time=19061.00.
+Warning: Vehicle '3216' could not finish continuous lane change (lane disappeared) time=19068.00.
+Warning: Vehicle '4161' could not finish continuous lane change (lane disappeared) time=19086.00.
+Warning: Vehicle '5138' could not finish continuous lane change (lane disappeared) time=19102.00.
+Warning: Vehicle '3146' could not finish continuous lane change (turn lane) time=19106.00.
+Warning: Vehicle '5529' could not finish continuous lane change (lane disappeared) time=19115.00.
+Warning: Teleporting vehicle '3842'; waited too long (wrong lane), lane='e25663_0', time=19117.00.
+Warning: Vehicle '3842' ends teleporting on edge 'e554', time=19117.00.
+Warning: Vehicle '5406' could not finish continuous lane change (turn lane) time=19140.00.
+Warning: Vehicle '5766' could not finish continuous lane change (lane disappeared) time=19170.00.
+Warning: Vehicle '5110' could not finish continuous lane change (lane disappeared) time=19170.00.
+Warning: Vehicle '2946' could not finish continuous lane change (turn lane) time=19193.00.
+Warning: Vehicle '4840' could not finish continuous lane change (lane disappeared) time=19206.00.
+Warning: Vehicle '3301' could not finish continuous lane change (lane disappeared) time=19207.00.
+Warning: Vehicle '6689' could not finish continuous lane change (lane disappeared) time=19239.00.
+Warning: Vehicle '5410' could not finish continuous lane change (lane disappeared) time=19239.00.
+Warning: Vehicle '3532' could not finish continuous lane change (lane disappeared) time=19239.00.
+Warning: Vehicle '3085' could not finish continuous lane change (lane disappeared) time=19264.00.
+Warning: Vehicle '5955' could not finish continuous lane change (lane disappeared) time=19279.00.
+Warning: No connection between edge 'e29001' and edge 'e26821' found.
+Warning: Vehicle '10000030' has no valid route from edge 'e29001' to stop edge 'e26821'.
+Warning: Vehicle '6751' could not finish continuous lane change (turn lane) time=19291.00.
+Warning: Vehicle '4063' could not finish continuous lane change (turn lane) time=19300.00.
+Warning: Vehicle '5537' could not finish continuous lane change (turn lane) time=19318.00.
+Warning: Vehicle '6188' could not finish continuous lane change (turn lane) time=19326.00.
+Warning: Vehicle '7263' could not finish continuous lane change (lane disappeared) time=19334.00.
+Warning: Vehicle '4041' could not finish continuous lane change (turn lane) time=19335.00.
+Warning: Vehicle '5211' could not finish continuous lane change (lane disappeared) time=19343.00.
+Warning: Vehicle '4650' could not finish continuous lane change (lane disappeared) time=19344.00.
+Warning: Vehicle '6523' could not finish continuous lane change (turn lane) time=19347.00.
+Warning: Vehicle '2695' could not finish continuous lane change (lane disappeared) time=19355.00.
+Warning: Vehicle '5024' could not finish continuous lane change (lane disappeared) time=19357.00.
+Warning: Vehicle '7832' could not finish continuous lane change (turn lane) time=19362.00.
+Warning: Vehicle '7259' could not finish continuous lane change (lane disappeared) time=19375.00.
+Warning: Vehicle '2695' could not finish continuous lane change (lane disappeared) time=19376.00.
+Warning: Vehicle '3742' could not finish continuous lane change (lane disappeared) time=19382.00.
+Warning: Vehicle '3513' could not finish continuous lane change (turn lane) time=19388.00.
+Warning: Vehicle '7182' could not finish continuous lane change (lane disappeared) time=19408.00.
+Warning: Vehicle '7548' could not finish continuous lane change (lane disappeared) time=19410.00.
+Warning: Vehicle '8094' could not finish continuous lane change (turn lane) time=19414.00.
+Warning: Vehicle '7002' could not finish continuous lane change (lane disappeared) time=19450.00.
+Warning: Teleporting vehicle '10000002'; waited too long (wrong lane), lane='e20306_0', time=19452.00.
+Warning: Vehicle '10000002' ends teleporting on edge 'e12549', time=19452.00.
+Warning: Vehicle '3702' could not finish continuous lane change (turn lane) time=19453.00.
+Warning: Vehicle '7853' could not finish continuous lane change (lane disappeared) time=19455.00.
+Warning: Vehicle '6583' could not finish continuous lane change (lane disappeared) time=19463.00.
+Warning: Vehicle '7956' could not finish continuous lane change (lane disappeared) time=19472.00.
+Warning: Vehicle '7261' could not finish continuous lane change (lane disappeared) time=19472.00.
+Warning: Vehicle '5013' could not finish continuous lane change (lane disappeared) time=19476.00.
+Warning: Vehicle '7097' could not finish continuous lane change (lane disappeared) time=19482.00.
+Warning: Vehicle '6883' could not finish continuous lane change (lane disappeared) time=19487.00.
+Warning: Vehicle '6614' could not finish continuous lane change (turn lane) time=19488.00.
+Warning: Vehicle '6622' could not finish continuous lane change (turn lane) time=19488.00.
+Warning: Vehicle '6822' could not finish continuous lane change (lane disappeared) time=19489.00.
+Warning: Vehicle '5424' could not finish continuous lane change (lane disappeared) time=19490.00.
+Warning: Vehicle '6372' could not finish continuous lane change (lane disappeared) time=19496.00.
+Warning: Vehicle '8773' could not finish continuous lane change (lane disappeared) time=19509.00.
+Warning: Vehicle '7001' could not finish continuous lane change (lane disappeared) time=19531.00.
+Warning: Vehicle '7285' could not finish continuous lane change (lane disappeared) time=19538.00.
+Warning: Vehicle '8093' could not finish continuous lane change (lane disappeared) time=19539.00.
+Warning: Vehicle '7228' could not finish continuous lane change (lane disappeared) time=19552.00.
+Warning: Vehicle '5321' could not finish continuous lane change (lane disappeared) time=19566.00.
+Warning: Vehicle '7304' could not finish continuous lane change (lane disappeared) time=19569.00.
+Warning: Vehicle '7462' could not finish continuous lane change (lane disappeared) time=19571.00.
+Warning: Vehicle '6993' could not finish continuous lane change (turn lane) time=19574.00.
+Warning: Vehicle '8314' could not finish continuous lane change (lane disappeared) time=19584.00.
+Warning: Vehicle '7041' could not finish continuous lane change (lane disappeared) time=19590.00.
+Warning: Vehicle '7455' could not finish continuous lane change (lane disappeared) time=19591.00.
+Warning: Vehicle '3756' could not finish continuous lane change (lane disappeared) time=19596.00.
+Warning: Teleporting vehicle '5902'; waited too long (wrong lane), lane='r32490_0', time=19611.00.
+Warning: Vehicle '5902' ends teleporting on edge 'r21724', time=19611.00.
+Warning: Teleporting vehicle '7051'; waited too long (wrong lane), lane='r32490_1', time=19612.00.
+Warning: Vehicle '7051' ends teleporting on edge 'e16882', time=19612.00.
+Warning: Vehicle '6070' could not finish continuous lane change (lane disappeared) time=19623.00.
+Warning: Vehicle '6584' could not finish continuous lane change (turn lane) time=19623.00.
+Warning: Vehicle '2690' could not finish continuous lane change (turn lane) time=19627.00.
+Warning: Vehicle '8180' could not finish continuous lane change (turn lane) time=19628.00.
+Warning: Vehicle '8413' could not finish continuous lane change (lane disappeared) time=19629.00.
+Warning: Vehicle '4483' could not finish continuous lane change (turn lane) time=19643.00.
+Warning: Vehicle '5727' could not finish continuous lane change (lane disappeared) time=19669.00.
+Warning: Vehicle '6145' could not finish continuous lane change (turn lane) time=19676.00.
+Warning: Vehicle '3593' could not finish continuous lane change (turn lane) time=19716.00.
+Warning: Vehicle '4180' could not finish continuous lane change (lane disappeared) time=19726.00.
+Warning: Vehicle '9682' could not finish continuous lane change (lane disappeared) time=19739.00.
+Warning: Vehicle '6945' could not finish continuous lane change (turn lane) time=19767.00.
+Warning: Vehicle '2894' could not finish continuous lane change (lane disappeared) time=19769.00.
+Warning: No connection between edge 'e20306' and edge 'e12549' found.
+Warning: Vehicle '10000042' has no valid route from edge 'e20306' to stop edge 'e12549'.
+Warning: Vehicle '6153' could not finish continuous lane change (lane disappeared) time=19776.00.
+Warning: Vehicle '8117' could not finish continuous lane change (turn lane) time=19781.00.
+Warning: Vehicle '6830' could not finish continuous lane change (lane disappeared) time=19788.00.
+Warning: Vehicle '5785' could not finish continuous lane change (lane disappeared) time=19792.00.
+Step #19800.00Warning: Vehicle '7952' could not finish continuous lane change (turn lane) time=19800.00.
+Warning: Vehicle '8643' could not finish continuous lane change (lane disappeared) time=19800.00.
+ (57ms ~= 17.54*RT, ~61473.68UPS, vehicles TOT 10307 ACT 3504 BUF 3)        Warning: Vehicle '4495' could not finish continuous lane change (lane disappeared) time=19817.00.
+Warning: Vehicle '8623' could not finish continuous lane change (lane disappeared) time=19820.00.
+Warning: Vehicle '7136' could not finish continuous lane change (turn lane) time=19831.00.
+Warning: Vehicle '9058' could not finish continuous lane change (lane disappeared) time=19844.00.
+Warning: Vehicle '5296' could not finish continuous lane change (turn lane) time=19855.00.
+Warning: Vehicle '7774' could not finish continuous lane change (lane disappeared) time=19862.00.
+Warning: Vehicle '6965' could not finish continuous lane change (turn lane) time=19865.00.
+Warning: Vehicle '9114' could not finish continuous lane change (turn lane) time=19878.00.
+Warning: Vehicle '9577' could not finish continuous lane change (lane disappeared) time=19879.00.
+Warning: Vehicle '8051' could not finish continuous lane change (turn lane) time=19939.00.
+Warning: Vehicle '9363' could not finish continuous lane change (lane disappeared) time=19955.00.
+Warning: Vehicle '6338' could not finish continuous lane change (lane disappeared) time=19969.00.
+Warning: Vehicle '10097' could not finish continuous lane change (turn lane) time=19970.00.
+Warning: Vehicle '9177' could not finish continuous lane change (lane disappeared) time=19995.00.
+Warning: Vehicle '6966' could not finish continuous lane change (lane disappeared) time=20003.00.
+Warning: Teleporting vehicle '10062'; waited too long (jam), lane='e10021_0', time=20009.00.
+Warning: Vehicle '10062' ends teleporting on edge 'e10022', time=20009.00.
+Warning: Vehicle '7254' could not finish continuous lane change (turn lane) time=20011.00.
+Warning: Vehicle '10460' could not finish continuous lane change (lane disappeared) time=20021.00.
+Warning: Vehicle '7643' could not finish continuous lane change (lane disappeared) time=20024.00.
+Warning: Vehicle '9776' could not finish continuous lane change (turn lane) time=20026.00.
+Warning: Vehicle '5029' could not finish continuous lane change (lane disappeared) time=20028.00.
+Warning: Vehicle '8057' could not finish continuous lane change (lane disappeared) time=20032.00.
+Warning: Vehicle '10797' could not finish continuous lane change (lane disappeared) time=20044.00.
+Warning: Vehicle '7689' could not finish continuous lane change (lane disappeared) time=20052.00.
+Warning: Vehicle '4563' could not finish continuous lane change (turn lane) time=20057.00.
+Warning: Vehicle '10013' could not finish continuous lane change (lane disappeared) time=20057.00.
+Warning: Vehicle '11243' could not finish continuous lane change (turn lane) time=20076.00.
+Warning: Vehicle '9792' could not finish continuous lane change (lane disappeared) time=20077.00.
+Warning: Vehicle '10552' could not finish continuous lane change (lane disappeared) time=20081.00.
+Warning: Vehicle '9919' could not finish continuous lane change (turn lane) time=20089.00.
+Warning: Vehicle '5341' could not finish continuous lane change (lane disappeared) time=20096.00.
+Warning: Vehicle '9186' could not finish continuous lane change (lane disappeared) time=20097.00.
+Warning: Vehicle '9485' could not finish continuous lane change (turn lane) time=20116.00.
+Warning: Vehicle '10018' could not finish continuous lane change (lane disappeared) time=20116.00.
+Warning: Vehicle '5856' could not finish continuous lane change (lane disappeared) time=20131.00.
+Warning: Vehicle '8760' could not finish continuous lane change (lane disappeared) time=20135.00.
+Warning: Vehicle '7610' could not finish continuous lane change (lane disappeared) time=20137.00.
+Warning: Vehicle '6044' could not finish continuous lane change (lane disappeared) time=20138.00.
+Warning: Vehicle '10351' could not finish continuous lane change (lane disappeared) time=20162.00.
+Warning: Vehicle '8468' could not finish continuous lane change (turn lane) time=20166.00.
+Warning: Vehicle '6535' could not finish continuous lane change (lane disappeared) time=20173.00.
+Warning: Vehicle '4905' could not finish continuous lane change (turn lane) time=20191.00.
+Warning: Vehicle '8997' could not finish continuous lane change (turn lane) time=20195.00.
+Warning: Vehicle '9933' could not finish continuous lane change (turn lane) time=20226.00.
+Warning: Vehicle '11918' could not finish continuous lane change (turn lane) time=20231.00.
+Warning: Vehicle '11232' could not finish continuous lane change (lane disappeared) time=20233.00.
+Warning: Vehicle '7989' could not finish continuous lane change (turn lane) time=20238.00.
+Warning: Vehicle '5642' could not finish continuous lane change (turn lane) time=20246.00.
+Warning: Vehicle '8692' could not finish continuous lane change (lane disappeared) time=20248.00.
+Warning: Teleporting vehicle '10845'; waited too long (jam), lane='e10021_0', time=20255.00.
+Warning: Vehicle '10845' ends teleporting on edge 'e10022', time=20255.00.
+Warning: Vehicle '9518' could not finish continuous lane change (turn lane) time=20257.00.
+Warning: Vehicle '5717' could not finish continuous lane change (lane disappeared) time=20257.00.
+Warning: Vehicle '10384' could not finish continuous lane change (lane disappeared) time=20271.00.
+Warning: Vehicle '11917' could not finish continuous lane change (lane disappeared) time=20271.00.
+Warning: Vehicle '11875' could not finish continuous lane change (turn lane) time=20276.00.
+Warning: Vehicle '11863' could not finish continuous lane change (lane disappeared) time=20304.00.
+Warning: Vehicle '12510' could not finish continuous lane change (lane disappeared) time=20305.00.
+Warning: Vehicle '6786' could not finish continuous lane change (lane disappeared) time=20308.00.
+Warning: No connection between edge 'e834' and edge 'e30343' found.
+Warning: Vehicle '10000051' has no valid route from edge 'e834' to stop edge 'e30343'.
+Warning: busStop 's334' for vehicle '10000051' on lane 'e30343_0' is not downstream the current route.
+Warning: Vehicle '10563' could not finish continuous lane change (lane disappeared) time=20314.00.
+Warning: Vehicle '5822' could not finish continuous lane change (lane disappeared) time=20325.00.
+Warning: Vehicle '7880' could not finish continuous lane change (lane disappeared) time=20331.00.
+Warning: Vehicle '11961' could not finish continuous lane change (turn lane) time=20343.00.
+Warning: Vehicle '9336' could not finish continuous lane change (lane disappeared) time=20350.00.
+Warning: Vehicle '11415' could not finish continuous lane change (lane disappeared) time=20363.00.
+Warning: Vehicle '9314' could not finish continuous lane change (lane disappeared) time=20365.00.
+Warning: Vehicle '5574' could not finish continuous lane change (turn lane) time=20375.00.
+Warning: Vehicle '9877' could not finish continuous lane change (lane disappeared) time=20379.00.
+Warning: Vehicle '9554' could not finish continuous lane change (turn lane) time=20379.00.
+Warning: Vehicle '10662' could not finish continuous lane change (turn lane) time=20382.00.
+Warning: Vehicle '9146' could not finish continuous lane change (lane disappeared) time=20387.00.
+Warning: Vehicle '12868' performs emergency braking on lane 'e26793_1' with decel=9.00, wished=4.00, severity=1.00, time=20404.00.
+Warning: Vehicle '9168' could not finish continuous lane change (lane disappeared) time=20412.00.
+Warning: Vehicle '8537' could not finish continuous lane change (turn lane) time=20419.00.
+Warning: Vehicle '11571' could not finish continuous lane change (turn lane) time=20427.00.
+Warning: Vehicle '12044' could not finish continuous lane change (turn lane) time=20429.00.
+Warning: Vehicle '13232' could not finish continuous lane change (lane disappeared) time=20451.00.
+Warning: Vehicle '8417' could not finish continuous lane change (lane disappeared) time=20459.00.
+Warning: Vehicle '9531' could not finish continuous lane change (lane disappeared) time=20461.00.
+Warning: Vehicle '13435' could not finish continuous lane change (lane disappeared) time=20462.00.
+Warning: Vehicle '10719' could not finish continuous lane change (turn lane) time=20466.00.
+Warning: Vehicle '9015' could not finish continuous lane change (lane disappeared) time=20469.00.
+Warning: Teleporting vehicle '11580'; waited too long (jam), lane='e30705_0', time=20484.00.
+Warning: Vehicle '13865' could not finish continuous lane change (lane disappeared) time=20493.00.
+Warning: Vehicle '11580' ends teleporting on edge 'r30694', time=20496.00.
+Warning: Teleporting vehicle '9003'; waited too long (blocked), lane='e10022_0', time=20503.00.
+Warning: Vehicle '9003' ends teleporting on edge 'e28429', time=20503.00.
+Warning: Vehicle '11811' could not finish continuous lane change (lane disappeared) time=20504.00.
+Warning: Vehicle '13512' could not finish continuous lane change (turn lane) time=20513.00.
+Warning: Vehicle '9818' performs emergency braking on lane 'e32567-AddedOnRampEdge_0' with decel=9.00, wished=4.50, severity=1.00, time=20526.00.
+Warning: Vehicle '12769' could not finish continuous lane change (turn lane) time=20551.00.
+Warning: Vehicle '10604' could not finish continuous lane change (lane disappeared) time=20556.00.
+Warning: Vehicle '11124' could not finish continuous lane change (turn lane) time=20570.00.
+Warning: Vehicle '7014' could not finish continuous lane change (turn lane) time=20572.00.
+Warning: Vehicle '7937' could not finish continuous lane change (lane disappeared) time=20574.00.
+Warning: Vehicle '12418' could not finish continuous lane change (turn lane) time=20584.00.
+Warning: Vehicle '13979' could not finish continuous lane change (turn lane) time=20601.00.
+Warning: Vehicle '13123' could not finish continuous lane change (lane disappeared) time=20602.00.
+Warning: Vehicle '9607' could not finish continuous lane change (lane disappeared) time=20609.00.
+Warning: Vehicle '7461' could not finish continuous lane change (lane disappeared) time=20622.00.
+Warning: Vehicle '12683' could not finish continuous lane change (lane disappeared) time=20629.00.
+Warning: Vehicle '12748' could not finish continuous lane change (lane disappeared) time=20637.00.
+Warning: Vehicle '8782' could not finish continuous lane change (lane disappeared) time=20642.00.
+Warning: Teleporting vehicle '10000051'; waited too long (wrong lane), lane='e834_0', time=20655.00.
+Warning: Vehicle '10000051' ends teleporting on edge 'e834', time=20655.00.
+Warning: Vehicle '13912' could not finish continuous lane change (lane disappeared) time=20660.00.
+Warning: Vehicle '10743' could not finish continuous lane change (lane disappeared) time=20662.00.
+Warning: No connection between edge 'e20306' and edge 'e12549' found.
+Warning: Vehicle '10000062' has no valid route from edge 'e20306' to stop edge 'e12549'.
+Warning: Vehicle '13676' could not finish continuous lane change (turn lane) time=20672.00.
+Warning: Vehicle '10276' could not finish continuous lane change (lane disappeared) time=20679.00.
+Warning: Vehicle '8558' could not finish continuous lane change (turn lane) time=20681.00.
+Warning: Vehicle '10578' could not finish continuous lane change (turn lane) time=20699.00.
+Step #20700.00 (64ms ~= 15.62*RT, ~64859.38UPS, vehicles TOT 15242 ACT 4151 BUF 3)        Warning: Vehicle '12258' could not finish continuous lane change (lane disappeared) time=20717.00.
+Warning: Vehicle '14655' could not finish continuous lane change (turn lane) time=20722.00.
+Warning: Vehicle '7925' could not finish continuous lane change (turn lane) time=20732.00.
+Warning: Vehicle '7628' could not finish continuous lane change (lane disappeared) time=20736.00.
+Warning: Vehicle '9814' could not finish continuous lane change (lane disappeared) time=20737.00.
+Warning: Vehicle '9769' could not finish continuous lane change (turn lane) time=20742.00.
+Warning: Vehicle '15139' could not finish continuous lane change (turn lane) time=20743.00.
+Warning: Vehicle '15442' could not finish continuous lane change (turn lane) time=20762.00.
+Warning: Vehicle '14960' could not finish continuous lane change (lane disappeared) time=20766.00.
+Warning: Vehicle '12632' could not finish continuous lane change (turn lane) time=20786.00.
+Warning: Vehicle '11659' could not finish continuous lane change (turn lane) time=20788.00.
+Warning: Vehicle '11553' could not finish continuous lane change (turn lane) time=20797.00.
+Warning: Vehicle '12175' could not finish continuous lane change (lane disappeared) time=20798.00.
+Warning: Vehicle '9300' could not finish continuous lane change (lane disappeared) time=20800.00.
+Warning: Vehicle '15599' could not finish continuous lane change (lane disappeared) time=20801.00.
+Warning: Vehicle '14697' could not finish continuous lane change (lane disappeared) time=20823.00.
+Warning: Vehicle '14616' could not finish continuous lane change (lane disappeared) time=20824.00.
