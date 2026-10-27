@@ -1,0 +1,17 @@
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 52564 of 53702 edges
+151 gates in, 153 out; 1493 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+448687 trips: {'work': 316013, 'through': 26392, 'school': 41864, 'errand': 39890, 'airport': 10455, 'delivery': 19448} (scale 1.0)
+departures by half hour: 4.5h 5012 5.0h 15735 5.5h 20003 6.0h 40830 6.5h 50370 7.0h 95542 7.5h 70244 8.0h 53459 8.5h 37580 9.0h 29348 9.5h 30564
+-> data/sim/sanjuan/lab
