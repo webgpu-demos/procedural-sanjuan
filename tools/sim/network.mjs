@@ -6,27 +6,41 @@
 //   world (x east, z south, y up)  ->  SUMO (x east, y north, z up): (x, -z, y), no offset (the frames coincide)
 //   edge i of roads.json            ->  SUMO edge "e<i>" along it, "r<i>" against it (two-way roads)
 //
-// Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml} and runs netconvert to data/sim/<area>/<area>.net.xml.gz.
-// Usage: node tools/sim/network.mjs [--area=sanjuan]
+// A run of roads joined end to end with nothing else meeting them (OSM splits a way wherever a tag changes) is one
+// SUMO edge, named after its last piece (the one that arrives at the junction): net/merged.json lists the pieces,
+// for run.py to give each its speeds. (Each node is a junction SUMO builds; netconvert cuts the edges back to their
+// junctions' shapes, and a piece between two close ones was left a metre or none long: a car could not stop on it,
+// so it waited across the junction behind, and the streets locked one another.)
+//
+// Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, merged.json, lanes.json} and runs netconvert to
+// data/sim/<area>/<area>.net.xml.gz.
+// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--join=18]
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { resolveArea, ROOT } from '../pipeline/config.mjs';
+import { roadLanes, paintOf } from '../../src/shared/roadway.js';
 
 const area = resolveArea();
+const flag = (k) => !process.argv.includes(`--no-${k}`);
+const opt = (k, d) => { const a = process.argv.find((v) => v.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const tiles = path.join(ROOT, 'public/tiles', area.id), out = path.join(ROOT, 'data/sim', area.id);
 fs.mkdirSync(path.join(out, 'net'), { recursive: true });
 const roads = JSON.parse(fs.readFileSync(path.join(tiles, 'roads.json'), 'utf8'));
+const lanesFile = path.join(tiles, 'lanes.json');
+const painted = flag('painted') && fs.existsSync(lanesFile) ? JSON.parse(fs.readFileSync(lanesFile, 'utf8')).edges : null;
 const t0 = Date.now(), log = (m) => console.log(`${((Date.now() - t0) / 1000).toFixed(1).padStart(6)}s ${m}`);
 
 // junction priority by road class: who gives way to whom where there are no lights
 const PRIORITY = { motorway: 13, trunk: 12, primary: 11, secondary: 10, tertiary: 9, unclassified: 7, residential: 6, living_street: 5, service: 4 };
 const LANE = 3.0;   // lane width (m): roadsplit.mjs builds carriageways of 3 m lanes
 const NARROW = 2.6; // a two-way street of one shared lane: two narrow ones, a car's width either side of the line
+const WIDEST = 4.5; // (a lane no wider: a one-lane ramp is painted as wide as it is paved, 7 m; SUMO's junctions grow with it)
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const f = (v) => Math.round(v * 100) / 100;
+const fast = (e) => /^(motorway|trunk)(_link)?$/.test(e.highway);
+const lanesOf = roadLanes(roads.edges);
 
-const used = new Set();
 const edges = [];
 roads.edges.forEach((e, i) => {
   if (e.a === e.b) return;
@@ -38,20 +52,25 @@ roads.edges.forEach((e, i) => {
   const hw = e.highway.replace('_link', ''), link = e.highway.endsWith('_link');
   const priority = (PRIORITY[hw] ?? 5) - (link ? 1 : 0);
   const speed = Math.max(4, e.maxspeed / 3.6);
-  const attrs = { priority, speed: f(speed), name: e.name ?? e.ref ?? '' };
-  const shape = (p) => p.map(([x, y, z]) => `${f(x)},${f(y)},${f(z)}`).join(' ');
+  const attrs = { src: i, priority, speed: f(speed), name: e.name ?? e.ref ?? '', fast: fast(e), link };
   if (e.oneway) {
     const p = e.oneway === -1 ? [...pts].reverse() : pts, [a, b] = e.oneway === -1 ? [e.b, e.a] : [e.a, e.b];
-    edges.push({ id: `e${i}`, from: a, to: b, lanes: Math.max(1, e.lanes), width: LANE, spread: 'center', shape: shape(p), ...attrs });
-    used.add(a); used.add(b);
+    // The expressway in the lanes the tiles paint (lanetable.mjs measured them from the carriageway; elsewhere, a ramp
+    // or a deck, by the rule markings.mjs paints them with): the lanes OSM counts are sometimes more than are painted,
+    // and a car rode down a painted line between two of them (src/world/simtraffic.js relane)
+    let lanes = Math.max(1, e.lanes), width = LANE;
+    if (painted && attrs.fast) {
+      const t = painted[i], p = t ?? paintOf(e, Math.max(1, lanesOf(e) || e.lanes || 1));
+      lanes = p.lanes; width = Math.min(WIDEST, p.lw);
+    }
+    edges.push({ id: `e${i}`, from: a, to: b, lanes, width, spread: 'center', pts: p, ...attrs });
   } else {
     // lanes each way: the tagged split, else half the road each (a single shared lane: one narrow lane each way)
     const fwd = e.lanesForward ?? (e.lanes >= 2 ? Math.floor(e.lanes / 2) : 1);
     const bwd = e.lanesBackward ?? (e.lanes >= 2 ? Math.max(1, e.lanes - fwd) : 1);
     const width = e.lanes >= 2 ? LANE : NARROW;
-    edges.push({ id: `e${i}`, from: e.a, to: e.b, lanes: fwd, width, spread: 'right', shape: shape(pts), ...attrs });
-    edges.push({ id: `r${i}`, from: e.b, to: e.a, lanes: bwd, width, spread: 'right', shape: shape([...pts].reverse()), ...attrs });
-    used.add(e.a); used.add(e.b);
+    edges.push({ id: `e${i}`, from: e.a, to: e.b, lanes: fwd, width, spread: 'right', pts, ...attrs });
+    edges.push({ id: `r${i}`, from: e.b, to: e.a, lanes: bwd, width, spread: 'right', pts: [...pts].reverse(), ...attrs });
   }
 });
 
@@ -61,16 +80,14 @@ roads.edges.forEach((e, i) => {
 // locked the west side of the city). An expressway stretch is made at most one lane wider than all the lanes
 // leaving its end, from the end back upstream, so a road narrows a lane at a time as drivers merge.
 {
-  const fast = (e) => /^(motorway|trunk)(_link)?$/.test(roads.edges[+e.id.slice(1)].highway);
-  const main = (e) => !roads.edges[+e.id.slice(1)].highway.endsWith('_link');
   const outOf = new Map();
-  for (const e of edges) if (fast(e)) (outOf.get(e.from) ?? outOf.set(e.from, []).get(e.from)).push(e);
+  for (const e of edges) if (e.fast) (outOf.get(e.from) ?? outOf.set(e.from, []).get(e.from)).push(e);
   let n = 0;
   for (let pass = 0; pass < 6; pass++) {
     let changed = 0;
     for (const e of edges) {
-      if (!fast(e) || !main(e)) continue;
-      const on = (outOf.get(e.to) ?? []).filter((o) => o.id.slice(1) !== e.id.slice(1)); // (not the other way back)
+      if (!e.fast || e.link) continue;
+      const on = (outOf.get(e.to) ?? []).filter((o) => o.src !== e.src); // (not the other way back)
       if (!on.length) continue;
       const room = on.reduce((s, o) => s + o.lanes, 0) + 1;
       if (e.lanes > room) { e.lanes = room; changed++; }
@@ -82,21 +99,85 @@ roads.edges.forEach((e, i) => {
 }
 
 const signals = new Set(roads.signals);
+// the lanes SUMO drives each one-way expressway piece with, and their width (run.py puts them in the run's index:
+// the client moves each car from SUMO's lanes into the painted ones)
+const laneTable = {};
+for (const e of edges) if (e.fast && e.spread === 'center') laneTable[e.src] = [e.lanes, f(e.width)];
+
+// Runs of pieces: a node that only joins two roads (no light, nothing else meeting there), the same road either side
+// (lanes, width, class, speed), joins them.
+const inAt = new Map(), outAt = new Map();
+for (const e of edges) {
+  (inAt.get(e.to) ?? inAt.set(e.to, []).get(e.to)).push(e);
+  (outAt.get(e.from) ?? outAt.set(e.from, []).get(e.from)).push(e);
+}
+const merged = {};
+let mergedEdges = edges;
+if (flag('merge')) {
+  const same = (a, b) => a.lanes === b.lanes && Math.abs(a.width - b.width) < 0.35 && a.priority === b.priority &&
+    Math.abs(a.speed - b.speed) < 0.6 && a.spread === b.spread && a.fast === b.fast && a.link === b.link;
+  const next = new Map(), prev = new Map();
+  for (const [node, ins] of inAt) {
+    if (signals.has(node)) continue;
+    const outs = outAt.get(node) ?? [];
+    const srcs = new Set([...ins, ...outs].map((e) => e.src));
+    if (srcs.size !== 2 || ins.length !== outs.length || ins.length > 2) continue;
+    const pairs = ins.map((a) => [a, outs.find((b) => b.src !== a.src)]);
+    if (pairs.some(([a, b]) => !b || !same(a, b))) continue;
+    for (const [a, b] of pairs) { next.set(a, b); prev.set(b, a); }
+  }
+  mergedEdges = [];
+  const done = new Set();
+  const emit = (chain) => {
+    for (const e of chain) done.add(e);
+    if (chain.length === 1) { mergedEdges.push(chain[0]); return; }
+    const last = chain.at(-1), pts = [...chain[0].pts];
+    for (const e of chain.slice(1)) pts.push(...e.pts.slice(1));
+    mergedEdges.push({ ...chain[0], id: last.id, to: last.to, pts, name: chain.find((e) => e.name)?.name ?? '' });
+    merged[last.id] = chain.map((e) => e.id);
+  };
+  for (const e of edges) {
+    if (done.has(e) || prev.has(e)) continue;
+    const chain = [e];
+    for (let n = next.get(e); n && !done.has(n) && !chain.includes(n); n = next.get(n)) chain.push(n);
+    emit(chain);
+  }
+  for (const e of edges) if (!done.has(e)) emit([e]); // (a ring of pieces with no end: left as it is)
+  log(`${edges.length - mergedEdges.length} joins: ${mergedEdges.length} edges`);
+}
+
+// Nodes: lights (right on red, as Puerto Rico drives: after a stop, unless a sign says otherwise), and where two
+// expressway carriageways or a ramp join into fewer lanes than they bring, a zipper (each lane's drivers in turn: a
+// priority junction made the ramp wait for a gap that, at the rush hour, never came).
+const used = new Map(); // node -> [in, out]
+for (const e of mergedEdges) {
+  (used.get(e.from) ?? used.set(e.from, [[], []]).get(e.from))[1].push(e);
+  (used.get(e.to) ?? used.set(e.to, [[], []]).get(e.to))[0].push(e);
+}
+let zips = 0;
 const nodeXml = ['<nodes>'];
-for (const k of used) {
+for (const [k, [ins, outs]] of used) {
   const [x, y, z] = roads.nodes[k];
-  nodeXml.push(`  <node id="n${k}" x="${f(x)}" y="${f(-z)}" z="${f(y)}"${signals.has(k) ? ' type="traffic_light"' : ''}/>`);
+  let type = '';
+  if (signals.has(k)) type = flag('ror') ? 'traffic_light_right_on_red' : 'traffic_light';
+  else if (flag('zipper') && ins.length >= 2 && outs.length === 1 && [...ins, ...outs].every((e) => e.fast && e.spread === 'center') &&
+    ins.reduce((s, e) => s + e.lanes, 0) > outs[0].lanes) { type = 'zipper'; zips++; }
+  nodeXml.push(`  <node id="n${k}" x="${f(x)}" y="${f(-z)}" z="${f(y)}"${type ? ` type="${type}"` : ''}/>`);
 }
 nodeXml.push('</nodes>');
+const shape = (p) => p.map(([x, y, z]) => `${f(x)},${f(y)},${f(z)}`).join(' ');
 const edgeXml = ['<edges>'];
-for (const e of edges) {
-  edgeXml.push(`  <edge id="${e.id}" from="n${e.from}" to="n${e.to}" priority="${e.priority}" numLanes="${e.lanes}" speed="${e.speed}" width="${e.width}"` +
-    ` spreadType="${e.spread}"${e.name ? ` name="${esc(e.name)}"` : ''} shape="${e.shape}"/>`);
+for (const e of mergedEdges) {
+  edgeXml.push(`  <edge id="${e.id}" from="n${e.from}" to="n${e.to}" priority="${e.priority}" numLanes="${e.lanes}" speed="${e.speed}" width="${f(e.width)}"` +
+    ` spreadType="${e.spread}"${e.name ? ` name="${esc(e.name)}"` : ''} shape="${shape(e.pts)}"/>`);
 }
 edgeXml.push('</edges>');
 fs.writeFileSync(path.join(out, 'net/plain.nod.xml'), nodeXml.join('\n'));
 fs.writeFileSync(path.join(out, 'net/plain.edg.xml'), edgeXml.join('\n'));
-log(`plain network: ${used.size} nodes (${[...used].filter((k) => signals.has(k)).length} with lights), ${edges.length} directed edges from ${roads.edges.length} roads`);
+fs.writeFileSync(path.join(out, 'net/merged.json'), JSON.stringify(merged));
+fs.writeFileSync(path.join(out, 'net/lanes.json'), JSON.stringify(laneTable));
+log(`plain network: ${used.size} nodes (${[...used.keys()].filter((k) => signals.has(k)).length} with lights, ${zips} zippers), ` +
+  `${mergedEdges.length} directed edges from ${roads.edges.length} roads`);
 
 const bin = path.join(ROOT, '.venv-sim/bin/netconvert');
 const netFile = path.join(out, `${area.id}.net.xml.gz`);
@@ -104,7 +185,7 @@ execFileSync(bin, [
   '--node-files', path.join(out, 'net/plain.nod.xml'), '--edge-files', path.join(out, 'net/plain.edg.xml'),
   '--output-file', netFile,
   '--offset.disable-normalization',                 // SUMO's frame is the world's
-  '--junctions.join', '--junctions.join-dist', '18', // a crossing OSM draws as several nodes is one junction
+  '--junctions.join', '--junctions.join-dist', opt('join', '18'), // a crossing OSM draws as several nodes is one junction
   '--ramps.guess',                                   // acceleration and deceleration lanes on the expressway ramps
   '--tls.join', '--tls.default-type', 'actuated',    // (the heads show what the run recorded: simsignals.js)
   '--default.junctions.type', 'priority',            // (not right-before-left: Puerto Rico's side streets give way to the main road)
@@ -112,5 +193,6 @@ execFileSync(bin, [
   '--remove-edges.isolated',
   '--output.street-names',
   '--no-warnings', '--ignore-errors',
+  ...(opt('netconvert', '') ? opt('netconvert', '').split(',') : []),
 ], { stdio: 'inherit' });
 log(`netconvert -> ${path.relative(ROOT, netFile)} (${(fs.statSync(netFile).size / 1e6).toFixed(1)} MB)`);

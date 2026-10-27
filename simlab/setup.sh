@@ -1,6 +1,7 @@
 #!/bin/bash
 # A runner made ready: SUMO, the inputs, the compiled city's road graph.
 set -e
+trap 'echo "::error title=setup failed::line $LINENO"' ERR
 cd "$(dirname "$0")/.."
 sudo mkdir -p /mnt/sim && sudo chown "$(id -u):$(id -g)" /mnt/sim
 python3 -m venv .venv-sim
@@ -13,4 +14,4 @@ for f in roads.json lanes.json manifest.json; do
   curl -sSfL -o public/tiles/sanjuan/$f "https://raw.githubusercontent.com/$REPO/gh-pages/tiles/sanjuan/$f"
 done
 ls -la public/tiles/sanjuan data/sim/*
-nproc; free -g; df -h / /mnt
+echo "::notice title=runner::$(nproc) cpus, $(free -g | awk '/Mem/{print $2}') GB, python $(python3 -V), $(df -h /mnt | tail -1)"

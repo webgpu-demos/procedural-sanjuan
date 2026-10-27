@@ -4,6 +4,9 @@ import * as THREE from 'three';
 import { Soup, sections } from './rails.js';
 import { lampUniforms } from './lamplight.js';
 import { shared } from './materials.js';
+import { pavedHalf, roadLanes, paintOf } from '../shared/roadway.js';
+
+export { pavedHalf, roadLanes, paintOf };
 
 const DECK_ABOVE = 2.0;   // road level this far above the ground gets a deck on piers; lower, a walled ramp
 export const RAMP_ABOVE = 0.35; // below this the road is the ordinary ground surface (simtraffic.js drives the same decks)
@@ -97,48 +100,6 @@ export function structureEdges(edges, ground) {
   return built;
 }
 
-// The width the tiles pave a road at (tools/pipeline/roadsurface.mjs, and roadsplit.mjs carriageWidth): its
-// carriageway (OSM's width where mapped, else its lanes) and an expressway's shoulders or a street's sidewalks.
-// { carriage, half }: the carriageway's whole width, and half the paved width.
-const LANE = 3.0, SHOULDER = 1.4;
-const SIDEWALK = { trunk: 2.6, primary: 2.6, secondary: 2.3, tertiary: 2.1, unclassified: 1.7, residential: 1.7, living_street: 1.2, service: 0.4 };
-export function pavedHalf(e, lanes = e.lanes) {
-  const carriage = e.width >= 3 && e.width <= 30 ? e.width : lanes >= 2 ? lanes * LANE + 1 : e.oneway ? 4.2 : 5;
-  const hw = e.highway.replace('_link', '');
-  return { carriage, half: carriage / 2 + (hw === 'motorway' ? SHOULDER : SIDEWALK[hw] ?? 1.5) };
-}
-
-// paving: the tiles' road and paint materials (materials.js): a bridge at grade is paved with them, as the road up to
-// it is, so that it reads as the same road and not as a patch of another colour
-// A road's lanes; a bridge's as many as the road it carries on. OSM often tags the lanes on the road and not on the
-// bridge, which the compiler then gives its class's default, and a five-lane expressway crossed its creek on a
-// two-lane deck, the creek showing either side; so a bridge takes the lanes the road has at both its ends, if more.
-// edges: roads.json's. Returns (e) => lanes, or null where none are known.
-export function roadLanes(edges) {
-  const ends = new Map();
-  for (const e of edges) for (const n of [e.a, e.b]) { if (!ends.has(n)) ends.set(n, []); ends.get(n).push(e); }
-  const kind = (e) => (e.highway.startsWith('motorway') ? 'motorway' : e.highway.replace('_link', ''));
-  return (e) => {
-    if (!e.bridge) return e.lanes || null;
-    const at = [e.a, e.b].map((n) => Math.max(0, ...(ends.get(n) ?? []).filter((o) => o !== e && !o.bridge && kind(o) === kind(e)).map((o) => o.lanes || 0)));
-    const road = at[0] && at[1] ? Math.min(...at) : Math.max(...at);
-    return Math.max(e.lanes || 0, road) || null;
-  };
-}
-
-// The lines the tiles paint on a road (markings.mjs), across its measured carriageway: on the expressway the whole
-// paved width, shoulders and all, its lanes dividing it evenly (four-metre lanes on PR-22); on a street, the
-// carriageway between the kerbs. [{ o: offset to the right, dashed, yellow }]
-export function paintOf(e, lanes, width = pavedHalf(e, lanes)) {
-  const hw = e.highway.replace('_link', ''), expressway = hw === 'motorway';
-  const median = expressway ? 2 * width.half : width.carriage, n = Math.max(1, Math.min(lanes, Math.floor(median / 2.6))), lw = median / n;
-  const lines = [];
-  if (!e.oneway && n >= 2) for (const o of [-0.12, 0.12]) lines.push({ o, dashed: false, yellow: true });
-  for (let k = 1; k < n; k++) { const o = -median / 2 + k * lw; if (e.oneway || Math.abs(o) >= 0.4) lines.push({ o, dashed: true }); }
-  if (hw !== 'tertiary' && median > 6) for (const s of [-1, 1]) lines.push({ o: s * (median / 2 - 0.35), dashed: false, yellow: e.oneway && s < 0 && (hw === 'motorway' || hw === 'trunk') });
-  return Object.assign(lines, { lanes: n, lw, median });
-}
-
 // What would stand up through a deck: a tree, a pole, a street lamp or a signal on the ground under one, taller than
 // the room under it (a palm on the avenue beneath PR-22 grew out of the expressway's lanes). footprints: a
 // flyovers mesh's userData.footprints; deck(x, z) gives the deck's level over (x, z) by the sections it was drawn
@@ -168,6 +129,8 @@ export function overDecks(footprints, PROP) {
   };
 }
 
+// paving: the tiles' road and paint materials (materials.js): a bridge at grade is paved with them, as the road up to
+// it is, so that it reads as the same road and not as a patch of another colour
 export async function buildFlyovers(roads, ground, depth = null, paving = null) { // (roads: roads.json, or its url)
   const { edges } = typeof roads === 'string' ? await (await fetch(roads)).json() : roads;
   const concrete = [0.6, 0.6, 0.58], asphalt = [0.3, 0.3, 0.32], paint = [0.9, 0.9, 0.87], barrier = [0.7, 0.72, 0.72], sidewalk = [0.55, 0.55, 0.53];
