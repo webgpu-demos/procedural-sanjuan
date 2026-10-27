@@ -1,0 +1,16 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ D=/mnt/sim/diag
+++ mkdir -p /mnt/sim/diag
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
++++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python -c 'import sumo; print(sumo.SUMO_HOME)'
+++ export SUMO_HOME=/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo
+++ SUMO_HOME=/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo
+++ node tools/sim/network.mjs
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=0.5 --scenario=lab --vtype=
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan --demand=lab
+++ '[' -n '' ']'
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/route.py --area=sanjuan --demand=lab
+++ ROUTES=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/routes.rou.xml
+++ cat
++++ python3 -c 'print(int(10.25*3600))'
+++ /usr/bin/time -v /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -r /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/routes.rou.xml --additional-files /mnt/sim/diag/ed.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml --begin 16200 --end 36900 --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --statistic-output /mnt/res/stats.xml --summary-output /mnt/sim/diag/summary.xml --summary-output.period 60 --log /mnt/sim/diag/sumo.log --duration-log.statistics --step-log.period 900
