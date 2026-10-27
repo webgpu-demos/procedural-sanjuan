@@ -191,10 +191,16 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
 
 // ---------------------------------------------------------------- buildings
 // Usage code (PLATEAU's codes, see tools/pipeline/buildings.mjs) -> facade category.
-function category(usage, height, seed) {
+// Warehouses and works (431 transport and storage, 441 factories, 452 utilities) of one or two storeys, and the big
+// low boxes of commerce (a mall, a supermarket: 5,000 m2 and more, three storeys at most, under 22 m): sheds, their
+// walls blank but for a band of high windows and the loading doors (the office window grid had made the port's
+// warehouses office blocks). Anything taller keeps its windows: offices are often mapped as 431 too.
+function category(usage, height, seed, area = 0, storeys = 1) {
   if (usage === 411 || usage === 415) return CAT.HOUSE;
   if (usage === 412) return CAT.APARTMENT;
   if (usage === 413 || usage === 414) return CAT.MIXED;
+  if ((usage === 431 || usage === 441 || usage === 452) && storeys <= 2 && height < 15) return CAT.INDUSTRIAL;
+  if (usage >= 401 && usage <= 404 && area > 5000 && height < 22 && (storeys <= 3 || area > 20000)) return CAT.INDUSTRIAL;
   if (usage >= 401 && usage <= 404) return height > 45 || (height > 24 && seed < 0.25) ? CAT.GLASS : CAT.COMMERCIAL;
   if (usage >= 421 && usage <= 454) return CAT.PUBLIC;
   // unknown (461): low buildings read as houses, taller ones as apartments or offices
@@ -224,6 +230,8 @@ const PALETTE = {
   ],
   [CAT.PUBLIC]: [[0.95, 0.93, 0.87, WALL.PLASTER], [0.93, 0.85, 0.66, WALL.PLASTER], [0.86, 0.86, 0.84, WALL.CONCRETE], [0.85, 0.74, 0.6, WALL.PLASTER]],
   [CAT.GLASS]: [[0.5, 0.53, 0.56, WALL.CONCRETE], [0.62, 0.63, 0.64, WALL.CONCRETE], [0.32, 0.35, 0.38, WALL.CONCRETE]],
+  [CAT.INDUSTRIAL]: [[0.82, 0.82, 0.8, WALL.SIDING], [0.72, 0.74, 0.76, WALL.SIDING], [0.86, 0.84, 0.78, WALL.CONCRETE], [0.6, 0.66, 0.72, WALL.SIDING],
+    [0.9, 0.88, 0.82, WALL.CONCRETE], [0.78, 0.74, 0.66, WALL.SIDING]],
 };
 // Zinc and painted metal roofs, on the few houses that have a pitched roof at all (most are flat concrete).
 const PITCHED_ROOFS = [[0.55, 0.56, 0.57], [0.42, 0.44, 0.46], [0.62, 0.24, 0.2], [0.24, 0.42, 0.32], [0.66, 0.64, 0.6], [0.3, 0.36, 0.5]];
@@ -240,7 +248,7 @@ function flatRoofColour(r) {
   return [0.44, 0.51, 0.58];                                                     // a weathered blue
 }
 // Window bay width (m) per category; a whole number of bays is fitted to each wall.
-const BAY = { [CAT.HOUSE]: 3.4, [CAT.APARTMENT]: 3.3, [CAT.MIXED]: 3.2, [CAT.COMMERCIAL]: 3.0, [CAT.PUBLIC]: 3.4, [CAT.GLASS]: 1.5 };
+const BAY = { [CAT.HOUSE]: 3.4, [CAT.APARTMENT]: 3.3, [CAT.MIXED]: 3.2, [CAT.COMMERCIAL]: 3.0, [CAT.PUBLIC]: 3.4, [CAT.GLASS]: 1.5, [CAT.INDUSTRIAL]: 6.0 };
 const HINT_LAYER = { [MATERIAL.TILE]: WALL.TILE, [MATERIAL.CONCRETE]: WALL.CONCRETE, [MATERIAL.PLASTER]: WALL.PLASTER, [MATERIAL.BRICK]: WALL.BRICK, [MATERIAL.METAL]: WALL.SIDING };
 const SINK = 4; // walls run this far below the base so they meet sloping ground
 
@@ -298,7 +306,10 @@ function finishOf(b, i, tx, tz) {
   const seed = Math.floor(hash3(tx, tz, i) * 4096) / 4096; // quantised: the shader hashes it per room
   // OSM's building:material / building:colour, where mapped, replace the generated finish
   const material = (b.hint >>> 24) & 15, painted = b.hint >>> 31;
-  const cat = material === MATERIAL.GLASS ? CAT.GLASS : category(b.usage, b.height, seed);
+  let area = 0;
+  const ring = b.polygons[0]?.[0];
+  if (ring) for (let j = 0, n = ring.length; j < n; j += 2) area += ring[j] * ring[(j + 3) % n] - ring[(j + 2) % n] * ring[j + 1];
+  const cat = material === MATERIAL.GLASS ? CAT.GLASS : category(b.usage, b.height, seed, Math.abs(area) / 2, b.storeys || 1);
   const pal = PALETTE[cat], pick = pal[Math.floor(rnd() * pal.length)], tone = 0.92 + 0.16 * rnd();
   const wallCol = painted ? lin([((b.hint >> 16) & 255) / 255, ((b.hint >> 8) & 255) / 255, (b.hint & 255) / 255]) : lin(pick.slice(0, 3).map((c) => Math.min(1, c * tone)));
   return { material, cat, seed, wallCol, wallLayer: HINT_LAYER[material] ?? pick[3], k };

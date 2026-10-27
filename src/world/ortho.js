@@ -18,8 +18,8 @@ export function gradePhoto(canvas) {
     let r = d[i], gr = d[i + 1], b = d[i + 2];
     const warm = Math.max(r, gr);
     if (b > warm) b = warm + (b - warm) * 0.25;                // no blue shadows
-    const l = 0.3 * r + 0.59 * gr + 0.11 * b, l2 = 62 + 0.66 * l; // the tonal range squeezed: no black shadows, no glaring roofs
-    d[i] = l2 + (r - l) * 0.75; d[i + 1] = l2 + (gr - l) * 0.75; d[i + 2] = l2 + (b - l) * 0.75;
+    const l = 0.3 * r + 0.59 * gr + 0.11 * b, l2 = 34 + 0.78 * l; // the tonal range squeezed: no black shadows, no glaring roofs
+    d[i] = l2 + (r - l) * 0.85; d[i + 1] = l2 + (gr - l) * 0.85; d[i + 2] = l2 + (b - l) * 0.85; // (less lifted than it was: grey-white lots read as snow)
   }
   g.putImageData(img, 0, 0);
 }

@@ -156,7 +156,7 @@ const FACADE_MAIN = /* glsl */ `
     vec4 r = vec4(0.14, 0.86, 0.3, 0.82);                            // apartments, offices
     if (cat < 0.5) r = vec4(0.26, 0.74, 0.36, 0.78);                 // houses
     else if (cat > 3.5 && cat < 4.5) r = vec4(0.16, 0.84, 0.3, 0.8); // public
-    else if (cat > 4.5) r = vec4(0.0, 1.0, 0.26, 1.0);               // curtain wall: glass above a spandrel
+    else if (cat > 4.5 && cat < 5.5) r = vec4(0.0, 1.0, 0.26, 1.0);  // curtain wall: glass above a spandrel
     bool shop = row < 0.5 && cat > 1.5 && cat < 3.5;
     // mixed streets (the colonial city): tall, narrow openings, French doors onto the street
     bool colonial = cat > 1.5 && cat < 2.5 && !shop;
@@ -165,13 +165,20 @@ const FACADE_MAIN = /* glsl */ `
     float valid = step(0.0, v) * step(v, height - 0.9);
     // houses and apartments: some bays are plain wall
     if (cat < 2.5 && !shop) valid *= step(0.2, hash12(room + 41.0));
+    // a shed: a loading door here and there on the ground, a band of high windows on some bays, the rest blank
+    if (cat > 5.5) {
+      bool top = v + floorH > height - 0.9;
+      if (row < 0.5) { r = vec4(0.2, 0.8, 0.0, 0.62); valid *= step(0.72, hash12(room + 7.0)); }
+      else if (top) { r = vec4(0.08, 0.92, 0.55, 0.85); valid *= step(0.45, hash12(vec2(col + mod(sid, 61.0) * 17.0, 3.0))); }
+      else valid = 0.0;
+    }
     float inWin = box(fx, r.x, r.y, wx) * box(fy, r.z, r.w, wy) * valid;
 
     // frame and mullions, measured in metres from the window edge
     vec2 wmin = vec2(r.x * cellW, r.z * floorH), wmax = vec2(r.y * cellW, r.w * floorH);
     vec2 pm = vec2(fx * cellW, fy * floorH);
     float edge = min(min(pm.x - wmin.x, wmax.x - pm.x), min(pm.y - wmin.y, wmax.y - pm.y));
-    float fw = cat > 4.5 ? 0.045 : 0.065, ew = max(fwidth(edge), 1e-4);
+    float fw = cat > 4.5 && cat < 5.5 ? 0.045 : 0.065, ew = max(fwidth(edge), 1e-4);
     float frame = 1.0 - smoothstep(fw - ew, fw + ew, edge);
     float panes = max(1.0, floor((wmax.x - wmin.x) / 1.25 + 0.5));
     float mx = fract((pm.x - wmin.x) / (wmax.x - wmin.x) * panes);
@@ -235,7 +242,7 @@ const FACADE_MAIN = /* glsl */ `
     float glow = mix(0.3, 1.35, hash12(room + 1.3)) * mix(0.65, 1.25, b3);
 
     // glass: mostly a mirror of the sky; the room behind shows through as emitted light
-    vec3 glassTint = cat > 4.5 ? mix(vec3(0.2, 0.3, 0.38), vec3(0.3, 0.33, 0.34), fract(seed * 5.7)) : vec3(0.1, 0.11, 0.12);
+    vec3 glassTint = cat > 4.5 && cat < 5.5 ? mix(vec3(0.2, 0.3, 0.38), vec3(0.3, 0.33, 0.34), fract(seed * 5.7)) : vec3(0.1, 0.11, 0.12);
     vec3 frameCol = fract(seed * 3.3) < 0.5 ? vec3(0.16, 0.17, 0.18) : vec3(0.62, 0.63, 0.63);
     diffuseColor.rgb = mix(diffuseColor.rgb, frameCol, inWin * frame);
     diffuseColor.rgb = mix(diffuseColor.rgb, glassTint, pane);
@@ -270,7 +277,7 @@ const FACADE_MAIN = /* glsl */ `
       gRough = mix(gRough, 0.75, leaves); gMetal = mix(gMetal, 0.0, leaves);
       gNm = mix(gNm, vec3(0.0, 0.0, 1.0), leaves);
     }
-    float daylight = (1.0 - uNight) * (shop ? 0.3 : cat > 4.5 ? 0.06 : 0.12);
+    float daylight = (1.0 - uNight) * (shop ? 0.3 : cat > 4.5 && cat < 5.5 ? 0.06 : 0.12);
     float power = gridPower(seed);
     gEmissive = pane * interior * (daylight + uNight * on * glow * 1.25 * lamp * power);
     // The sun in the glass. Each pane sits a little out of true and float glass is never quite flat, so the
@@ -418,6 +425,7 @@ vec3 gT, gB, gN, gNm;
 float gRough;
 float gMirror = 0.0; // how much of a mirror this fragment is: water (written to alpha for the reflection pass)
 vec3 gGlint = vec3(0.0), gSheen = vec3(0.0); // the sun in the water, where it reaches; the sky round a low sun in it
+float gLampGain = 1.0; // the share of the street lamps' light it takes (LAMP_GAIN, on the tiles' ground)
 ${NOISE}
 `;
 const GROUND_MAIN = /* glsl */ `
@@ -429,6 +437,8 @@ const GROUND_MAIN = /* glsl */ `
   float layer = uFixedLayer >= 0.0 ? uFixedLayer : floor(vLayer + 0.5);
   bool water = layer > 5.5;
   layer = min(layer, 5.0);
+  // (grass under a street lamp took its full light and stood out lime green in the night: it takes half)
+  gLampGain = water ? 0.3 : abs(layer - 2.0) < 0.5 ? 0.5 : 1.0; // (and water: a pool under a lamp glowed cyan, the brightest thing in the night)
   float sc = uGroundScale[int(layer)];
   vec2 st = abs(gN.y) > 0.5 ? vWPos.xz : vec2(vWPos.x + vWPos.z, vWPos.y);
   vec3 a = texture(uGroundAlb, vec3(st / sc, layer)).rgb * 2.0;
@@ -444,21 +454,28 @@ const GROUND_MAIN = /* glsl */ `
     vec2 ouv = (vWPos.xz - uOrthoRect.xy) / uOrthoRect.zw;
     if (ouv.x > 0.0 && ouv.x < 1.0 && ouv.y > 0.0 && ouv.y < 1.0) {
       vec3 photo = texture2D(uOrtho, vec2(ouv.x, 1.0 - ouv.y)).rgb;
-      // (the photo is a few metres to the pixel: on its own, close up, it read as a smooth satin sheet; the grass
-      // texture's grain and relief under its colour make it ground)
-      vec2 gst = st / uGroundScale[2];
-      float grain = dot(texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0, vec3(0.333)) * 0.6 + dot(mix(a, b, 0.4), vec3(0.333)) * 0.4;
-      // Close up, the photo's five-metre pixels are smooth blots of colour, a car park's grey under the dawn sky
-      // as blue as a lagoon: there the ground is what the photo shows it to be, grass where it is green and
-      // bare, trodden ground elsewhere, in that texture, the photo's colour only its tint, and half as strong.
-      float near = 1.0 - smoothstep(60.0, 320.0, distance(vWPos, cameraPosition));
+      // The photo is five metres to the pixel: shown as it is, it was smooth blots of colour, and taken as albedo
+      // (a photograph is exposed to be seen) it lit up pale. The open lots of an industrial park lay like a field
+      // of snow at midday, and at dawn a car park read as a beach and a lagoon. Here it only says what the ground
+      // is: grass where it is green, bare earth where it is warm, paving where it is grey (the white of a roof the
+      // map has no building for among them). Each is drawn in its own texture at a reflectance it could have,
+      // lighter or darker as the photo is, with a little of the photo's own colour.
+      vec2 gst = st / uGroundScale[2], dst = st / uGroundScale[3], pst = st / uGroundScale[0];
       float veg = smoothstep(-0.005, 0.04, photo.g - max(photo.r, photo.b));
-      float pl = dot(photo, vec3(0.3, 0.59, 0.11));
-      vec2 dst = st / uGroundScale[3];
-      vec3 bare = texture(uGroundAlb, vec3(dst, 3.0)).rgb * 2.0, grass = texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0;
-      vec3 closeUp = mix(vec3(pl), photo, 0.5) * mix(bare, grass, veg) * (0.9 + 0.2 * blotch);
-      diffuseColor.rgb = mix(photo * clamp(0.62 + 0.55 * grain, 0.6, 1.25), closeUp, near);
-      gNm = mix(texture(uGroundNor, vec3(gst, 2.0)).xyz, texture(uGroundNor, vec3(dst, 3.0)).xyz, near * (1.0 - veg)) * 2.0 - 1.0;
+      float warm = (1.0 - veg) * smoothstep(0.004, 0.04, photo.r - photo.b);
+      float pl = dot(photo, vec3(0.3, 0.59, 0.11)), lit = smoothstep(0.03, 0.55, pl);
+      vec3 grassTex = texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0, dirtTex = texture(uGroundAlb, vec3(dst, 3.0)).rgb * 2.0;
+      vec3 paveTex = texture(uGroundAlb, vec3(pst, 0.0)).rgb * 2.0;
+      vec3 grassCol = mix(vec3(0.042, 0.064, 0.024), vec3(0.115, 0.16, 0.052), lit);   // under trees .. open lawn
+      vec3 dirtCol = mix(vec3(0.105, 0.082, 0.058), vec3(0.285, 0.22, 0.15), lit);
+      vec3 paveCol = mix(vec3(0.082, 0.082, 0.078), vec3(0.34, 0.335, 0.32), lit);
+      vec3 cls = mix(mix(paveCol * paveTex, dirtCol * dirtTex, warm), grassCol * grassTex, veg);
+      // (and broken up at 3 m and 12 m wherever a pixel is finer than that)
+      float px = max(max(fwidth(st.x), fwidth(st.y)), 1e-3);
+      float detail = mix(1.0, 0.8 + 0.4 * vnoise(st * 0.33), 1.0 - smoothstep(0.7, 3.0, px))
+                   * mix(1.0, 0.85 + 0.3 * vnoise(st * 0.083 + 7.1), 1.0 - smoothstep(3.0, 12.0, px)) * (0.92 + 0.16 * blotch);
+      diffuseColor.rgb = mix(cls, photo * 0.55, 0.2) * detail;
+      gNm = mix(mix(texture(uGroundNor, vec3(pst, 0.0)).xyz, texture(uGroundNor, vec3(dst, 3.0)).xyz, warm), texture(uGroundNor, vec3(gst, 2.0)).xyz, veg) * 2.0 - 1.0;
       gNm = normalize(vec3(gNm.xy * 0.55, gNm.z));
     }
   }
@@ -485,7 +502,9 @@ const GROUND_MAIN = /* glsl */ `
       float ang = 2.76 + 1.25 * (fract(sin(fi * 12.9898 + 4.1) * 43758.5453) - 0.5); // direction of travel (x east, z south)
       vec2 dir = vec2(cos(ang), sin(ang));
       float k = 6.2832 / len, w = sqrt(9.81 * k);
-      float steep = mix(0.03, 0.085, fi / 8.0) * (1.0 - smoothstep(len * 0.12, len * 0.4, px)) * (i < 4 ? swell : 1.0);
+      // (the longest crests gentler: at their full height, from the air, the sea near the shore lay in even
+      // parallel bands like corduroy)
+      float steep = mix(0.03, 0.085, fi / 8.0) * (1.0 - smoothstep(len * 0.12, len * 0.4, px)) * (i < 4 ? swell : 1.0) * (i < 3 ? 0.55 : 1.0);
       slope += dir * steep * cos(k * dot(dir, p + warp * (1.0 - fi / 9.0)) - w * uTime + fi * 1.7);
     }
     {
@@ -497,8 +516,12 @@ const GROUND_MAIN = /* glsl */ `
     slope *= calm;
     // The colour of the water itself: a deep Atlantic blue offshore, turquoise over the sand of the shallows;
     // lagoons and rivers darker and greener, pools their own blue
-    float shallow = sea * (1.0 - smoothstep(4.0, 120.0, shore + 30.0 * (vnoise(p * 0.02) - 0.5)));
+    // (the turquoise only where the shallows are open to the ocean: the bay, a harbour, its water greener and
+    // darker; it had been a lagoon's turquoise beside the navy Atlantic)
+    float harbour = sea * (1.0 - smoothstep(0.15, 0.6, sh.g));
+    float shallow = sea * (1.0 - harbour) * (1.0 - smoothstep(4.0, 120.0, shore + 30.0 * (vnoise(p * 0.02) - 0.5)));
     vec3 body = mix(vec3(0.0035, 0.026, 0.07), vec3(0.02, 0.16, 0.18), shallow * shallow);
+    body = mix(body, vec3(0.007, 0.04, 0.05), harbour * 0.8);
     body = mix(body, mix(tint * vec3(0.5, 0.6, 0.55), tint, pool), 1.0 - sea);
     // The surf, where the ocean reaches the shore (the north coast takes the Atlantic swell; the bay and the
     // lagoons lie still): broken lines of white water rolling in, and the wash at the edge
@@ -531,7 +554,9 @@ const GROUND_MAIN = /* glsl */ `
       // by night the waves mirror the navy of the night sky (atmosphere.js draws it after the environment map
       // is made, so the map is near black), and the glow of the city low over the horizon
       float low = 1.0 - smoothstep(0.0, 0.35, R.y);
-      gSheen += fw * uDark * (vec3(0.02, 0.034, 0.075) + vec3(0.05, 0.032, 0.018) * low * low) * (1.0 - foam);
+      // (no brighter than the sky it mirrors: with more of the city's glow in it, the sea at night lay lighter than
+      // the sky above the horizon, mauve, a sheet of fog)
+      gSheen += fw * uDark * (vec3(0.018, 0.031, 0.068) + vec3(0.016, 0.011, 0.007) * low * low) * (1.0 - foam);
     }
     // the reflection pass (reflections.js) mirrors the city in it, by water's Fresnel
     // (looked down on, water mirrors next to nothing: those pixels are left out of the pass, which saves it the work)
@@ -583,7 +608,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
         '\n#ifdef MATTE\nreflectedLight.indirectSpecular *= MATTE; reflectedLight.directSpecular *= MATTE;\n#endif')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v10';
+  m.customProgramCacheKey = () => 'ground-v12';
   return m;
 }
 
@@ -638,13 +663,14 @@ export function createMaterials(tex) {
     // (the open ground takes less of the street lamps' light than the street: their pools bleached the photo it
     // wears, lots and yards, near white, and from above at dawn the land beside PR-22 read as snow)
     terrain: Object.assign(groundMaterial(tex, { fixedLayer: 3, color: new THREE.Color().setRGB(0.2, 0.2, 0.185) }), { defines: { LAMP_GAIN: '0.4', MATTE: '0.3' } }),
-    road: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    road: Object.assign(groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }), { defines: { LAMP_GAIN: 'gLampGain' } }),
     // lane lines and crossings: drawn over the road surface, with a stronger depth bias so they never flicker
     paint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -8 }),
     // a bridge's deck paved like the road (flyovers.js): over whatever the tiles drape beneath it at about its height,
     // a creek's water above all, which showed through it as a dark band across PR-22
     deck: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -12 }),
-    deckPaint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -18 }),
+    // (just over the deck: with a stronger bias the dashes showed through the parapet beside them)
+    deckPaint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -14 }),
     // static models of a tile (bridges, street furniture, trees): plain painted surfaces, seen from both sides
     models: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide }),
     blocks: blocksMaterial(),
