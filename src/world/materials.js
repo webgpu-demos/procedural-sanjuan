@@ -438,7 +438,7 @@ const GROUND_MAIN = /* glsl */ `
   bool water = layer > 5.5;
   layer = min(layer, 5.0);
   // (grass under a street lamp took its full light and stood out lime green in the night: it takes half)
-  gLampGain = abs(layer - 2.0) < 0.5 ? 0.5 : 1.0;
+  gLampGain = water ? 0.3 : abs(layer - 2.0) < 0.5 ? 0.5 : 1.0; // (and water: a pool under a lamp glowed cyan, the brightest thing in the night)
   float sc = uGroundScale[int(layer)];
   vec2 st = abs(gN.y) > 0.5 ? vWPos.xz : vec2(vWPos.x + vWPos.z, vWPos.y);
   vec3 a = texture(uGroundAlb, vec3(st / sc, layer)).rgb * 2.0;
@@ -466,9 +466,9 @@ const GROUND_MAIN = /* glsl */ `
       float pl = dot(photo, vec3(0.3, 0.59, 0.11)), lit = smoothstep(0.03, 0.55, pl);
       vec3 grassTex = texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0, dirtTex = texture(uGroundAlb, vec3(dst, 3.0)).rgb * 2.0;
       vec3 paveTex = texture(uGroundAlb, vec3(pst, 0.0)).rgb * 2.0;
-      vec3 grassCol = mix(vec3(0.035, 0.055, 0.02), vec3(0.1, 0.14, 0.045), lit);   // under trees .. open lawn
-      vec3 dirtCol = mix(vec3(0.09, 0.07, 0.05), vec3(0.25, 0.19, 0.13), lit);
-      vec3 paveCol = mix(vec3(0.07, 0.07, 0.068), vec3(0.3, 0.295, 0.28), lit);
+      vec3 grassCol = mix(vec3(0.042, 0.064, 0.024), vec3(0.115, 0.16, 0.052), lit);   // under trees .. open lawn
+      vec3 dirtCol = mix(vec3(0.105, 0.082, 0.058), vec3(0.285, 0.22, 0.15), lit);
+      vec3 paveCol = mix(vec3(0.082, 0.082, 0.078), vec3(0.34, 0.335, 0.32), lit);
       vec3 cls = mix(mix(paveCol * paveTex, dirtCol * dirtTex, warm), grassCol * grassTex, veg);
       // (and broken up at 3 m and 12 m wherever a pixel is finer than that)
       float px = max(max(fwidth(st.x), fwidth(st.y)), 1e-3);

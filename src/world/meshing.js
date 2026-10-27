@@ -191,15 +191,16 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
 
 // ---------------------------------------------------------------- buildings
 // Usage code (PLATEAU's codes, see tools/pipeline/buildings.mjs) -> facade category.
-// Warehouses and works (431 transport and storage, 441 factories, 452 utilities), and the big low sheds of
-// commerce (a mall, a supermarket, a store of 5,000 m2 and more under 22 m): sheds, their walls blank but for a
-// band of high windows and the loading doors (the office window grid had made the port's warehouses office blocks).
-function category(usage, height, seed, area = 0) {
+// Warehouses and works (431 transport and storage, 441 factories, 452 utilities) of one or two storeys, and the big
+// low boxes of commerce (a mall, a supermarket: 5,000 m2 and more, three storeys at most, under 22 m): sheds, their
+// walls blank but for a band of high windows and the loading doors (the office window grid had made the port's
+// warehouses office blocks). Anything taller keeps its windows: offices are often mapped as 431 too.
+function category(usage, height, seed, area = 0, storeys = 1) {
   if (usage === 411 || usage === 415) return CAT.HOUSE;
   if (usage === 412) return CAT.APARTMENT;
   if (usage === 413 || usage === 414) return CAT.MIXED;
-  if (usage === 431 || usage === 441 || usage === 452) return height > 30 ? CAT.COMMERCIAL : CAT.INDUSTRIAL;
-  if (usage >= 401 && usage <= 404 && area > 5000 && height < 22) return CAT.INDUSTRIAL;
+  if ((usage === 431 || usage === 441 || usage === 452) && storeys <= 2 && height < 15) return CAT.INDUSTRIAL;
+  if (usage >= 401 && usage <= 404 && area > 5000 && height < 22 && storeys <= 3) return CAT.INDUSTRIAL;
   if (usage >= 401 && usage <= 404) return height > 45 || (height > 24 && seed < 0.25) ? CAT.GLASS : CAT.COMMERCIAL;
   if (usage >= 421 && usage <= 454) return CAT.PUBLIC;
   // unknown (461): low buildings read as houses, taller ones as apartments or offices
@@ -308,7 +309,7 @@ function finishOf(b, i, tx, tz) {
   let area = 0;
   const ring = b.polygons[0]?.[0];
   if (ring) for (let j = 0, n = ring.length; j < n; j += 2) area += ring[j] * ring[(j + 3) % n] - ring[(j + 2) % n] * ring[j + 1];
-  const cat = material === MATERIAL.GLASS ? CAT.GLASS : category(b.usage, b.height, seed, Math.abs(area) / 2);
+  const cat = material === MATERIAL.GLASS ? CAT.GLASS : category(b.usage, b.height, seed, Math.abs(area) / 2, b.storeys || 1);
   const pal = PALETTE[cat], pick = pal[Math.floor(rnd() * pal.length)], tone = 0.92 + 0.16 * rnd();
   const wallCol = painted ? lin([((b.hint >> 16) & 255) / 255, ((b.hint >> 8) & 255) / 255, (b.hint & 255) / 255]) : lin(pick.slice(0, 3).map((c) => Math.min(1, c * tone)));
   return { material, cat, seed, wallCol, wallLayer: HINT_LAYER[material] ?? pick[3], k };

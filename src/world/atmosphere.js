@@ -69,7 +69,7 @@ class TwilightSky extends Effect {
         vec3 cell = floor(dir * 150.0);
         vec3 at = normalize((cell + 0.5 + 0.5 * (vec3(hash(cell + 1.0), hash(cell + 2.0), hash(cell + 3.0)) - 0.5)) / 150.0);
         float px = max(length(fwidth(dir)), 1e-5), ang = length(dir - at);
-        float star = step(0.982, hash(cell)) * (1.0 - smoothstep(0.5 * px, 1.3 * px, ang)) * smoothstep(0.05, 0.3, up) * smoothstep(0.74, 0.97, uDark);
+        float star = step(0.988, hash(cell)) * (1.0 - smoothstep(0.5 * px, 1.3 * px, ang)) * smoothstep(0.1, 0.45, up) * smoothstep(0.74, 0.97, uDark); // (fewer over a lit city, and none low down in its glow)
         sky += vec3(star * (0.35 + 0.65 * hash(cell + 7.0)));
         outputColor.rgb = inputColor.rgb + sky * uDark * 0.6;
       }`, {
