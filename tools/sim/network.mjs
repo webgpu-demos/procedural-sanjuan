@@ -15,6 +15,7 @@
 // Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, merged.json, lanes.json} and runs netconvert to
 // data/sim/<area>/<area>.net.xml.gz.
 // Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--join=18]
+//        [--cluster=20] [--reach=45] [--netconvert=--opt,value,...]
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -154,16 +155,49 @@ for (const e of mergedEdges) {
   (used.get(e.from) ?? used.set(e.from, [[], []]).get(e.from))[1].push(e);
   (used.get(e.to) ?? used.set(e.to, [[], []]).get(e.to))[0].push(e);
 }
+// Junctions OSM draws as several nodes a few metres apart (a dual carriageway crossing a street: four), joined into
+// one: netconvert's own joining (--junctions.join) leaves many of them apart, the pieces between them cut back to
+// nothing by the junctions' shapes, and SUMO then locks them against one another. Nodes where three or more roads
+// meet, or lights, joined along a piece shorter than CLUSTER metres, as long as the whole stays within REACH.
+const CLUSTER = +opt('cluster', 20), REACH = +opt('reach', 45);
+const parent = new Map(), members = new Map();
+const find = (k) => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
+const roadsAt = (k) => new Set([...used.get(k)[0], ...used.get(k)[1]].map((e) => e.src)).size;
+const xz = (k) => [roads.nodes[k][0], roads.nodes[k][2]];
+let joins = 0;
+if (CLUSTER > 0) {
+  const junction = (k) => signals.has(k) || roadsAt(k) >= 3;
+  for (const k of used.keys()) if (junction(k)) { parent.set(k, k); members.set(k, [k]); }
+  const len2d = (e) => { let s = 0; for (let i = 1; i < e.pts.length; i++) s += Math.hypot(e.pts[i][0] - e.pts[i - 1][0], e.pts[i][1] - e.pts[i - 1][1]); return s; };
+  const short = mergedEdges.filter((e) => parent.has(e.from) && parent.has(e.to) && len2d(e) < CLUSTER).sort((a, b) => len2d(a) - len2d(b));
+  for (const e of short) {
+    const a = find(e.from), b = find(e.to);
+    if (a === b) continue;
+    const all = [...members.get(a), ...members.get(b)];
+    let wide = false;
+    for (let i = 0; i < all.length && !wide; i++) for (let j = i + 1; j < all.length; j++) {
+      const [x0, z0] = xz(all[i]), [x1, z1] = xz(all[j]);
+      if (Math.hypot(x1 - x0, z1 - z0) > REACH) { wide = true; break; }
+    }
+    if (wide) continue;
+    parent.set(b, a); members.set(a, all); members.delete(b); joins++;
+  }
+}
+const clusters = [...members.values()].filter((m) => m.length > 1);
+log(`${clusters.length} junctions joined from ${clusters.reduce((s, m) => s + m.length, 0)} nodes`);
+const inCluster = new Set(clusters.flat());
+
 let zips = 0;
 const nodeXml = ['<nodes>'];
 for (const [k, [ins, outs]] of used) {
   const [x, y, z] = roads.nodes[k];
   let type = '';
   if (signals.has(k)) type = flag('ror') ? 'traffic_light_right_on_red' : 'traffic_light';
-  else if (flag('zipper') && ins.length >= 2 && outs.length === 1 && [...ins, ...outs].every((e) => e.fast && e.spread === 'center') &&
+  else if (flag('zipper') && !inCluster.has(k) && ins.length >= 2 && outs.length === 1 && [...ins, ...outs].every((e) => e.fast && e.spread === 'center') &&
     ins.reduce((s, e) => s + e.lanes, 0) > outs[0].lanes) { type = 'zipper'; zips++; }
   nodeXml.push(`  <node id="n${k}" x="${f(x)}" y="${f(-z)}" z="${f(y)}"${type ? ` type="${type}"` : ''}/>`);
 }
+for (const m of clusters) nodeXml.push(`  <join nodes="${m.map((k) => 'n' + k).join(' ')}"/>`);
 nodeXml.push('</nodes>');
 const shape = (p) => p.map(([x, y, z]) => `${f(x)},${f(y)},${f(z)}`).join(' ');
 const edgeXml = ['<edges>'];

@@ -10,7 +10,7 @@ args = [a for a in sys.argv[1:] if not a.startswith('--')]
 opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
 TOP = int(opts.get('top', 40))
 net = sumolib.net.readNet(args[0], withInternal=True)
-TP = re.compile(r"Teleporting vehicle '([^']+)'; (?:waited too long \((\w[\w ]*)\)|(collision)[^,]*), lane='([^']+)'.*?time=([\d.]+)")
+TP = re.compile(r"Teleporting vehicle '([^']+)'; (?:waited too long \((\w[\w ]*)\)|(collision)[^,]*), lane='([^']+)'.*?time=(\d+(?:\.\d+)?)")
 tele = collections.Counter(); kinds = collections.defaultdict(collections.Counter); first = {}
 coll = collections.Counter()
 for line in open(args[1], errors='replace'):

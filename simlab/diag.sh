@@ -4,8 +4,8 @@
 set -x
 cd "$ROOT"
 D=$W/diag; mkdir -p $D
-node tools/sim/network.mjs $NETARGS || exit 1
-$PY tools/sim/demand.py --area=sanjuan --scale=${SCALE:-1} --scenario=lab > $RES/demand.txt 2>&1 || exit 1
+node tools/sim/${NETSCRIPT:-network.mjs} $NETARGS || exit 1
+$PY tools/sim/demand.py --area=sanjuan --scale=${SCALE:-1} --scenario=lab "--vtype=$VTYPE" > $RES/demand.txt 2>&1 || exit 1
 $PY tools/sim/gtfs.py --area=sanjuan --demand=lab > $RES/gtfs.txt 2>&1
 $PY tools/sim/route.py --area=sanjuan --demand=lab ${ROUTEARGS} > $RES/route.txt 2>&1 || exit 1
 S=$ROOT/data/sim/sanjuan
