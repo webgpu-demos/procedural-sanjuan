@@ -10,7 +10,7 @@ push() {
     [ $ok = 1 ] || echo "::error title=push failed::$(tail -c 900 /tmp/push.err | tr '\n' ' ')"
     rm -rf .git ) || echo "::error title=push::could not commit"
 }
-( while sleep 480; do push progress; done ) &
+( while sleep 480; do [ "$(du -sm "$RES" | cut -f1)" -lt 60 ] && push progress; done ) &  # (the big outputs: at the end only)
 LOOP=$!
 start=$(date +%s)
 bash "simlab/jobs/$JOB.sh" > "$RES/job.log" 2>&1

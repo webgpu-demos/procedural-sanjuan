@@ -93,6 +93,7 @@ cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if
 # SUMO then spends most of its time waiting: measured 6.7x slower at full scale.
 if float(args.get('reroute', 0)) > 0:
     cmd += ['--device.rerouting.probability', args['reroute'], '--device.rerouting.period', '900']
+cmd += args.get('sumoargs', '').split()  # (more of SUMO's options: --sumoargs="--a 1 --b 2")
 if not apagon: cmd += ['--save-state.times', str(APAGON_AT), '--save-state.files', STATE, '--save-state.rng']
 if begin != BEGIN: cmd += ['--load-state', STATE]  # (the apagón: the same morning until the failure)
 if args.get('skip-sumo') != '1':
