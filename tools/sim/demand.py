@@ -291,13 +291,12 @@ hours = collections.Counter(int(t // 1800) / 2 for t, *_ in trips)
 print('departures by half hour:', ' '.join(f'{h:.1f}h {hours[h]}' for h in sorted(hours)))
 
 # ---------------------------------------------------------------- write
-VTYPES = {  # lengths as the models (src/world/traffic.js TYPES); Puerto Rico drives a little over the limit
+VTYPES = {  # lengths as the models (src/world/traffic.js TYPES); Puerto Rico drives a little over the limit (the bus: gtfs.py)
     'compact': dict(length=4.2, width=1.74, accel=2.8, decel=4.5, maxSpeed=48),
     'sedan': dict(length=4.8, width=1.82, accel=2.6, decel=4.5, maxSpeed=50),
     'suv': dict(length=4.7, width=1.9, accel=2.5, decel=4.5, maxSpeed=48),
     'pickup': dict(length=5.6, width=1.95, accel=2.4, decel=4.5, maxSpeed=46),
     'truck': dict(length=7.0, width=2.3, accel=1.3, decel=4.0, maxSpeed=30, vClass='delivery'),
-    'bus': dict(length=12.0, width=2.55, accel=1.2, decel=4.0, maxSpeed=25, vClass='bus'),
 }
 # (San Juan drives close: 2 m gaps, less dawdling than SUMO's default driver; the capacity that comes of it is
 # what the counts are checked against. The headway, tau, stays at SUMO's step of 1 s: below it Krauss drivers

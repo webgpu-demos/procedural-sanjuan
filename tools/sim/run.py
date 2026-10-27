@@ -73,11 +73,16 @@ if apagon:
         for tl in TLS: f.write(f'  <wautJunction wautID="grid" junctionID="{tl}"/>\n')
         f.write('</additional>\n')
     extra = [os.path.join(WORK, 'apagon.add.xml')]
-ROUTES = args.get('routes', os.path.join(SIM, DEMAND, 'routes.rou.xml'))  # routes made beforehand (route.py; or assigned: --routes=a,b)
+# routes made beforehand: assigned (assign.py), the buses with them (gtfs.py: SUMO routes each through its stops), or
+# else on the free roads (route.py, buses and all); or --routes=a,b
+ASSIGNED, BUSES = os.path.join(SIM, DEMAND, 'assigned.rou.alt.xml.gz'), os.path.join(SIM, DEMAND, 'buses.xml')
+ROUTES = args.get('routes') or (ASSIGNED + (',' + BUSES if os.path.exists(BUSES) else '') if os.path.exists(ASSIGNED)
+                                else os.path.join(SIM, DEMAND, 'routes.rou.xml'))
+TAZ = os.path.join(SIM, DEMAND, 'taz.add.xml')  # (the gates of trips from beyond the edge: demand.py)
 STOPS = os.path.join(SIM, DEMAND, 'busstops.add.xml')  # the AMA's stops (gtfs.py)
 cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if os.path.exists(ROUTES.split(',')[0]) else os.path.join(SIM, DEMAND, 'trips.xml'),
        '--begin', str(begin), '--end', str(END),
-       '--additional-files', ','.join([os.path.join(WORK, 'outputs.add.xml')] + ([STOPS] if os.path.exists(STOPS) else []) + extra),
+       '--additional-files', ','.join([os.path.join(WORK, 'outputs.add.xml')] + [f for f in (STOPS, TAZ) if os.path.exists(f)] + extra),
        '--time-to-teleport', '240', '--ignore-route-errors', '--max-depart-delay', '900',
        '--lanechange.duration', '2.5',  # a lane change takes its time (SUMO's default is instant): it reads as one
        # San Juan merging: after a minute and a half at a give-way line a driver takes a smaller gap, and a car
