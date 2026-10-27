@@ -283,9 +283,12 @@ export class Experience {
     // clock would otherwise wait for one mid-shot, and every car stand still while the camera glides on)
     const span = [T, T + s.dur * Math.max(1, s.rate) + 20], ws = [];
     if (sim) { sim.keep = span; for (let w = sim.windowStart(span[0]); w < span[1]; w += sim.index.window) { sim.ensure(w); ws.push(w); } }
-    for (let i = 0; i < 100; i++) {
+    // (and the tiles round the camera and ahead of it, in the black: up to half a minute on a slow connection,
+    // rather than a shot that opens on the bare terrain with the cars driving over it)
+    for (let i = 0, quiet = 0; i < 300; i++) {
       const ready = ws.every((w) => { const W = sim.windows.get(w); return (W && W !== 'loading') || w >= sim.end || sim.failed.has(w); });
-      if ((!sim || ready) && !app.streamer.pending && i > 6) break;
+      quiet = app.streamer.pending ? 0 : quiet + 1;
+      if ((!sim || ready) && quiet >= 3 && i > 6) break;
       await new Promise((r) => setTimeout(r, 100));
     }
     if (s.ride) {
