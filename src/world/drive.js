@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { vehicleCapsule } from './collide.js';
 import { TYPES, vehicle, carMaterial, beamGeometry, beamTexture } from './traffic.js';
 import { LAMP_LAYER, lampMaterial } from './lamplight.js';
+import { streetAt } from '../shared/decks.js';
 
 const CELL = 1.5;              // wall grid (m)
 const WHEELBASE = 2.8, TOP = 44, BOOST = 58, REVERSE = 9;
@@ -137,7 +138,7 @@ export class Driver {
   // car set down on a bridge starts on its deck).
   start(x, z, heading, y = null) {
     this.x = x; this.z = z; this.heading = heading; this.course = heading;
-    this.speed = 0; this.steer = 0; this.y = y ?? this.surface(x, z, -2) + this.lift(x, z); this.pitch = 0; this.roll = 0;
+    this.speed = 0; this.steer = 0; this.y = y ?? streetAt(this.surface, x, z, this.surface(x, z, -2)) + this.lift(x, z); this.pitch = 0; this.roll = 0;
     this.bump = 0; this.on = true; this.mesh.visible = this.beams.visible = true; this.parked = null;
     this.ghost = 2; // (seconds: set down in a queue of traffic, it drives out of it before anything stops it)
   }
@@ -200,7 +201,8 @@ export class Driver {
     this.speed = v;
     // the ground, or the deck it is on: a deck near its height (a ramp grows out of the road a step at a time,
     // so the car climbs onto it; driving under a flyover, the deck is far above and the ground is the way)
-    const ground = this.surface(this.x, this.z, -2) + this.lift(this.x, this.z), deck = sim?.deckAt(this.x, this.z, this.y + 0.5) ?? null; // (the asphalt, the kerb up onto a sidewalk)
+    // (the asphalt as drawn, a bridge's deck at street level included; the kerb up onto a sidewalk)
+    const ground = streetAt(this.surface, this.x, this.z, this.y) + this.lift(this.x, this.z), deck = sim?.deckAt(this.x, this.z, this.y + 0.5) ?? null;
     const want = deck != null && Math.abs(deck - this.y) < 2.4 ? deck : ground;
     // (no steeper than a road climbs: the elevation model has the odd bridge embankment in it, a wall to drive into)
     const moved = Math.hypot(nx - this.x, nz - this.z) + Math.abs(v) * dt, climb = 0.35 * moved + 0.02;

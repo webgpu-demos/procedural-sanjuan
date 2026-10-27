@@ -80,7 +80,9 @@ export function corridorOf(e) {
 export function laneDepth(roads, cell = 32) {
   const grid = new Map();
   for (const e of roads.edges) {
-    if (!DRIVEN.test(e.highway) || e.bridge || e.tunnel || e.flyover || e.span || e.layer) continue; // (raised, or under: not at the props' level)
+    // (raised, or in a tunnel: not at the props' level; a road with a layer below the street's, mapped under a
+    // bridge, is at street level, and a pier must not stand in it either)
+    if (!DRIVEN.test(e.highway) || e.bridge || e.tunnel || e.flyover || e.span || e.layer > 0) continue;
     const c = corridorOf(e), p = e.pts;
     for (let i = 3; i < p.length; i += 3) {
       const s = [p[i - 3], p[i - 1], p[i], p[i + 2], c, e.way];

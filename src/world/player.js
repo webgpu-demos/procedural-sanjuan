@@ -13,6 +13,7 @@ import { clone as cloneRig } from 'three/addons/utils/SkeletonUtils.js';
 import { Walls, Roofs } from './drive.js';
 import { heroLit, lampMaterial, LAMP_LAYER } from './lamplight.js';
 import { shared } from './materials.js';
+import { streetAt } from '../shared/decks.js';
 
 const keyOf = (keys) => (...c) => c.some((x) => keys.has(x));
 const mat = (color, roughness = 0.7, metalness = 0) => heroLit(new THREE.MeshStandardMaterial({ color, roughness, metalness }));
@@ -130,13 +131,14 @@ export class Walker {
     this.view = null;
   }
   start(x, z, heading, y = null) {
-    Object.assign(this, { x, z, heading, speed: 0, vy: 0, phase: 0, y: y ?? this.surface(x, z, -2) + this.lift(x, z), on: true });
+    Object.assign(this, { x, z, heading, speed: 0, vy: 0, phase: 0, y: y ?? streetAt(this.surface, x, z, this.surface(x, z, -2)) + this.lift(x, z), on: true });
     this.model.visible = true;
   }
   stop() { this.on = false; this.model.visible = false; this.view = null; }
   // the ground under (x, z), or the deck at about this height (a walkway, a flyover)
   floor(x, z) {
-    const ground = this.surface(x, z, -2) + this.lift(x, z), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null; // (on the sidewalk, not in it)
+    // (the street as drawn, a bridge's deck at street level included; on the sidewalk, not in it)
+    const ground = streetAt(this.surface, x, z, this.y) + this.lift(x, z), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null;
     return deck != null && Math.abs(deck - this.y) < 1.2 ? deck : ground;
   }
   update(dt, keys) {
@@ -258,12 +260,13 @@ export class Cyclist {
     }
   }
   start(x, z, heading, y = null) {
-    Object.assign(this, { x, z, heading, speed: 0, lean: 0, crank: 0, roll: 0, y: y ?? this.surface(x, z, -2) + this.lift(x, z), on: true });
+    Object.assign(this, { x, z, heading, speed: 0, lean: 0, crank: 0, roll: 0, y: y ?? streetAt(this.surface, x, z, this.surface(x, z, -2)) + this.lift(x, z), on: true });
     this.model.visible = true;
   }
   stop() { this.on = false; this.model.visible = false; this.view = null; }
   floor(x, z) {
-    const ground = this.surface(x, z, -2) + this.lift(x, z), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null; // (on the sidewalk, not in it)
+    // (the street as drawn, a bridge's deck at street level included; on the sidewalk, not in it)
+    const ground = streetAt(this.surface, x, z, this.y) + this.lift(x, z), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null;
     return deck != null && Math.abs(deck - this.y) < 1.2 ? deck : ground;
   }
   update(dt, keys) {

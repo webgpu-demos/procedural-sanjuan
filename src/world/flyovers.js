@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { Soup, sections } from './rails.js';
 
 const DECK_ABOVE = 2.0;   // road level this far above the ground gets a deck on piers; lower, a walled ramp
-const RAMP_ABOVE = 0.35;  // below this the road is the ordinary ground surface
+export const RAMP_ABOVE = 0.35; // below this the road is the ordinary ground surface (simtraffic.js drives the same decks)
 const PIER_SPACING = 27, STEP = 3;
 
 // depth(x, z): how far inside the lanes of a road at street level (x, z) is (src/shared/roadway.js laneDepth), or

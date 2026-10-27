@@ -9,6 +9,8 @@
 // Tracks come in windows of the morning (w_<t>.bin, WINDOW s each), fetched ahead of the clock.
 import * as THREE from 'three';
 import { segDist, vehicleCapsule } from './collide.js';
+import { RAMP_ABOVE } from './flyovers.js';
+import { streetAt } from '../shared/decks.js';
 import { TYPES, vehicle, carMaterial, dissolve, beamGeometry, beamTexture, CAR_COLORS, BUS_COLORS } from './traffic.js';
 import { shared } from './materials.js';
 import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
@@ -143,8 +145,11 @@ export class SimTraffic {
     this.view = null;      // the followed car's place this frame: { x, y, z, heading, speed }
   }
 
-  // The raised roads (flyovers, ramps, bridges: road level well above the ground) as segments by 24 m cell. A car
-  // over one, at about its height in the simulation, drives on its deck; any other on the ground.
+  // The raised roads as segments by 24 m cell: the decks and ramps the city draws (src/world/flyovers.js builds
+  // them from the same roads, by the same rules: a flyover, or an expressway that climbs well off the ground, on a
+  // structure wherever its level stands RAMP_ABOVE over the ground). A car over one, at about its height in the
+  // simulation, drives on it; any other on the street the tiles draw. (A road whose level stands off the ground
+  // with nothing drawn under it, a hump the old elevation model put in it, is driven on the ground.)
   raise(roads, ground) {
     this.decks = new Map();
     // (where the expressway's height was corrected, src/shared/profile.js: the simulation drove the old levels,
@@ -154,7 +159,7 @@ export class SimTraffic {
       if (!e.pts0) continue;
       const p = e.pts, o = e.pts0;
       for (let k = 3; k < p.length; k += 3) {
-        if (o[k / 3] - p[k + 1] < 0.5 && o[k / 3 - 1] - p[k - 2] < 0.5) continue;
+        if (Math.abs(o[k / 3] - p[k + 1]) < 0.5 && Math.abs(o[k / 3 - 1] - p[k - 2]) < 0.5) continue;
         const seg = [p[k - 3], o[k / 3 - 1], p[k - 1], p[k], o[k / 3], p[k + 2], p[k - 2], p[k + 1]], len = Math.hypot(p[k] - p[k - 3], p[k + 2] - p[k - 1]);
         for (let s = 0; s <= len; s += 12) {
           const f = len ? s / len : 0, key = Math.floor((p[k - 3] + (p[k] - p[k - 3]) * f) / 24) + ',' + Math.floor((p[k - 1] + (p[k + 2] - p[k - 1]) * f) / 24);
@@ -164,12 +169,17 @@ export class SimTraffic {
       }
     }
     for (const e of roads.edges) {
-      if (e.tunnel) continue;
-      const p = e.pts;
+      if (e.tunnel || e.span) continue; // (a span's surface is the tiles' own, draped on its deck: the surface)
+      const p = e.pts, expressway = e.highway.startsWith('motorway');
+      if (!e.flyover && !expressway) continue;
+      // (an expressway gets a structure only where it climbs 1.5 m off the ground somewhere: flyovers.js)
+      let top = -Infinity;
+      for (let k = 0; k < p.length; k += 3) top = Math.max(top, p[k + 1] - ground(p[k], p[k + 2]));
+      if (top <= (e.flyover ? RAMP_ABOVE : 1.5)) continue;
       for (let k = 3; k < p.length; k += 3) {
         const x0 = p[k - 3], y0 = p[k - 2], z0 = p[k - 1], x1 = p[k], y1 = p[k + 1], z1 = p[k + 2];
         const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-        if ((y0 + y1) / 2 < ground(mx, mz) + 1.2) continue;
+        if (Math.max(y0 - ground(x0, z0), y1 - ground(x1, z1)) <= RAMP_ABOVE && (y0 + y1) / 2 < ground(mx, mz) + RAMP_ABOVE) continue;
         const len = Math.hypot(x1 - x0, z1 - z0); if (len < 0.1) continue;
         for (let s = 0; s <= len; s += 12) {
           const f = s / len, key = Math.floor((x0 + (x1 - x0) * f) / 24) + ',' + Math.floor((z0 + (z1 - z0) * f) / 24);
@@ -271,9 +281,9 @@ export class SimTraffic {
     let mid = 0, lights = 0, active = 0, nearSpeed = 0, nearStopped = 0, nearN = 0;
     const m = this.m.elements, night = shared.uNight.value;
     this.view = null; this.probeHits.length = 0; this.nearby.length = 0;
-    // A seen car's height is eased over a tenth of a second: the ground under some roads (the elevation model
-    // round an overpass's fill) rises and falls a few metres in a few, and at the speed of the opening a car
-    // would hop there. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
+    // A seen car's height follows the street exactly, but a step of more than half a metre from one frame to the
+    // next (onto a deck, off it) is eased over a tenth of a second, or at the speed of the opening the car would
+    // hop. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
     const ease = 1 - Math.exp(-dt / 0.1), frame = ++this.frameNo;
     if (frame % 120 === 0) for (const [k, v] of this.heights) if (frame - v[1] > 60) this.heights.delete(k);
     for (let i = 0; i < W.n; i++) {
@@ -309,25 +319,24 @@ export class SimTraffic {
         SimTraffic.at(W, i, T, p);
       }
       const sin = Math.sin(heading), cos = Math.cos(heading);
-      // on the ground, unless on a raised road's deck (a flyover, a ramp, a bridge); for a car seen only as its
-      // lamps, the simulation's own height is near enough (and the ground is not looked up for tens of thousands).
-      // The ground is the terrain under any deck (the surface's top would put a car passing under a flyover up
-      // in its deck); a car well above the ground whose deck is not found keeps the simulation's own height.
-      // Onto a ramp, it rises from the ground to the deck over a stretch (between 0.6 and 2.2 m up in the
-      // simulation), not at a step.
-      // (the elevation model has a bridge's embankment in it here and there, metres above a road passing under:
-      // where the ground stands well above the simulation's own height for the road, the road's height it is)
+      // On what the city draws there: the street (the tiles' surface, flat across the triangles they draw it with:
+      // src/shared/terrain.js meshHeight), or a deck or a ramp the flyovers draw (deckAt), when the simulation has
+      // the car up at about its level. Never at a height nothing is drawn at: the simulation drove the levels the
+      // compiler gave the roads, humps of the elevation model in them here and there, and a car following them
+      // sank into the street where the street ran over a hump the levels did not have, or rose off it where the
+      // levels had one the street did not. For a car seen only as its lamps, the simulation's own height is near
+      // enough (and the ground is not looked up for tens of thousands).
       const seen = d2 < MID * MID || followed;
       // (the simulation's height for it, the expressway's humps taken out: src/shared/profile.js)
       const sy = (seen && this.fixes?.size ? this.fixAt(p[0], p[2], p[1]) : null) ?? p[1];
-      const terrain = seen ? this.surface(p[0], p[2], -2) : sy;
-      const ground = terrain + (sy - terrain) * smooth(1.5, 3.5, terrain - sy); // (over a span, not at a step)
-      const up = seen ? smooth(0.6, 2.2, sy - ground) : 0, raised = up > 0.5;
-      const deck = up > 0 ? this.deckAt(p[0], p[2], sy) : null;
-      let y = seen ? ground + ((deck ?? sy) - ground) * up : sy;
+      // the street: on a bridge's deck at street level (the tiles drape the road on it), or under it if the car is
+      // nearer the ground there (a road passing beneath)
+      const ground = seen ? streetAt(this.surface, p[0], p[2], sy) : sy;
+      const deck = seen && sy > ground + 0.25 ? this.deckAt(p[0], p[2], sy) : null, raised = deck != null && deck > ground + 0.1;
+      let y = seen ? (raised ? deck : ground) : sy;
       if (seen) {
         const h = this.heights.get(vid);
-        if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12) y = h[0] + (y - h[0]) * ease;
+        if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12 && Math.abs(y - h[0]) > 0.5) y = h[0] + (y - h[0]) * ease; // (a step: onto a deck, off it)
         if (h) { h[0] = y; h[1] = frame; } else this.heights.set(vid, [y, frame]);
       }
       // A car setting off or arriving (or split where SUMO cleared a jam) fades in or out, over about half a

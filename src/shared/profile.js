@@ -10,7 +10,8 @@
 // has an ordinary road's bridge do: it does not climb a flyover's clearance over the embankment's top (a 7 m
 // hump, 120 m of walled ramp either side, where PR-22 crosses an underpass). roads.json is corrected in place;
 // each edge whose levels moved by more than half a metre keeps its old ones in `pts0` (the simulation drove
-// those: simtraffic.js).
+// those: simtraffic.js), unless roads.json already carries them (an area whose ground was replaced after the
+// simulation: tools/pipeline/reterrain.mjs).
 const MAX_GRADE = 0.06, REACH = 22, LOW = 0.3; // (as roadprofile.mjs; metres round a point; the percentile)
 const SPAN_DIP = 2.5, BANK = 14;                 // (as roadprofile.mjs)
 
@@ -47,7 +48,7 @@ export function correctProfiles(roads, ground) {
       total += len; cum.push(total);
     }
     if (Math.min(a, b) - lowest <= SPAN_DIP || total > 400) continue; // (a flyover over flat ground keeps its clearance)
-    e.pts0 = []; for (let i = 0; i < n; i++) e.pts0.push(p[i * 3 + 1]);
+    if (!e.pts0) { e.pts0 = []; for (let i = 0; i < n; i++) e.pts0.push(p[i * 3 + 1]); } // (levels the simulation drove: kept from roads.json if it has them)
     for (let i = 0; i < n; i++) p[i * 3 + 1] = Math.min(p[i * 3 + 1], a + ((b - a) * cum[i]) / (total || 1)); // (only down)
     banked.add(e);
   }
@@ -100,7 +101,7 @@ export function correctProfiles(roads, ground) {
       const y = Math.min(p[k + 1], level.get(key(e, ei, k))); // (it only comes down: a hump taken away)
       old.push(p[k + 1]); moved = Math.max(moved, p[k + 1] - y); p[k + 1] = y;
     }
-    if (moved > 0.5) { e.pts0 = old; corrected++; }
+    if (moved > 0.5) { e.pts0 ??= old; corrected++; }
   }
   return corrected;
 }
