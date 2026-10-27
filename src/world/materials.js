@@ -406,6 +406,10 @@ uniform vec4 uShoreRect;
 uniform vec3 uSunDir;
 uniform vec3 uSunGlint;
 uniform float uDark;
+uniform float uNight;
+uniform vec4 uGrid;
+uniform sampler2D uNightRoads;
+uniform vec4 uNightRoadsRect;
 varying float vLayer;
 varying vec3 vWPos;
 varying vec3 vWNrm;
@@ -439,8 +443,13 @@ const GROUND_MAIN = /* glsl */ `
     vec2 ouv = (vWPos.xz - uOrthoRect.xy) / uOrthoRect.zw;
     if (ouv.x > 0.0 && ouv.x < 1.0 && ouv.y > 0.0 && ouv.y < 1.0) {
       vec3 photo = texture2D(uOrtho, vec2(ouv.x, 1.0 - ouv.y)).rgb;
-      diffuseColor.rgb = photo * (0.9 + 0.2 * (mix(a, b, 0.4).g - 0.5));
-      gNm = vec3(0.0, 0.0, 1.0);
+      // (the photo is a few metres to the pixel: on its own, close up, it read as a smooth satin sheet; the grass
+      // texture's grain and relief under its colour make it ground)
+      vec2 gst = st / uGroundScale[2];
+      float grain = dot(texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0, vec3(0.333)) * 0.6 + dot(mix(a, b, 0.4), vec3(0.333)) * 0.4;
+      diffuseColor.rgb = photo * clamp(0.62 + 0.55 * grain, 0.6, 1.25);
+      gNm = texture(uGroundNor, vec3(gst, 2.0)).xyz * 2.0 - 1.0;
+      gNm = normalize(vec3(gNm.xy * 0.55, gNm.z));
     }
   }
   if (water) {
@@ -521,6 +530,22 @@ const GROUND_MAIN = /* glsl */ `
 }
 `;
 
+// Beyond the lamp light map (lamplight.js draws it round what the view looks at, up to 2.4 km across), the tiles
+// that are in kept no light at night: from the air they were black holes in the city, their edges stepped tile by
+// tile, among the distant ground's lit streets (far.js). Out there their streets take the same lines of light.
+const FAR_STREETS = /* glsl */ `
+{
+  vec2 lu = vec2(vWPos.x - uLampRect.x, uLampRect.y - vWPos.z) / (2.0 * uLampRect.z) + 0.5;
+  vec2 le = smoothstep(vec2(0.0), vec2(0.08), lu) * (1.0 - smoothstep(vec2(0.92), vec2(1.0), lu));
+  vec2 ruv = (vWPos.xz - uNightRoadsRect.xy) / max(uNightRoadsRect.zw, vec2(1.0));
+  float inArea = step(0.0, ruv.x) * step(ruv.x, 1.0) * step(0.0, ruv.y) * step(ruv.y, 1.0);
+  float road = inArea * texture2D(uNightRoads, ruv).r;
+  float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.12, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
+  vec3 sodium = mix(vec3(1.0, 0.85, 0.68), vec3(1.0, 0.6, 0.28), smoothstep(0.3, 0.75, road));
+  totalEmissiveRadiance += (1.0 - le.x * le.y) * road * 0.22 * sodium * uNight * power * smoothstep(0.5, 0.8, vWNrm.y);
+}
+`;
+
 function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.92, ...params });
   m.onBeforeCompile = (shader) => {
@@ -530,6 +555,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       uOrtho: shared.uOrtho, uOrthoRect: shared.uOrthoRect, uOrthoOn: shared.uOrthoOn,
       uLampOn: shared.uLampOn, uLampMap: shared.uLampMap, uLampRect: shared.uLampRect,
       uTime: shared.uTime, uShore: shared.uShore, uShoreRect: shared.uShoreRect, uSunDir: shared.uSunDir, uSunGlint: shared.uSunGlint, uDark: shared.uDark,
+      uNightRoads: shared.uNightRoads, uNightRoadsRect: shared.uNightRoadsRect, uGrid: shared.uGrid, uNight: shared.uNight,
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nattribute float aLayer;\nvarying float vLayer;\n${WORLD_VARYINGS_VERT}`)
@@ -539,12 +565,12 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + GROUND_MAIN)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + APPLY_NORMAL)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gSheen;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gSheen * (1.0 - smoothstep(15000.0, 40000.0, length(vWPos - cameraPosition)));\n' + FAR_STREETS)
       // (the direct diffuse light is zero in shadow: it tells whether the sun reaches the water there)
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v6';
+  m.customProgramCacheKey = () => 'ground-v9';
   return m;
 }
 

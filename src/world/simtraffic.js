@@ -9,7 +9,7 @@
 // Tracks come in windows of the morning (w_<t>.bin, WINDOW s each), fetched ahead of the clock.
 import * as THREE from 'three';
 import { segDist, vehicleCapsule } from './collide.js';
-import { RAMP_ABOVE, structureEdges } from './flyovers.js';
+import { RAMP_ABOVE, structureEdges, pavedHalf, leftOut } from './flyovers.js';
 import { streetAt } from '../shared/decks.js';
 import { TYPES, vehicle, carMaterial, dissolve, beamGeometry, beamTexture, CAR_COLORS, BUS_COLORS } from './traffic.js';
 import { shared } from './materials.js';
@@ -20,6 +20,7 @@ const BAND = 110;                                       // a car hands over from
 const DETAIL = 250;                                     // within this, the full model; beyond, a lighter one
 // a 24 m cell's number (the corrected levels by cell, fixAt): the cell east of it is +1, north +CELLS
 const CELLS = 1 << 16;
+const reversed = (pts) => { const out = []; for (let k = pts.length - 3; k >= 0; k -= 3) out.push(pts[k], pts[k + 1], pts[k + 2]); return out; };
 const cellKey = (x, z) => (Math.floor(z / 24) + CELLS / 2) * CELLS + Math.floor(x / 24) + CELLS / 2;
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const MAX_NEAR = 4500, MAX_MID = 40000, MAX_LIGHTS = 120000;
@@ -142,7 +143,7 @@ export class SimTraffic {
     this.solids = [];      // what the cars must not drive through: the visitor and the car parked, as capsules
                            // [ax, az, bx, bz, r] (collide.js); a car that would, fades out instead
     this.nearby = [];      // [x, z] of the cars within 320 m of the camera (the minimap's dots)
-    this.heights = new Map(); this.frameNo = 0; // (each seen car's eased height, and the frame it was set)
+    this.heights = new Map(); this.turns = new Map(); this.frameNo = 0; // (each seen car's eased height, and the frame it was set)
     this.rate = 1;         // the clock's speed: a car's arrival and departure fade over about half a second of it
     this.followed = null;  // vehicle id the camera rides with
     this.view = null;      // the followed car's place this frame: { x, y, z, heading, speed }
@@ -153,7 +154,100 @@ export class SimTraffic {
   // structure wherever its level stands RAMP_ABOVE over the ground). A car over one, at about its height in the
   // simulation, drives on it; any other on the street the tiles draw. (A road whose level stands off the ground
   // with nothing drawn under it, a hump the old elevation model put in it, is driven on the ground.)
+  // The expressway's lanes as SUMO drove them and as the tiles paint them. The network (tools/sim/network.mjs) gave
+  // each one-way expressway stretch its lanes 3 m wide about the centreline, and narrowed a stretch to at most one
+  // lane more than the lanes leaving its end (a toll plaza's six lanes into two); the tiles paint the lanes as the
+  // carriageway is wide, all of them. So on 4 km of San Juan's expressway SUMO drove three lanes where four are
+  // painted, and the opening's commuter rode down the painted line between two of them. Each seen car on a one-way
+  // expressway is moved across to the same lane counted from the left among the painted ones (the lane SUMO
+  // dropped is the right one), and in it as far off its middle as it was in SUMO's: a car changing lanes still
+  // crosses the line. (Where the lanes agree it moves at most the few decimetres the painted lanes are wider.)
+  relanes(roads) {
+    const fast = (e) => /^(motorway|trunk)(_link)?$/.test(e.highway);
+    const dir = [];
+    roads.edges.forEach((e, i) => {
+      if (e.a === e.b || !e.oneway || !fast(e)) return;
+      const [a, b] = e.oneway === -1 ? [e.b, e.a] : [e.a, e.b];
+      dir.push({ e, i, from: a, to: b, lanes: Math.max(1, e.lanes) });
+    });
+    // (network.mjs's lane drops, on the same graph)
+    const outOf = new Map();
+    for (const d of dir) (outOf.get(d.from) ?? outOf.set(d.from, []).get(d.from)).push(d);
+    for (let pass = 0; pass < 6; pass++) {
+      let changed = 0;
+      for (const d of dir) {
+        if (d.e.highway.endsWith('_link')) continue;
+        const on = (outOf.get(d.to) ?? []).filter((o) => o.i !== d.i);
+        if (!on.length) continue;
+        const room = on.reduce((t, o) => t + o.lanes, 0) + 1;
+        if (d.lanes > room) { d.lanes = room; changed++; }
+      }
+      if (!changed) break;
+    }
+    // (a two-way expressway's lanes are SUMO's two-way ones: left as they are)
+    this.laneCells = new Map();
+    for (const d of dir) {
+      const { carriage } = pavedHalf(d.e), painted = Math.max(1, Math.min(d.e.lanes || 1, Math.floor(carriage / 2.6)));
+      const p = d.e.oneway === -1 ? reversed(d.e.pts) : d.e.pts;
+      // (where the lanes changed in number: eased in and out over the first and last 40 m of a stretch whose
+      // neighbour does not change them the same way)
+      const same = (o) => o.lanes === d.lanes && Math.max(1, Math.min(o.e.lanes || 1, Math.floor(pavedHalf(o.e).carriage / 2.6))) === painted;
+      const easeIn = !dir.some((o) => o.to === d.from && same(o)), easeOut = !(outOf.get(d.to) ?? []).some(same);
+      let total = 0;
+      for (let k = 3; k < p.length; k += 3) total += Math.hypot(p[k] - p[k - 3], p[k + 2] - p[k - 1]);
+      let along = 0;
+      for (let k = 3; k < p.length; k += 3) {
+        const x0 = p[k - 3], z0 = p[k - 1], x1 = p[k], z1 = p[k + 2], len = Math.hypot(x1 - x0, z1 - z0);
+        if (len < 0.1) continue;
+        const seg = { x0, z0, tx: (x1 - x0) / len, tz: (z1 - z0) / len, len, sumo: d.lanes, painted, lw: carriage / painted, s0: along, total, easeIn, easeOut, highway: d.e.highway };
+        for (let s = 0; s <= len + 12; s += 12) {
+          const f = Math.min(1, s / len), key = cellKey(x0 + (x1 - x0) * f, z0 + (z1 - z0) * f);
+          let cell = this.laneCells.get(key);
+          if (!cell) this.laneCells.set(key, (cell = []));
+          if (cell.at(-1) !== seg) cell.push(seg);
+        }
+        along += len;
+      }
+    }
+  }
+  // Whether (x, z), facing `heading`, is in the lanes of a one-way expressway (relanes' cells)
+  onExpressway(x, z, heading) {
+    const c = cellKey(x, z), hx = Math.sin(heading), hz = Math.cos(heading);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      for (const g of this.laneCells?.get(c + a * CELLS + b) ?? []) {
+        if (g.tx * hx + g.tz * hz < 0.9 || /_link$/.test(g.highway)) continue;
+        const u = (x - g.x0) * g.tx + (z - g.z0) * g.tz, d = (x - g.x0) * -g.tz + (z - g.z0) * g.tx;
+        if (u >= 0 && u <= g.len && Math.abs(d) <= g.sumo * 1.5 + 1) return true;
+      }
+    }
+    return false;
+  }
+  // p: a seen car's place, moved across into its painted lane; heading: the way it faces
+  relane(p, heading) {
+    const c = cellKey(p[0], p[2]), hx = Math.sin(heading), hz = Math.cos(heading);
+    let best = null, bd = Infinity;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      for (const g of this.laneCells.get(c + a * CELLS + b) ?? []) {
+        if (g.tx * hx + g.tz * hz < 0.9) continue; // (driving along it)
+        const u = (p[0] - g.x0) * g.tx + (p[2] - g.z0) * g.tz;
+        if (u < -0.5 || u > g.len + 0.5) continue;
+        const d = (p[0] - g.x0) * -g.tz + (p[2] - g.z0) * g.tx; // (to the right of the way)
+        if (Math.abs(d) > g.sumo * 1.5 + 1.2 || Math.abs(d) >= bd) continue;
+        bd = Math.abs(d); best = [g, u, d];
+      }
+    }
+    if (!best) return;
+    const [g, u, d] = best;
+    const fromRight = g.sumo / 2 - 0.5 - d / 3.0;                 // SUMO's lane, counted from the right
+    const lane = Math.min(g.painted - 0.55, Math.max(-0.45, fromRight + Math.max(0, g.painted - g.sumo)));
+    let shift = (g.painted / 2 - 0.5 - lane) * g.lw - d;
+    const at = g.s0 + u, ease = Math.min(1, g.easeIn ? at / 40 : 1, g.easeOut ? (g.total - at) / 40 : 1);
+    shift *= Math.max(0, ease);
+    p[0] += -g.tz * shift; p[2] += g.tx * shift;
+  }
+
   raise(roads, ground) {
+    this.relanes(roads);
     this.decks = new Map();
     this.flush = new Map(); // (the bridges at grade where they lie on the ground: the deck a few centimetres up)
     // (where the expressway's height was corrected, src/shared/profile.js: the simulation drove the old levels,
@@ -205,7 +299,7 @@ export class SimTraffic {
         if (len < 0.1) continue;
         const low = Math.max(y0 - ground(x0, z0), y1 - ground(x1, z1)) <= RAMP_ABOVE && (y0 + y1) / 2 < ground(mx, mz) + RAMP_ABOVE;
         // (a bridge at grade, low as it is, is driven on its deck: flush, below)
-        const into = low ? (e.grade ? this.flush : null) : this.decks;
+        const into = low ? (leftOut(e) ? this.flush : null) : this.decks;
         if (!into) continue;
         const seg = [x0, y0, z0, x1, y1, z1];
         for (let s = 0; s <= len; s += 12) {
@@ -311,8 +405,8 @@ export class SimTraffic {
     // A seen car's height follows the street exactly, but a step of more than half a metre from one frame to the
     // next (onto a deck, off it) is eased over a tenth of a second, or at the speed of the opening the car would
     // hop. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
-    const ease = 1 - Math.exp(-dt / 0.1), frame = ++this.frameNo;
-    if (frame % 120 === 0) for (const [k, v] of this.heights) if (frame - v[1] > 60) this.heights.delete(k);
+    const ease = 1 - Math.exp(-dt / 0.1), turn = 1 - Math.exp(-dt / 0.3), frame = ++this.frameNo;
+    if (frame % 120 === 0) for (const map of [this.heights, this.turns]) for (const [k, v] of map) if (frame - v[1] > 60) map.delete(k);
     for (let i = 0; i < W.n; i++) {
       if (!SimTraffic.at(W, i, T, p)) continue;
       active++;
@@ -332,8 +426,27 @@ export class SimTraffic {
         SimTraffic.at(W, i, T, p); // (restore the cursor)
         const hx = (hadR ? r[0] : p[0]) - (hadQ ? q[0] : p[0]), hz = (hadR ? r[2] : p[2]) - (hadQ ? q[2] : p[2]);
         const moved = Math.hypot(hx, hz); speed = moved / ((hadQ ? 0.5 : 0) + (hadR ? 0.5 : 0) || 1);
-        if (moved > 0.02) { heading = Math.atan2(hx, hz); W.heading[i] = heading; }
+        let fx = hx, fz = hz;
+        // (a slow car takes its heading over a longer stretch of its way: SUMO moves a car into the next lane in one
+        // step of a second, and in a queue at walking pace that step was three metres sideways to one forward, the car
+        // turned broadside across the lanes for that second)
+        if (moved > 0.02 && moved < 8) {
+          const back = this.back, on = this.on ??= [0, 0, 0];
+          for (const span of [1.5, 3]) {
+            const hb = SimTraffic.at(W, i, T - span, back), ho = SimTraffic.at(W, i, T + span, on);
+            const gx = (ho ? on[0] : p[0]) - (hb ? back[0] : p[0]), gz = (ho ? on[2] : p[2]) - (hb ? back[2] : p[2]);
+            if (Math.hypot(gx, gz) > Math.hypot(fx, fz)) { fx = gx; fz = gz; }
+            if (Math.hypot(fx, fz) >= 8) break;
+          }
+          SimTraffic.at(W, i, T, p);
+        }
+        if (moved > 0.02) { heading = Math.atan2(fx, fz); W.heading[i] = heading; }
         else if (Number.isNaN(heading)) heading = W.heading[i] = this.restHeading(W, i, T);
+        // (and turns, from one frame to the next, over a third of a second: a lane change at speed is a gentle
+        // swing, not a snap to the next track segment's direction)
+        const was = this.turns.get(vid);
+        if (was && was[1] === frame - 1) heading = was[0] + Math.atan2(Math.sin(heading - was[0]), Math.cos(heading - was[0])) * turn;
+        if (was) { was[0] = heading; was[1] = frame; } else this.turns.set(vid, [heading, frame]);
       }
       // braking: slower than half a second ago by more than ~1.2 m/s², or standing in a queue
       let brake = 0;
@@ -345,6 +458,8 @@ export class SimTraffic {
         }
         SimTraffic.at(W, i, T, p);
       }
+      // (in the lane the tiles paint, on the expressway: relane)
+      if ((d2 < MID * MID || followed) && this.laneCells) this.relane(p, heading);
       const sin = Math.sin(heading), cos = Math.cos(heading);
       // On what the city draws there: the street (the tiles' surface, flat across the triangles they draw it with:
       // src/shared/terrain.js meshHeight), or a deck or a ramp the flyovers draw (deckAt), when the simulation has
@@ -362,7 +477,7 @@ export class SimTraffic {
       const deck = seen && sy > ground + 0.25 ? this.deckAt(p[0], p[2], sy) : null, raised = deck != null && deck > ground + 0.1;
       let y = seen ? (raised ? deck : ground) : sy;
       // on a bridge at grade: on its deck, which flyovers.js lays just clear of the ground
-      if (seen && !raised && this.flush?.size) { const f = this.deckAt(p[0], p[2], sy, this.flush); if (f != null && f < ground + 0.5) y = Math.max(f, ground + 0.08); }
+      if (seen && !raised && this.flush?.size) { const f = this.deckAt(p[0], p[2], sy, this.flush); if (f != null && f < ground + 0.5) y = Math.max(f, ground + 0.02); }
       if (seen) {
         const h = this.heights.get(vid);
         if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12 && Math.abs(y - h[0]) > 0.5) y = h[0] + (y - h[0]) * ease; // (a step: onto a deck, off it)
@@ -481,6 +596,14 @@ export class SimTraffic {
   }
 
   // Cars within `radius` of (x, z) at time T that will still be driving `until` seconds on: [{ vid, x, z, heading }].
+  // Whether car vid is on the road at T (its window loaded)
+  alive(vid, T) {
+    const W = this.windows.get(this.windowStart(T));
+    if (!W || W === 'loading') return false;
+    const p = [0, 0, 0];
+    for (let i = 0; i < W.n; i++) if (W.vid[i] === vid) return SimTraffic.at(W, i, T, p);
+    return false;
+  }
   carsNear(T, x, z, radius, until = 60) {
     const W = this.windows.get(this.windowStart(T)), out = [];
     if (!W || W === 'loading') return out;

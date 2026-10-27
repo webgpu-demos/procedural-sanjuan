@@ -136,7 +136,7 @@ const FLOOD = parseSeaLevel(params.get('sea'), manifest.sea ?? 0);
 // surroundings, plain ground in the grey of the area's own unbuilt land unless the area has a coast.
 {
   const b = manifest.bounds, coastal = manifest.sea != null || manifest.far != null;
-  const plain = new THREE.Mesh(new THREE.CircleGeometry(50000, 64).rotateX(-Math.PI / 2), coastal || FLOOD != null ? materials.sea
+  const plain = new THREE.Mesh(new THREE.CircleGeometry(50000, 256).rotateX(-Math.PI / 2), coastal || FLOOD != null ? materials.sea
     : new THREE.MeshStandardMaterial({ color: 0x8a8a86, roughness: 0.95, metalness: 0 }));
   plain.position.set((b.minX + b.maxX) / 2, FLOOD ?? (coastal ? (manifest.sea ?? 0) - 0.15 : manifest.terrain.min - 1), (b.minZ + b.maxZ) / 2); // just under the sea in the tiles, or the lowest ground
   plain.receiveShadow = true;
@@ -170,7 +170,7 @@ correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
 scene.add(railways);
-scene.add(await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth));
+scene.add(await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.road, paint: materials.paint }));
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));
 if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
 const traffic = new Traffic(roads, streamer.surface);
@@ -549,7 +549,7 @@ if (FLOOD != null) {
 const chase = { on: false, target: new THREE.Vector3(), eye: new THREE.Vector3(), heading: 0, back: 13, up: 4.2, yaw: 0, tilt: 0.3, drag: null };
 function ride(vid) {
   setMode('explore');
-  sim.followed = vid; chase.on = true; chase.fresh = true; chase.yaw = 0; Object.assign(chase, { back: 13, tilt: 0.3 });
+  sim.followed = vid; chase.on = true; chase.fresh = true; chase.yaw = 0; Object.assign(chase, { back: 13, tilt: 0.3, sharp: false });
   controls.enabled = false;
 }
 function stopRiding() { setMode('explore'); if (!sim) return; sim.followed = null; chase.on = false; controls.enabled = true; atmosphere.focus(null); }
@@ -760,7 +760,7 @@ function chaseCamera(dt) {
   const fov = fast ? 55 + Math.min(14, v.speed * 0.32) : 55;
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
   // riding along: the car sharp, the city behind it soft (playing: everything sharp, as a game is)
-  atmosphere.focus(player ? null : camera.position.distanceTo(chase.target));
+  atmosphere.focus(player || chase.sharp ? null : camera.position.distanceTo(chase.target)); // (sharp: the opening's ride, all in focus)
   atmosphere.blur(fast && cam !== 'orbit' ? Math.min(1.1, v.speed / 30) : 0); // (driving: the street rushes past)
 }
 

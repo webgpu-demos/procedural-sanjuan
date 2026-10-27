@@ -15,9 +15,11 @@ const CSS = `
 #xp-cap { position: fixed; left: 50%; bottom: 13vh; transform: translateX(-50%); z-index: 960; text-align: center; width: min(900px, 90vw);
   opacity: 0; transition: opacity 1.2s ease; pointer-events: none; text-shadow: 0 2px 18px rgba(0,0,0,0.75); }
 #xp-cap.on { opacity: 1; }
+/* (a soft shade behind the lines: over the lit expressway they were lost) */
+#xp-cap::before { content: ''; position: absolute; inset: -30px -70px; z-index: -1; background: radial-gradient(ellipse closest-side, rgba(0,0,0,0.5), rgba(0,0,0,0)); }
 body:not(.hud-off) #xp-cap { bottom: 140px; } /* (free roaming: above the HUD's ways round the city) */
 #xp-cap .a { font-size: clamp(18px, 2.3vw, 30px); font-weight: 600; letter-spacing: 0.01em; }
-#xp-cap .b { margin-top: 8px; font-size: clamp(12px, 1.25vw, 15px); letter-spacing: 0.14em; text-transform: uppercase; color: rgba(246,241,231,0.72); }
+#xp-cap .b { margin-top: 8px; font-size: clamp(12px, 1.25vw, 15px); letter-spacing: 0.14em; text-transform: uppercase; color: rgba(246,241,231,0.86); }
 #xp-start { position: fixed; inset: 0; z-index: 980; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   background: radial-gradient(ellipse at 50% 70%, rgba(8,30,46,0.55), rgba(2,6,12,0.88)); transition: opacity 1s ease; }
 #xp-start.gone { opacity: 0; pointer-events: none; }
@@ -219,10 +221,10 @@ export class Experience {
     return [
       { hour: 5.47, rate: 1, dur: 13, eye: [[1300, 520, 7700], [1950, 470, 7050]], at: [[5400, 40, 3000], [5600, 40, 3150]],
         cap: ['San Juan, 5:28 a.m.', 'Un martes, antes del amanecer · a Tuesday, before dawn'] },
-      { hour: 5.97, rate: 1, dur: 13, eye: [[1700, 46, 5330], [2010, 38, 5192]], at: [[2900, 3, 5193], [3250, 3, 5100]],
+      { hour: 6.24, rate: 1, dur: 13, eye: [[1700, 46, 5330], [2010, 38, 5192]], at: [[2900, 3, 5193], [3250, 3, 5100]],
         cap: ['138,000 personas entran a San Juan cada mañana', 'commuters driving in every weekday · U.S. Census ACS'] },
-      { hour: 6.1, rate: 1, dur: 18, ride: [2700, 5273, 420] },
-      { hour: 6.322, rate: 1, dur: 16, eye: [[4950, 40, 4250], [5060, 170, 4340]], at: [[6250, 80, 4600], [6260, 60, 4620]],
+      { hour: 6.28, rate: 1, dur: 18, ride: [2700, 5273, 420] },
+      { hour: 6.322, rate: 1, dur: 16, eye: [[4974, 75, 4153], [5084, 170, 4243]], at: [[6274, 80, 4503], [6284, 60, 4523]],
         cap: ['Puerto Rico en movimiento', 'Cada carro es un viaje simulado · every car is a simulated trip'] },
     ];
   }
@@ -292,12 +294,19 @@ export class Experience {
       await new Promise((r) => setTimeout(r, 100));
     }
     if (s.ride) {
-      const cars = sim.carsNear(T, s.ride[0], s.ride[1], s.ride[2], s.dur + 20).filter((c) => c.moving && Math.sin(c.heading) > 0.3);
+      // (on the road for the whole shot: a car whose trip ended halfway was swapped for another, a different car)
+      const cars = sim.carsNear(T, s.ride[0], s.ride[1], s.ride[2], s.dur + 20).filter((c) => c.moving && Math.sin(c.heading) > 0.3)
+        .filter((c, i) => i > 400 || sim.alive(c.vid, T + s.dur + 4));
       // a commuter from beyond the city, if there is one in reach (on the expressway, at its speed, if one is):
       // the story of the morning
       const commuter = (c) => { const t = this.trip(c.vid); return t && t.kind === 'work' && t.from && t.from !== 'San Juan'; };
-      const pick = cars.find((c) => c.speed > 16 && commuter(c)) ?? cars.find(commuter) ?? cars[0];
-      if (pick) app.ride(pick.vid);
+      // (on the expressway itself, not the avenue alongside it)
+      const onX = (c) => sim.onExpressway?.(c.x, c.z, c.heading) ?? true;
+      const pick = cars.find((c) => onX(c) && c.speed > 16 && commuter(c)) ?? cars.find((c) => onX(c) && commuter(c)) ?? cars.find(onX)
+        ?? cars.find((c) => c.speed > 16 && commuter(c)) ?? cars.find(commuter) ?? cars[0];
+      // (low and close behind it, all in focus: from 13 m back and up, softened before and behind, the expressway
+      // looked like a model of itself)
+      if (pick) { app.ride(pick.vid); Object.assign(app.chase, { back: 9.5, tilt: 0.15, sharp: true }); }
     }
     app.clockTime.rate = s.rate;
     if (app.speedMap) { app.speedMap.on = !!s.map; this.mapButton(); }
@@ -423,7 +432,8 @@ export class Experience {
     // the opening's camera
     if (this.directing && this.shot >= 0) {
       const s = this.reel[this.shot];
-      this.shotT += dt;
+      // (the shot's time runs once the picture is up: in the black, while the city arrives, it waits at the start)
+      if (!this.fading) this.shotT += dt;
       if (s.eye) this.place(s, this.shotT / s.dur);
       if (this.shotT > s.dur && !this.cutting) { this.cutting = true; this.cut(this.shot + 1).then(() => { this.cutting = false; }); }
     }
