@@ -1,0 +1,39 @@
+name: simlab
+# Traffic simulation experiments: each job in simlab/jobs.json runs simlab/jobs/<job>.sh on its own runner and
+# pushes what it writes to $RES to the branch simres/<job> (progress every few minutes, everything at the end).
+on:
+  push:
+    branches: [simlab]
+    paths: [simlab/jobs.json]
+permissions:
+  contents: write
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      jobs: ${{ steps.p.outputs.jobs }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: simlab/jobs.json, sparse-checkout-cone-mode: false }
+      - id: p
+        run: echo "jobs=$(jq -c . simlab/jobs.json)" >> "$GITHUB_OUTPUT"
+  run:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        job: ${{ fromJSON(needs.plan.outputs.jobs) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      JOB: ${{ matrix.job }}
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: setup
+        run: bash simlab/setup.sh
+      - name: run
+        run: bash simlab/run.sh
