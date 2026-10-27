@@ -1,0 +1,7 @@
+1309 counted roads matched; simulated/counted 0.05; GEH<5 1%, GEH<10 2%, r² 0.29
+  other                  n    4  ratio 0.69  GEH<5   50%  GEH<10   75%
+  interstate / freeway   n  343  ratio 0.04  GEH<5    2%  GEH<10    3%
+  arterials              n  848  ratio 0.06  GEH<5    0%  GEH<10    1%
+  collectors             n   79  ratio 0.03  GEH<5    0%  GEH<10    0%
+  local                  n   35  ratio 0.02  GEH<5    0%  GEH<10    0%
+worst: [('PR-18', 21296, 430), ('PR-18', 21296, 443), ('PR-18', 21296, 533), ('PR-18', 21296, 536), ('PR-18', 19472, 46), ('PR-18', 19472, 421)]
