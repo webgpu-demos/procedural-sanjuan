@@ -9,7 +9,7 @@
 // Tracks come in windows of the morning (w_<t>.bin, WINDOW s each), fetched ahead of the clock.
 import * as THREE from 'three';
 import { segDist, vehicleCapsule } from './collide.js';
-import { RAMP_ABOVE } from './flyovers.js';
+import { RAMP_ABOVE, structureEdges } from './flyovers.js';
 import { streetAt } from '../shared/decks.js';
 import { TYPES, vehicle, carMaterial, dissolve, beamGeometry, beamTexture, CAR_COLORS, BUS_COLORS } from './traffic.js';
 import { shared } from './materials.js';
@@ -168,16 +168,24 @@ export class SimTraffic {
         }
       }
     }
+    // (the roads flyovers.js builds a structure for; a span's surface is the tiles' own, draped on its deck: the
+    // surface)
+    const built = structureEdges(roads.edges, ground);
     for (const e of roads.edges) {
-      if (e.tunnel || e.span) continue; // (a span's surface is the tiles' own, draped on its deck: the surface)
-      const p = e.pts, expressway = e.highway.startsWith('motorway');
-      if (!e.flyover && !expressway) continue;
-      // (an expressway gets a structure only where it climbs 1.5 m off the ground somewhere: flyovers.js)
-      let top = -Infinity;
-      for (let k = 0; k < p.length; k += 3) top = Math.max(top, p[k + 1] - ground(p[k], p[k + 2]));
-      if (top <= (e.flyover ? RAMP_ABOVE : 1.5)) continue;
+      if (!built.has(e)) continue;
+      const p = e.pts, [from, to] = built.get(e);
+      let along = 0;
       for (let k = 3; k < p.length; k += 3) {
-        const x0 = p[k - 3], y0 = p[k - 2], z0 = p[k - 1], x1 = p[k], y1 = p[k + 1], z1 = p[k + 2];
+        let x0 = p[k - 3], y0 = p[k - 2], z0 = p[k - 1], x1 = p[k], y1 = p[k + 1], z1 = p[k + 2];
+        const whole = Math.hypot(x1 - x0, z1 - z0), s0 = along; along += whole;
+        // (the stretch of it that has a structure)
+        const f0 = Math.max(0, (from - s0) / (whole || 1)), f1 = Math.min(1, (to - s0) / (whole || 1));
+        if (f1 <= f0) continue;
+        if (f0 > 0 || f1 < 1) {
+          const ax = x0, ay = y0, az = z0, bx = x1, by = y1, bz = z1;
+          x0 = ax + (bx - ax) * f0; y0 = ay + (by - ay) * f0; z0 = az + (bz - az) * f0;
+          x1 = ax + (bx - ax) * f1; y1 = ay + (by - ay) * f1; z1 = az + (bz - az) * f1;
+        }
         const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
         if (Math.max(y0 - ground(x0, z0), y1 - ground(x1, z1)) <= RAMP_ABOVE && (y0 + y1) / 2 < ground(mx, mz) + RAMP_ABOVE) continue;
         const len = Math.hypot(x1 - x0, z1 - z0); if (len < 0.1) continue;
