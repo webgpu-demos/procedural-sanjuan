@@ -1,0 +1,129 @@
+> Executing step 0
+>> Running router on /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/trips.xml
+>>> Begin time: 2026-10-27 21:09:00.014843
+>>> End time: 2026-10-27 21:09:58.668002
+>>> Duration: 0:00:58.653159
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 21:09:58.668047
+>>> End time: 2026-10-27 21:12:49.780814
+>>> Duration: 0:02:51.112767
+<<
+< Step 0 ended (duration: 0:03:49.766036)
+------------------
+
+> Executing step 1
+>> Running router on 000/trips_000.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 21:12:49.782037
+>>> End time: 2026-10-27 21:15:43.174628
+>>> Duration: 0:02:53.392591
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 21:15:43.174671
+>>> End time: 2026-10-27 21:19:01.322561
+>>> Duration: 0:03:18.147890
+<<
+< Step 1 ended (duration: 0:06:11.540589)
+------------------
+
+> Executing step 2
+>> Running router on 001/trips_001.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 21:19:01.323557
+>>> End time: 2026-10-27 21:22:30.232631
+>>> Duration: 0:03:28.909074
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 21:22:30.232673
+>>> End time: 2026-10-27 21:25:41.641379
+>>> Duration: 0:03:11.408706
+<<
+< Step 2 ended (duration: 0:06:40.317881)
+------------------
+
+> Executing step 3
+>> Running router on 002/trips_002.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 21:25:41.642407
+>>> End time: 2026-10-27 21:29:44.030284
+>>> Duration: 0:04:02.387877
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 21:29:44.030326
+>>> End time: 2026-10-27 21:33:16.260487
+>>> Duration: 0:03:32.230161
+<<
+< Step 3 ended (duration: 0:07:34.618143)
+------------------
+
+> Executing step 4
+>> Running router on 003/trips_003.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 21:33:16.261852
+>>> End time: 2026-10-27 21:37:52.075201
+>>> Duration: 0:04:35.813349
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 21:37:52.075292
+>>> End time: 2026-10-27 21:41:49.135435
+>>> Duration: 0:03:57.060143
+<<
+< Step 4 ended (duration: 0:08:32.873646)
+------------------
+
+> Executing step 5
+>> Running router on 004/trips_004.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 21:41:49.136792
+>>> End time: 2026-10-27 21:46:51.987316
+>>> Duration: 0:05:02.850524
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 21:46:51.987375
+>>> End time: 2026-10-27 21:50:18.635497
+>>> Duration: 0:03:26.648122
+<<
+< Step 5 ended (duration: 0:08:29.498766)
+------------------
+
+> Executing step 6
+>> Running router on 005/trips_005.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 21:50:18.636915
+>>> End time: 2026-10-27 21:55:36.487113
+>>> Duration: 0:05:17.850198
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 21:55:36.487157
+>>> End time: 2026-10-27 21:59:30.702309
+>>> Duration: 0:03:54.215152
+<<
+< Step 6 ended (duration: 0:09:12.065452)
+------------------
+
+> Executing step 7
+>> Running router on 006/trips_006.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 21:59:30.703415
+>>> End time: 2026-10-27 22:04:41.704546
+>>> Duration: 0:05:11.001131
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:04:41.704587
+>>> End time: 2026-10-27 22:08:07.582082
+>>> Duration: 0:03:25.877495
+<<
+< Step 7 ended (duration: 0:08:36.878724)
+------------------
+
+> Executing step 8
+>> Running router on 007/trips_007.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:08:07.583140
+>>> End time: 2026-10-27 22:13:20.253553
+>>> Duration: 0:05:12.670413
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:13:20.253596
+>>> End time: 2026-10-27 22:16:34.808687
+>>> Duration: 0:03:14.555091
+<<
+< Step 8 ended (duration: 0:08:27.225605)
+------------------
+
+> Executing step 9
+>> Running router on 008/trips_008.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:16:34.809803
