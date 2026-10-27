@@ -13,7 +13,7 @@ $PY tools/sim/gtfs.py --area=sanjuan --demand=lab > $RES/gtfs.txt 2>&1
 if [ -n "$ASSIGN" ]; then
   A=$W/assign; mkdir -p $A; cd $A
   /usr/bin/time -v $PY $SUMO_HOME/tools/assign/duaIterate.py -n $S/sanjuan.net.xml.gz -t $S/lab/trips.xml -l $ASSIGN \
-    -b 16200 -e 36900 --mesosim -j --meso-recheck 10 --time-to-teleport 300 --routing-algorithm astar -T -E -a 900 \
+    -b 16200 -e 36900 --mesosim -j --meso-recheck 10 --time-to-teleport 300 --routing-algorithm ${ASSIGNALG:-CH} -T -E -a 900 \
     $ASSIGNARGS duarouter--routing-threads 4 sumo--ignore-route-errors true sumo--max-depart-delay 900 > $RES/assign.txt 2>&1
   cd "$ROOT"
   last=$(ls -d $A/0* | sort | tail -1)
@@ -32,8 +32,8 @@ cat > $D/ed.add.xml <<X
 X
 /usr/bin/time -v $BIN/sumo -n $S/sanjuan.net.xml.gz -r $ROUTES \
  --additional-files $D/ed.add.xml,$S/lab/busstops.add.xml --begin 16200 --end $(python3 -c "print(int(${END:-10.25}*3600))") \
- --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 \
- --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar \
+ --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration ${LCDUR:-2.5} \
+ --time-to-impatience ${IMPATIENCE:-90} --ignore-junction-blocker ${BLOCKER:-15} --routing-algorithm astar \
  --statistic-output $RES/stats.xml --summary-output $D/summary.xml --summary-output.period 60 \
  --log $D/sumo.log --duration-log.statistics --step-log.period 900 $SUMOARGS > $RES/sumo.txt 2>&1
 tr '\r' '\n' < $RES/sumo.txt | grep -v "^Warning" > $RES/sumo-steps.txt

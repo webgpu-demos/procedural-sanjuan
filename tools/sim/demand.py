@@ -285,14 +285,14 @@ VTYPES = {  # lengths as the models (src/world/traffic.js TYPES); Puerto Rico dr
 # what the counts are checked against. The headway, tau, stays at SUMO's step of 1 s: below it Krauss drivers
 # can run into the car ahead, and SUMO clears each crash by teleporting a car: at 0.9 s, one car in six.)
 # (--vtype=a=1;b=2: more of SUMO's driver parameters, for every type)
-VEXTRA = [kv.split('=', 1) for kv in args.get('vtype', '').split(';') if '=' in kv]
+VEXTRA = dict(kv.split('=', 1) for kv in args.get('vtype', '').split(';') if '=' in kv)
 with open(os.path.join(OUT, 'trips.xml'), 'w') as fx:
     fx.write('<routes>\n')
     for k, v in VTYPES.items():
         cls = v.pop('vClass', 'passenger')
-        fx.write(f'  <vType id="{k}" vClass="{cls}" ' + ' '.join(f'{a}="{b}"' for a, b in v.items()) +
-                 ' speedFactor="normc(1.06,0.1,0.75,1.35)" sigma="0.3" tau="1.0" minGap="2.0" lcStrategic="1.2" lcCooperative="0.8" lcAssertive="1.3" impatience="0.5"' +
-                 ''.join(f' {a}="{b}"' for a, b in VEXTRA) + '/>\n')
+        drive = dict(speedFactor='normc(1.06,0.1,0.75,1.35)', sigma=0.3, tau=1.0, minGap=2.0, lcStrategic=1.2, lcCooperative=0.8, lcAssertive=1.3, impatience=0.5)
+        drive.update(VEXTRA)
+        fx.write(f'  <vType id="{k}" vClass="{cls}" ' + ' '.join(f'{a}="{b}"' for a, b in {**v, **drive}.items()) + '/>\n')
     for i, (t, a, b, typ, kind, story) in enumerate(trips):
         fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" from="{a}" to="{b}" departLane="best" departSpeed="max" departPos="random_free"/>\n')
     fx.write('</routes>\n')
