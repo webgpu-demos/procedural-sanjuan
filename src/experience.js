@@ -111,7 +111,7 @@ const clockLabel = (hour) => {
 };
 
 // The morning the opening shows, whatever the day it is watched: a Tuesday in late October, when the sun rises at
-// 6:19. The shots are timed to its light (in January it is still dark at 6:30; in June the sun is up by 5:50).
+// 6:25. The shots are timed to its light (in January it is still dark at 6:30; in June the sun is up by 5:50).
 const MORNING = Date.UTC(2026, 9, 27, 4); // (midnight in San Juan, AST)
 
 // Where the grid failed in the apagón: the Monacillos transmission centre, Río Piedras (lon -66.075, lat 18.39)
@@ -225,9 +225,10 @@ export class Experience {
   }
   hideTitle() { this.titleUp = false; this.start?.classList.add('gone'); setTimeout(() => this.start?.remove(), 1100); }
 
-  // The opening: dark (5:28), blue hour over the expressway into the city (5:58), a ride with the headlights on
-  // (6:06), the sun coming up behind the towers of the Milla de Oro, looking east (it rises about 6:19 in late
-  // October, a little south of east)
+  // The opening: dark (5:28), the blue hour over the expressway into the city (6:14), a ride with the headlights on
+  // (6:16), the sun a degree up behind the towers of the Milla de Oro, looking east (6:28; it rises about 6:25 in
+  // late October, a little south of east: at 6:19 it was still below the horizon, and its glitter on the sea had
+  // stood in for it)
   get shots() {
     return [
       { hour: 5.47, rate: 1, dur: 13, eye: [[1300, 520, 7700], [1950, 470, 7050]], at: [[5400, 40, 3000], [5600, 40, 3150]],
@@ -235,7 +236,7 @@ export class Experience {
       { hour: 6.24, rate: 1, dur: 13, eye: [[1700, 46, 5330], [2010, 38, 5192]], at: [[2900, 3, 5193], [3250, 3, 5100]],
         cap: ['138,000 personas entran a San Juan cada mañana', 'commuters driving in every weekday · U.S. Census ACS'] },
       { hour: 6.28, rate: 1, dur: 18, ride: [2700, 5273, 420] },
-      { hour: 6.322, rate: 1, dur: 16, eye: [[4974, 75, 4153], [5084, 170, 4243]], at: [[6274, 80, 4503], [6284, 60, 4523]],
+      { hour: 6.465, rate: 1, dur: 16, eye: [[4974, 75, 4153], [5084, 170, 4243]], at: [[6274, 80, 4503], [6284, 60, 4523]],
         cap: ['Puerto Rico en movimiento', 'Cada carro es un viaje simulado · every car is a simulated trip'] },
     ];
   }

@@ -577,7 +577,10 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + APPLY_NORMAL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gSheen * (1.0 - smoothstep(15000.0, 40000.0, length(vWPos - cameraPosition)));\n' + FAR_STREETS)
       // (the direct diffuse light is zero in shadow: it tells whether the sun reaches the water there)
-      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));' +
+        // (open ground: grass, scrub and dirt mask their own sheen. Seen at a grazing angle from the air, the
+        // Fresnel sheen of a rough plane mirrored the bright horizon, and every lot round PR-22 lay like satin)
+        '\n#ifdef MATTE\nreflectedLight.indirectSpecular *= MATTE; reflectedLight.directSpecular *= MATTE;\n#endif')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
   m.customProgramCacheKey = () => 'ground-v10';
@@ -634,7 +637,7 @@ export function createMaterials(tex) {
     // Ground not covered by roads or buildings: private lots, car parks, yards.
     // (the open ground takes less of the street lamps' light than the street: their pools bleached the photo it
     // wears, lots and yards, near white, and from above at dawn the land beside PR-22 read as snow)
-    terrain: Object.assign(groundMaterial(tex, { fixedLayer: 3, color: new THREE.Color().setRGB(0.2, 0.2, 0.185) }), { defines: { LAMP_GAIN: '0.4' } }),
+    terrain: Object.assign(groundMaterial(tex, { fixedLayer: 3, color: new THREE.Color().setRGB(0.2, 0.2, 0.185) }), { defines: { LAMP_GAIN: '0.4', MATTE: '0.3' } }),
     road: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     // lane lines and crossings: drawn over the road surface, with a stronger depth bias so they never flicker
     paint: groundMaterial(tex, { vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -8 }),
