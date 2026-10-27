@@ -18,6 +18,9 @@ import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
 const NEAR = 700, MID = 2800, LIGHTS = 12000;           // metres from the camera (near: the default; sim.near)
 const BAND = 110;                                       // a car hands over from its model to its box over this
 const DETAIL = 250;                                     // within this, the full model; beyond, a lighter one
+// a 24 m cell's number (the corrected levels by cell, fixAt): the cell east of it is +1, north +CELLS
+const CELLS = 1 << 16;
+const cellKey = (x, z) => (Math.floor(z / 24) + CELLS / 2) * CELLS + Math.floor(x / 24) + CELLS / 2;
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const MAX_NEAR = 4500, MAX_MID = 40000, MAX_LIGHTS = 120000;
 
@@ -155,19 +158,30 @@ export class SimTraffic {
     // (where the expressway's height was corrected, src/shared/profile.js: the simulation drove the old levels,
     // pts0; a car on one is put at the new: fixAt)
     this.fixes = new Map();
+    const keep = [];
+    const file = (seg, only) => {
+      const len = Math.hypot(seg[3] - seg[0], seg[5] - seg[2]);
+      for (let s = 0; s <= len; s += 12) {
+        const f = len ? s / len : 0, key = cellKey(seg[0] + (seg[3] - seg[0]) * f, seg[2] + (seg[5] - seg[2]) * f);
+        if (only && !only(key)) continue;
+        let cell = this.fixes.get(key);
+        if (!cell) this.fixes.set(key, (cell = []));
+        if (cell.at(-1) !== seg) cell.push(seg);
+      }
+    };
     for (const e of roads.edges) {
-      if (!e.pts0) continue;
       const p = e.pts, o = e.pts0;
       for (let k = 3; k < p.length; k += 3) {
-        if (Math.abs(o[k / 3] - p[k + 1]) < 0.5 && Math.abs(o[k / 3 - 1] - p[k - 2]) < 0.5) continue;
-        const seg = [p[k - 3], o[k / 3 - 1], p[k - 1], p[k], o[k / 3], p[k + 2], p[k - 2], p[k + 1]], len = Math.hypot(p[k] - p[k - 3], p[k + 2] - p[k - 1]);
-        for (let s = 0; s <= len; s += 12) {
-          const f = len ? s / len : 0, key = Math.floor((p[k - 3] + (p[k] - p[k - 3]) * f) / 24) + ',' + Math.floor((p[k - 1] + (p[k + 2] - p[k - 1]) * f) / 24);
-          if (!this.fixes.has(key)) this.fixes.set(key, []);
-          const cell = this.fixes.get(key); if (cell.at(-1) !== seg) cell.push(seg);
-        }
+        const y0 = o ? o[k / 3 - 1] : p[k - 2], y1 = o ? o[k / 3] : p[k + 1];
+        const seg = [p[k - 3], y0, p[k - 1], p[k], y1, p[k + 2], p[k - 2], p[k + 1]];
+        if (Math.abs(y1 - p[k + 1]) < 0.5 && Math.abs(y0 - p[k - 2]) < 0.5) keep.push(seg); else file(seg);
       }
     }
+    // (and the roads whose level stayed, where they pass near one whose was corrected: a car on one of them is
+    // matched to its own road, not to the corrected one beside it)
+    const fixed = new Set(this.fixes.keys());
+    const near = (key) => { for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (fixed.has(key + a * CELLS + b)) return true; return false; };
+    for (const seg of keep) file(seg, near);
     // (the roads flyovers.js builds a structure for; a span's surface is the tiles' own, draped on its deck: the
     // surface)
     const built = structureEdges(roads.edges, ground);
@@ -200,10 +214,10 @@ export class SimTraffic {
   // The corrected level of the expressway under (x, z) for a car the simulation has at height y on its old level
   // there, or null
   fixAt(x, z, y) {
-    const cx = Math.floor(x / 24), cz = Math.floor(z / 24);
+    const c = cellKey(x, z);
     let best = null, score = Infinity;
-    for (let i = cx - 1; i <= cx + 1; i++) for (let j = cz - 1; j <= cz + 1; j++) {
-      for (const [x0, y0, z0, x1, y1, z1, n0, n1] of this.fixes?.get(i + ',' + j) ?? []) {
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      for (const [x0, y0, z0, x1, y1, z1, n0, n1] of this.fixes?.get(c + a * CELLS + b) ?? []) {
         const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
         const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f, s = d + 4 * Math.abs(h - y);
         if (d < 12 && Math.abs(h - y) < 2.5 && s < score) { score = s; best = n0 + (n1 - n0) * f; }
