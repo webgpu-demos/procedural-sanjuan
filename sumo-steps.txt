@@ -1,0 +1,79 @@
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (5130ms).
+Loading additional-files from '/mnt/sim/diag/ed.add.xml' ... done (57ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml' ... done (8ms).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+Step #16200.00 (0ms ?*RT. ?UPS, vehicles TOT 0 ACT 0 BUF 0)                               
+Step #17100.00 (17ms ~= 58.82*RT, ~79764.71UPS, vehicles TOT 1744 ACT 1356 BUF 0)         
+Step #18000.00 (34ms ~= 29.41*RT, ~83382.35UPS, vehicles TOT 5026 ACT 2835 BUF 4)         
+Step #18900.00 (75ms ~= 13.33*RT, ~80533.33UPS, vehicles TOT 11869 ACT 6040 BUF 0)        
+Step #19800.00 (107ms ~= 9.35*RT, ~89598.13UPS, vehicles TOT 20607 ACT 9587 BUF 182)      
+Step #20700.00 (142ms ~= 7.04*RT, ~96323.94UPS, vehicles TOT 29965 ACT 13678 BUF 603)     
+Step #21600.00 (183ms ~= 5.46*RT, ~99683.06UPS, vehicles TOT 39463 ACT 18242 BUF 1142)    
+Step #22500.00Warning: Vehicle '10000091' could not finish continuous lane change (lane disappeared) time=22500.00.
+ (270ms ~= 3.70*RT, ~105640.74UPS, vehicles TOT 54930 ACT 28523 BUF 2671)   
+Step #23400.00Warning: Teleporting vehicle '73585'; waited too long (yield), lane='r20585_0', time=23400.00.
+ (348ms ~= 2.87*RT, ~112856.32UPS, vehicles TOT 71630 ACT 39274 BUF 6894)   
+Step #24300.00Warning: Teleporting vehicle '85090'; waited too long (jam), lane='e34821_0', time=24300.00.
+ (406ms ~= 2.46*RT, ~120384.24UPS, vehicles TOT 86619 ACT 48876 BUF 10071)  
+Step #25200.00Warning: Teleporting vehicle '122658'; waited too long (yield), lane='e18258_0', time=25200.00.
+ (493ms ~= 2.03*RT, ~119350.91UPS, vehicles TOT 102315 ACT 58840 BUF 11921) 
+Step #26100.00 (709ms ~= 1.41*RT, ~114572.64UPS, vehicles TOT 131775 ACT 81232 BUF 15048) 
+
+Simulation ended at time: 26100.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 2175.49s
+ Real time factor: 4.55069
+ UPS: 110458.943329
+Vehicles:
+ Inserted: 131775 (Loaded: 184086)
+ Running: 81232
+ Waiting: 15048
+ Teleports: 21958 (Collisions: 150, Jam: 12749, Yield: 7484, Wrong Lane: 1575)
+ Emergency Braking: 73
+Statistics (avg of 50543):
+ RouteLength: 9283.24
+ Speed: 11.28
+ Duration: 1024.44
+ WaitingTime: 250.68
+ TimeLoss: 491.75
+ DepartDelay: 5.89
+	Command being timed: "/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -r /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/routes.rou.xml --additional-files /mnt/sim/diag/ed.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml --begin 16200 --end 26100 --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --statistic-output /mnt/res/stats.xml --summary-output /mnt/sim/diag/summary.xml --summary-output.period 60 --log /mnt/sim/diag/sumo.log --duration-log.statistics --step-log.period 900"
+	User time (seconds): 2181.94
+	System time (seconds): 1.65
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 36:23.94
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 2227700
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 552029
+	Voluntary context switches: 550
+	Involuntary context switches: 14982
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 221864
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
