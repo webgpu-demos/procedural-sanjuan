@@ -89,11 +89,12 @@ varying vec4 vFacade;
 varying vec4 vBldg;
 varying vec3 vWPos;
 varying vec3 vWNrm;
-// the power at this building: 1 on, 0 cut by the apagón; one building in seven runs on a generator, dimmer
+// the power at this building: 1 on, 0 cut by the apagón; one building in twenty runs on a generator, dimmer
+// (one in seven had the far city still lit end to end when the grid was down)
 float gridPower(float seed) {
   if (uGrid.z < 0.0) return 1.0;
   float dark = 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy));
-  return mix(1.0, step(0.86, fract(seed * 29.37)) * 0.55, dark);
+  return mix(1.0, step(0.95, fract(seed * 29.37)) * 0.55, dark);
 }
 float gRough, gMetal;
 vec3 gGlint = vec3(0.0); // the sun mirrored in a pane (added to the specular light where the sun reaches it)
@@ -549,7 +550,7 @@ const FAR_STREETS = /* glsl */ `
   vec2 ruv = (vWPos.xz - uNightRoadsRect.xy) / max(uNightRoadsRect.zw, vec2(1.0));
   float inArea = step(0.0, ruv.x) * step(ruv.x, 1.0) * step(0.0, ruv.y) * step(ruv.y, 1.0);
   float road = inArea * texture2D(uNightRoads, ruv).r;
-  float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.12, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
+  float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.0, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
   vec3 sodium = mix(vec3(1.0, 0.85, 0.68), vec3(1.0, 0.6, 0.28), smoothstep(0.3, 0.75, road));
   totalEmissiveRadiance += (1.0 - le.x * le.y) * road * 0.22 * sodium * uNight * power * smoothstep(0.5, 0.8, vWNrm.y);
 }
@@ -617,7 +618,7 @@ function blocksMaterial() {
           vec3 tube = mix(vec3(1.0, 0.72, 0.42), vec3(0.82, 0.9, 1.0), step(0.6, hash12(bld + 11.0)));
           diffuseColor.rgb *= 0.9 - 0.5 * win; // (as dark as a detailed facade is with its glass, from afar)
           // (an apagón: dark inside the spreading edge, but for the odd generator)
-          float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, step(0.88, hash12(floor(vWPos.xz / 37.0))) * 0.5,
+          float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, step(0.95, hash12(floor(vWPos.xz / 37.0))) * 0.5,
             1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vWPos.xz, uGrid.xy)));
           totalEmissiveRadiance += win * lit * uNight * tube * 1.3 * power;
         }`);

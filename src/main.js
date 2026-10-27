@@ -12,7 +12,7 @@ import { Streamer } from './world/streamer.js';
 import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
-import { buildFlyovers, overDecks } from './world/flyovers.js';
+import { buildFlyovers, overDecks, landDecks } from './world/flyovers.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
@@ -173,6 +173,7 @@ roads.lanes = lanes;
 // (the expressway's height without the humps the elevation model's overpass ridges put in it, and the bridges that
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
+landDecks(roads, (x, z) => streamer.ground(x, z)); // (decks flush with the streets they meet: world/flyovers.js)
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);

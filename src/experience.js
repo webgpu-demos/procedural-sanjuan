@@ -187,11 +187,18 @@ export class Experience {
     if (!roads) return cells;
     for (const e of roads.edges) {
       const name = e.name ?? e.ref; if (!name) continue;
-      const p = e.pts;
-      for (let i = 0; i < p.length; i += 3) {
-        const k = Math.floor(p[i] / 60) + ',' + Math.floor(p[i + 2] / 60);
+      const p = e.pts, label = e.ref && e.name ? `${e.name} (${e.ref})` : name;
+      const put = (x, z) => {
+        const k = Math.floor(x / 60) + ',' + Math.floor(z / 60);
         if (!cells.has(k)) cells.set(k, []);
-        cells.get(k).push([p[i], p[i + 2], e.ref && e.name ? `${e.name} (${e.ref})` : name]);
+        cells.get(k).push([x, z, label]);
+      };
+      // (every 20 m along it: on a long straight the next mapped point can be 200 m off, and the name came and went)
+      for (let i = 0; i < p.length; i += 3) {
+        put(p[i], p[i + 2]);
+        if (i + 3 >= p.length) break;
+        const n = Math.floor(Math.hypot(p[i + 3] - p[i], p[i + 5] - p[i + 2]) / 20);
+        for (let j = 1; j <= n; j++) put(p[i] + ((p[i + 3] - p[i]) * j) / (n + 1), p[i + 2] + ((p[i + 5] - p[i + 2]) * j) / (n + 1));
       }
     }
     return cells;
@@ -460,7 +467,7 @@ export class Experience {
       if (!this.wave) { this.wave = { start: performance.now(), late: T - at > 30 }; if (!this.wave.late) this.sound.blackout(); }
       // the grid stumbles (the lights flicker, the whole city at once) for a second, then the dark spreads
       const age = (performance.now() - this.wave.start) / 1000, FLICKER = 1.3;
-      let r = this.wave.late ? 1e6 : Math.max(0, age - FLICKER) * 650;
+      let r = this.wave.late ? 1e6 : Math.max(0, age - FLICKER) * 1600; // (across the metro area within the shot: at 650 m/s the far city was still lit when it cut)
       if (!this.wave.late && age < FLICKER) r = Math.sin(age * 37) * Math.sin(age * 23) > 0.15 ? 1e6 : -1;
       uGrid.set(GRID_ORIGIN[0], GRID_ORIGIN[1], r, 450);
     } else { this.wave = null; uGrid.set(GRID_ORIGIN[0], GRID_ORIGIN[1], -1, 450); }
@@ -488,7 +495,9 @@ export class Experience {
       }
       this.story.querySelector('.spd').textContent = `${Math.round(v.speed * 3.6)} km/h`;
       this.story.querySelector('.typ').textContent = TYPE_NAME[v.type] ?? '';
-      const street = this.streetAt(v.x, v.z);
+      // (the last one named, until another is: the line does not blink out between mapped points or at a node)
+      const named = this.streetAt(v.x, v.z), street = named ?? (this.lastStreet?.[0] === v.vid ? this.lastStreet[1] : null);
+      if (named) this.lastStreet = [v.vid, named];
       this.story.querySelector('.st').textContent = street ? `por ${street}` : '';
     } else this.story.classList.remove('on');
     // the sound

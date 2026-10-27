@@ -55,7 +55,7 @@ export function gridAware(m, key) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vGridXZ;\nuniform vec4 uGrid;')
       .replace('#include <opaque_fragment>', `#include <opaque_fragment>
-        if (uGrid.z >= 0.0) gl_FragColor.rgb *= mix(0.12, 1.0, smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vGridXZ, uGrid.xy)));`);
+        if (uGrid.z >= 0.0) gl_FragColor.rgb *= smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vGridXZ, uGrid.xy));`);
   };
   m.customProgramCacheKey = () => key;
   return m;

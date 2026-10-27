@@ -9,8 +9,8 @@ function colour(r, out) {
   if (r >= 0.75) out.setRGB(0.15, 0.85, 0.45);
   else if (r >= 0.5) out.setRGB(0.98, 0.82, 0.2);
   else if (r >= 0.3) out.setRGB(1.0, 0.45, 0.12);
-  else if (r >= 0.15) out.setRGB(0.92, 0.12, 0.1);
-  else out.setRGB(0.6, 0.03, 0.12);
+  else if (r >= 0.15) out.setRGB(0.95, 0.1, 0.05);
+  else out.setRGB(0.62, 0.02, 0.02); // (true red: with blue in it, it was graded to magenta)
   return out;
 }
 

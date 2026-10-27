@@ -35,6 +35,34 @@ export function clearSpot(cs, i, across, high, foot, depth, skip = null) {
 // and every flyover; tunnels are not drawn at all)
 export const leftOut = (e) => !e.tunnel && !e.span && !!(e.bridge || e.flyover || e.grade);
 
+// Where a deck meets a road the tiles drape on the ground, it meets it at the ground. The road's level there (the
+// simulation's, roads.json) can stand some decimetres off the terrain, and a deck that started at it stood up out
+// of the street as a step across the lanes: on PR-22 at the Quebrada Margarita, 0.3 m, right under the opening's
+// ride. Mismatches within 1.5 m are landed (more is a cutting, or a structure the terrain has in it: left as they
+// are); the deck eases back to its own level over 15 m. Run after correctProfiles, before anything uses the
+// levels (the decks, the simulated cars). Returns the number of ends landed.
+export function landDecks(roads, ground, reach = 15, most = 1.5) {
+  const onGround = new Set();
+  for (const e of roads.edges) if (!leftOut(e) && !e.tunnel) { onGround.add(e.a); onGround.add(e.b); }
+  let landed = 0;
+  for (const e of roads.edges) {
+    if (!leftOut(e)) continue;
+    const p = e.pts, n = p.length / 3, cum = [0];
+    if (n < 2) continue;
+    for (let k = 1; k < n; k++) cum.push(cum[k - 1] + Math.hypot(p[k * 3] - p[k * 3 - 3], p[k * 3 + 2] - p[k * 3 - 1]));
+    const total = cum[n - 1], L = Math.min(reach, total * 0.5);
+    for (const [k0, node] of [[0, e.a], [n - 1, e.b]]) {
+      if (!onGround.has(node) || L <= 0) continue;
+      const d = ground(p[k0 * 3], p[k0 * 3 + 2]) - p[k0 * 3 + 1];
+      if (Math.abs(d) < 0.02 || Math.abs(d) > most) continue;
+      e.pts0 ??= Array.from({ length: n }, (_, k) => p[k * 3 + 1]); // (the levels the simulation drove)
+      for (let k = 0; k < n; k++) { const s = k0 === 0 ? cum[k] : total - cum[k]; if (s < L) p[k * 3 + 1] += d * (1 - s / L); }
+      landed++;
+    }
+  }
+  return landed;
+}
+
 export function structureEdges(edges, ground) {
   const at = new Map(), built = new Map(), cs = new Map();
   const sec = (e) => { if (!cs.has(e)) cs.set(e, sections(e.pts, ground)); return cs.get(e); };
@@ -254,10 +282,55 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null) 
         {
           vec2 lu = vec2(vDeckW.x - uLampRect.x, uLampRect.y - vDeckW.z) / (2.0 * uLampRect.z) + 0.5;
           vec2 le = smoothstep(vec2(0.0), vec2(0.08), lu) * (1.0 - smoothstep(vec2(0.92), vec2(1.0), lu));
-          float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.12, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vDeckW.xz, uGrid.xy)));
+          float power = uGrid.z < 0.0 ? 1.0 : mix(1.0, 0.0, 1.0 - smoothstep(uGrid.z - uGrid.w, uGrid.z, distance(vDeckW.xz, uGrid.xy)));
           totalEmissiveRadiance += (1.0 - le.x * le.y) * 0.2 * vec3(1.0, 0.6, 0.28) * uNight * power * smoothstep(0.5, 0.8, abs(vDeckUp)) * step(0.01, uLampOn);
         }`);
   };
+  // The expressway's lane lines through its merges and forks. The tiles paint lanes as wide as the carriageway is
+  // (markings.mjs), and where a ramp joins or leaves it the paving is wider than its lanes: there they painted
+  // nothing, and the opening's ride crossed forty metres of bare asphalt on PR-22. The lanes go on through, about
+  // the painted centre either side (lanes.json); the line on the ramp's side is dashed, as at a merge.
+  const table = roads.lanes?.edges, SAMPLE = roads.lanes?.step ?? 2.5;
+  if (table && paving) for (const [i, t] of Object.entries(table)) {
+    const e = edges[i], c = t.c, median = t.lanes * t.lw;
+    let samples = null;
+    for (let k = 1; k < c.length; k++) {
+      if (c[k] != null || c[k - 1] == null) continue;
+      let j = k; while (j < c.length && c[j] == null) j++;
+      if (j >= c.length) break; // (unpainted to the end: a junction)
+      if (t.why && !/^w+$/.test(t.why.slice(k, j))) { k = j; continue; } // (only where it is paved wider: not off the paving)
+      if (!samples) { // (as lanetable.mjs and markings.mjs sample it: every 2.5 m from 1.25 m, the normal to the right of travel)
+        samples = [];
+        let next = SAMPLE / 2, walked = 0;
+        for (let q = 3; q < e.pts.length; q += 3) {
+          const ax = e.pts[q - 3], az = e.pts[q - 1], bx = e.pts[q], bz = e.pts[q + 2], len = Math.hypot(bx - ax, bz - az);
+          if (len < 1e-6) continue;
+          for (; next <= walked + len; next += SAMPLE) { const f = (next - walked) / len; samples.push([ax + (bx - ax) * f, az + (bz - az) * f, (bx - ax) / len, (bz - az) / len]); }
+          walked += len;
+        }
+      }
+      const a = k - 1, ca = c[a], cb = c[j];
+      const section = (n) => {
+        const [x, z, dx, dz] = samples[n], off = ca + ((cb - ca) * (n - a)) / (j - a);
+        return { x: x - dz * off, z: z + dx * off, nx: -dz, nz: dx };
+      };
+      // (a line o metres right of the centre, each corner on the ground the tiles drape there)
+      const line = (s0, s1, o, kind) => {
+        const [color, layer, lift] = PAVE[kind], g = paved.paint;
+        const P = [[s0, o - 0.075], [s1, o - 0.075], [s1, o + 0.075], [s0, o + 0.075]].map(([s, l]) => { const x = s.x + s.nx * l, z = s.z + s.nz * l; return [x, ground(x, z) + lift, z]; });
+        const cross = (P[1][0] - P[0][0]) * (P[2][2] - P[0][2]) - (P[1][2] - P[0][2]) * (P[2][0] - P[0][0]);
+        for (const k of cross > 0 ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3]) { g.position.push(...P[k]); g.normal.push(0, 1, 0); g.color.push(...color); g.aLayer.push(layer); }
+      };
+      for (let n = a; n < j && n + 1 < samples.length; n++) {
+        const s0 = section(n), s1 = section(n + 1), gap = Math.floor(n / 2) % 2, edge = median / 2 - 0.35;
+        for (let m = 1; m < t.lanes; m++) if (!gap) line(s0, s1, -median / 2 + m * t.lw, 'paint');
+        if (e.highway === 'motorway' || e.highway === 'trunk') line(s0, s1, -edge, 'yellow');
+        if (!gap) line(s0, s1, edge, 'paint');
+      }
+      k = j;
+    }
+  }
+
   material.customProgramCacheKey = () => 'flyovers-v2';
   const mesh = soup.mesh(material);
   mesh.name = 'flyovers';

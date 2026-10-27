@@ -77,7 +77,10 @@ roads.edges.forEach((e, i) => {
   const lanes = Math.max(1, Math.min(e.lanes, Math.floor(median / 2.6)));
   // the painted centre's offset at each sample (null where markings.mjs painted nothing: a junction, a bay)
   const offsets = samples.map((s) => (s && s.w > median * 0.8 && s.w < median * 1.25 ? Math.round(s.c * 100) / 100 : null));
-  out.edges[i] = { lanes, lw: Math.round((median / lanes) * 1000) / 1000, c: offsets };
+  // and why not, sample by sample: '.' painted, 'w' wider than its lanes (a ramp joining or leaving, a bay),
+  // 'n' narrower, 'x' off the carriageway or not measured (a junction, a bridge's gap)
+  const why = samples.map((s) => (!s ? 'x' : s.w >= median * 1.25 ? 'w' : s.w <= median * 0.8 ? 'n' : '.')).join('');
+  out.edges[i] = { lanes, lw: Math.round((median / lanes) * 1000) / 1000, c: offsets, why };
   painted++;
 });
 fs.writeFileSync(path.join(dir, 'lanes.json'), JSON.stringify(out));
