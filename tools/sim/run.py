@@ -97,7 +97,8 @@ cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if
 # (--reroute=0.15: that share of drivers, every quarter hour) is closer to a navigation app, but on this machine
 # SUMO then spends most of its time waiting: measured 6.7x slower at full scale.
 if float(args.get('reroute', 0)) > 0:
-    cmd += ['--device.rerouting.probability', args['reroute'], '--device.rerouting.period', '900']
+    cmd += ['--device.rerouting.probability', args['reroute'], '--device.rerouting.period', args.get('reroute-period', '900'),
+            '--device.rerouting.threads', str(os.cpu_count() or 1)]
 cmd += args.get('sumoargs', '').split()  # (more of SUMO's options: --sumoargs="--a 1 --b 2")
 if not apagon: cmd += ['--save-state.times', str(APAGON_AT), '--save-state.files', STATE, '--save-state.rng']
 if begin != BEGIN: cmd += ['--load-state', STATE]  # (the apagón: the same morning until the failure)
