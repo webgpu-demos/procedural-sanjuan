@@ -154,14 +154,14 @@ export class SimTraffic {
   // structure wherever its level stands RAMP_ABOVE over the ground). A car over one, at about its height in the
   // simulation, drives on it; any other on the street the tiles draw. (A road whose level stands off the ground
   // with nothing drawn under it, a hump the old elevation model put in it, is driven on the ground.)
-  // The expressway's lanes as SUMO drove them and as the tiles paint them. The network (tools/sim/network.mjs) gave
-  // each one-way expressway stretch its lanes 3 m wide about the centreline, and narrowed a stretch to at most one
-  // lane more than the lanes leaving its end (a toll plaza's six lanes into two); the tiles paint the lanes as the
-  // carriageway is wide, all of them. So on 4 km of San Juan's expressway SUMO drove three lanes where four are
-  // painted, and the opening's commuter rode down the painted line between two of them. Each seen car on a one-way
-  // expressway is moved across to the same lane counted from the left among the painted ones (the lane SUMO
-  // dropped is the right one), and in it as far off its middle as it was in SUMO's: a car changing lanes still
-  // crosses the line. (Where the lanes agree it moves at most the few decimetres the painted lanes are wider.)
+  // The expressway's lanes as SUMO drove them and as the tiles paint them. The tiles paint the lanes as the
+  // carriageway is wide (four-metre lanes on PR-22). The network (tools/sim/network.mjs) gives SUMO the same lanes,
+  // as wide, and lists them in the run's index; only where it narrowed a stretch (a toll plaza's six lanes into two,
+  // a lane at a time) does SUMO drive fewer. (An older run drove 3 m lanes, as many as OSM counts: on 4 km of San
+  // Juan's expressway three where four are painted, and the opening's commuter rode down a painted line.) Each seen
+  // car on a one-way expressway is moved across into the same lane counted from the left among the painted ones
+  // (a lane SUMO dropped is the right one), and in it as far off its middle as it was in SUMO's: a car changing
+  // lanes still crosses the line. Where the lanes agree, it only moves onto the painted carriageway's centre.
   relanes(roads) {
     const fast = (e) => /^(motorway|trunk)(_link)?$/.test(e.highway);
     const dir = [];

@@ -12,11 +12,11 @@ $PY tools/sim/gtfs.py --area=sanjuan --demand=morning > $RES/gtfs.txt 2>&1
 if [ -n "$ASSIGN" ]; then
   A=$W/assign; mkdir -p $A; cd $A
   $PY $SUMO_HOME/tools/assign/duaIterate.py -n $S/sanjuan.net.xml.gz -t $S/morning/trips.xml -l $ASSIGN \
-    -b 16200 -e 36900 --mesosim -j --meso-recheck 10 --time-to-teleport 300 --routing-algorithm ${ASSIGNALG:-CH} -T -E -a 900 \
-    $ASSIGNARGS duarouter--routing-threads 4 sumo--ignore-route-errors true sumo--max-depart-delay 900 > $RES/assign.txt 2>&1
+    -b 16200 -e 36900 --mesosim -j --meso-recheck 10 --time-to-teleport 300 --routing-algorithm ${ASSIGNALG:-CH} -T -E -a 900 -D $S/morning/taz.add.xml \
+    $ASSIGNARGS duarouter--routing-threads 4 sumo--ignore-route-errors true sumo--max-depart-delay 900 sumo--duration-log.statistics true > $RES/assign.txt 2>&1
   cd "$ROOT"
   last=$(ls -d $A/0* | sort | tail -1)
-  ROUTES=$(ls $last/*.rou.alt.xml | head -1),$S/morning/buses.xml
+  ROUTES=$(ls $last/*.rou.alt.xml* | head -1),$S/morning/buses.xml
 else
   $PY tools/sim/route.py --area=sanjuan --demand=morning > $RES/route.txt 2>&1 || exit 1
   ROUTES=$S/morning/routes.rou.xml

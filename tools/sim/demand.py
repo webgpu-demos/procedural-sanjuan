@@ -128,8 +128,26 @@ def gate_for(name, gates):
     w = np.array([capacity(g) for g in gates]) * np.exp(-(d - d.min()) / 2500)
     return gates, w / w.sum(), d.min()
 GATE_CACHE = {}
+# A trip from beyond the edge leaves its municipio by whichever of the roads towards it the router finds best (a
+# TAZ: the gates within GATE_REACH of the nearest, roads of some size): drawn by the gates' sizes, half of
+# Carolina's commuters had come in on Avenida 65 de Infantería, two lanes, and it stood still from five o'clock.
+# (--taz=0: drawn by size and distance, as before)
+TAZ, GATE_REACH = args.get('taz', '1') == '1', float(args.get('gatereach', 3000))
+TAZ_IDS, TAZ_USED = {n: f'm{i}' for i, n in enumerate(sorted(MUNI))}, {}
+def gate_set(name, inbound):
+    gates = gates_in if inbound else gates_out
+    cx, cy = CENTRE[name]
+    pos = np.array([(g.getToNode() if inbound else g.getFromNode()).getCoord() for g in gates])
+    d = np.hypot(pos[:, 0] - cx, pos[:, 1] - cy)
+    big = np.array([g.getPriority() >= 9 or g.getLaneNumber() >= 2 for g in gates])
+    keep = (d <= d.min() + GATE_REACH) & big; keep[d.argmin()] = True
+    return [gates[i].getID() for i in np.flatnonzero(keep)], d.min()
 def pick_gate(name, inbound):
     k = (name, inbound)
+    if TAZ:
+        if k not in GATE_CACHE: GATE_CACHE[k] = gate_set(name, inbound)
+        ids, dist = GATE_CACHE[k]; TAZ_USED[k] = ids
+        return 'taz:' + TAZ_IDS[name], dist
     if k not in GATE_CACHE: GATE_CACHE[k] = gate_for(name, gates_in if inbound else gates_out)
     gates, p, dist = GATE_CACHE[k]
     return gates[np.searchsorted(np.cumsum(p), rng.random())].getID(), dist
@@ -293,9 +311,19 @@ with open(os.path.join(OUT, 'trips.xml'), 'w') as fx:
         drive = dict(speedFactor='normc(1.06,0.1,0.75,1.35)', sigma=0.3, tau=1.0, minGap=2.0, lcStrategic=1.2, lcCooperative=0.8, lcAssertive=1.3, impatience=0.5)
         drive.update(VEXTRA)
         fx.write(f'  <vType id="{k}" vClass="{cls}" ' + ' '.join(f'{a}="{b}"' for a, b in {**v, **drive}.items()) + '/>\n')
+    end = lambda k, e: f'{k}Taz="{e[4:]}"' if e.startswith('taz:') else f'{k}="{e}"'
     for i, (t, a, b, typ, kind, story) in enumerate(trips):
-        fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" from="{a}" to="{b}" departLane="best" departSpeed="max" departPos="random_free"/>\n')
+        fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" {end("from", a)} {end("to", b)} departLane="best" departSpeed="max" departPos="random_free"/>\n')
     fx.write('</routes>\n')
+# the municipios' gates (route.py and the assignment route with --with-taz)
+with open(os.path.join(OUT, 'taz.add.xml'), 'w') as fx:
+    fx.write('<additional>\n')
+    for name in sorted({n for n, _ in TAZ_USED}):
+        fx.write(f'  <taz id="{TAZ_IDS[name]}" name="{name}">\n')
+        for g in TAZ_USED.get((name, True), []): fx.write(f'    <tazSource id="{g}" weight="1"/>\n')
+        for g in TAZ_USED.get((name, False), []): fx.write(f'    <tazSink id="{g}" weight="1"/>\n')
+        fx.write('  </taz>\n')
+    fx.write('</additional>\n')
 json.dump({'begin': BEGIN, 'end': END, 'kinds': sorted({k for *_, k, _ in trips}),
            'trips': [[round(t), k, s[0], s[1]] for t, a, b, typ, k, s in trips]}, open(os.path.join(OUT, 'trips.json'), 'w'))
 print('->', os.path.relpath(OUT, ROOT))
