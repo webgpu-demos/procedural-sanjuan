@@ -80,7 +80,7 @@ export function terrainMesh(grid, tx, tz, tileSize) {
 // islands stand a kerb's height above the carriageway. Colours tint the ground textures.
 const ROAD_STYLE = {
   [AREA.ROAD]: { lift: 0.04, color: lin([0.4, 0.4, 0.41]), layer: GROUND.ASPHALT },
-  [AREA.BEACH]: { lift: 0.03, color: lin([0.93, 0.85, 0.68]), layer: GROUND.SAND },
+  [AREA.BEACH]: { lift: 0.03, color: lin([0.84, 0.76, 0.6]), layer: GROUND.SAND }, // (dry sand reflects about half the light: at 0.93 it glared white)
   [AREA.CARRIAGEWAY]: { lift: 0.06, color: lin([0.36, 0.36, 0.38]), layer: GROUND.ASPHALT },
   [AREA.SIDEWALK]: { lift: 0.2, color: lin([0.63, 0.61, 0.58]), layer: GROUND.PAVERS, kerb: true },
   [AREA.ISLAND]: { lift: 0.22, color: lin([0.36, 0.47, 0.27]), layer: GROUND.GRASS, kerb: true },

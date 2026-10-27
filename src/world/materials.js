@@ -426,6 +426,7 @@ float gRough;
 float gMirror = 0.0; // how much of a mirror this fragment is: water (written to alpha for the reflection pass)
 vec3 gGlint = vec3(0.0), gSheen = vec3(0.0); // the sun in the water, where it reaches; the sky round a low sun in it
 float gLampGain = 1.0; // the share of the street lamps' light it takes (LAMP_GAIN, on the tiles' ground)
+float gSand = 0.0;      // how much it is a beach's sand (a beach area, or open ground the photo shows bright and warm)
 ${NOISE}
 `;
 const GROUND_MAIN = /* glsl */ `
@@ -463,6 +464,7 @@ const GROUND_MAIN = /* glsl */ `
       vec2 gst = st / uGroundScale[2], dst = st / uGroundScale[3], pst = st / uGroundScale[0];
       float veg = smoothstep(-0.005, 0.04, photo.g - max(photo.r, photo.b));
       float warm = (1.0 - veg) * smoothstep(0.004, 0.04, photo.r - photo.b);
+      gSand = warm * smoothstep(0.25, 0.5, dot(photo, vec3(0.3, 0.59, 0.11)));
       float pl = dot(photo, vec3(0.3, 0.59, 0.11)), lit = smoothstep(0.03, 0.55, pl);
       vec3 grassTex = texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0, dirtTex = texture(uGroundAlb, vec3(dst, 3.0)).rgb * 2.0;
       vec3 paveTex = texture(uGroundAlb, vec3(pst, 0.0)).rgb * 2.0;
@@ -478,6 +480,18 @@ const GROUND_MAIN = /* glsl */ `
       gNm = mix(mix(texture(uGroundNor, vec3(pst, 0.0)).xyz, texture(uGroundNor, vec3(dst, 3.0)).xyz, warm), texture(uGroundNor, vec3(gst, 2.0)).xyz, veg) * 2.0 - 1.0;
       gNm = normalize(vec3(gNm.xy * 0.55, gNm.z));
     }
+  }
+  // A beach: the sand below the reach of the waves is wet, darker and with a sheen, and the last of each wave
+  // runs up it as a thin edge of foam and drains back. (The sand had been one dry cream plane to the waterline.)
+  if (abs(layer - 4.0) < 0.5) gSand = 1.0;
+  if (!water && gSand > 0.01 && vWPos.y < 1.2) {
+    float lvl = vWPos.y + 0.12 * (vnoise(st * 0.13) - 0.5);
+    float wetSand = (1.0 - smoothstep(0.35, 0.95, lvl)) * gSand;
+    diffuseColor.rgb *= mix(vec3(1.0), vec3(0.4, 0.38, 0.36), wetSand);
+    gRough = mix(gRough, 0.28, wetSand);
+    float reach = 0.1 + 0.2 * (0.5 + 0.5 * sin(uTime * 0.45 + vnoise(st * 0.05) * 6.0));
+    float swash = smoothstep(reach - 0.05, reach - 0.01, lvl) * (1.0 - smoothstep(reach - 0.01, reach + 0.02, lvl));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.75, 0.78, 0.78), gSand * swash * smoothstep(0.35, 0.7, vnoise(st * 0.6 + uTime * 0.2)));
   }
   if (water) {
     // Which water, told by its colour (meshing.js): the open sea and the bay, a lagoon or a river, or a pool
@@ -608,7 +622,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
         '\n#ifdef MATTE\nreflectedLight.indirectSpecular *= MATTE; reflectedLight.directSpecular *= MATTE;\n#endif')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v12';
+  m.customProgramCacheKey = () => 'ground-v13';
   return m;
 }
 
