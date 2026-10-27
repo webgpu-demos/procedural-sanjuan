@@ -72,7 +72,7 @@ export class Signs {
   build(all) {
     const group = new THREE.Group();
     // billboards and screens (styles 3+) are drawn from a shared poster atlas, at any distance
-    const ads = all.filter((s) => s.style >= 3), signs = all.filter((s) => s.style < 3);
+    const ads = all.filter((s) => s.style >= 3 && !this.noAds?.(s.x, s.z)), signs = all.filter((s) => s.style < 3);
     if (ads.length) group.add(this.ads.build(ads));
     const pos = [], col = [], uv = [], quads = []; // quads: [sign, first vertex] for the uv pass
     const c = new THREE.Color();

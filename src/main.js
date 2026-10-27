@@ -132,6 +132,10 @@ if (LARGE) {
 }
 loader.set(0.14, 'railways and roads');
 const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
+{ // (no billboards or LED screens in the colonial city: Old San Juan, west of Puerta de Tierra)
+  const [x0, z1] = proj.project(-66.1245, 18.4600), [x1, z0] = proj.project(-66.1040, 18.4725);
+  signs.noAds = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+}
 // A raised sea (?sea=, Garita's sea-level scenario): the sea's surface at that height, over everything lower. It is
 // Garita's bathtub, not a flood model: ground below the level is under water whether or not the sea can reach it.
 const FLOOD = parseSeaLevel(params.get('sea'), manifest.sea ?? 0);

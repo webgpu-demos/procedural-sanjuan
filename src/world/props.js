@@ -367,7 +367,7 @@ const TREES = [
 // low on purpose: minified, the texture's averaged alpha drops, and at 0.5 the canopy would vanish
 // a few tens of metres away.
 // recolor: use only the brightness and outline of the leaf texture, and the tint as the colour (blossom).
-function leafMaterial(map, tint, recolor = false) {
+function leafMaterial(map, tint, recolor = false, crown = false) {
   const m = new THREE.MeshStandardMaterial({ map, color: tint, alphaTest: 0.18, side: THREE.DoubleSide, roughness: 0.85 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; // (no lamp light here; the sampler still needs its texture)
@@ -376,6 +376,10 @@ function leafMaterial(map, tint, recolor = false) {
       diffuseColor.rgb *= 0.55 + 0.7 * dot(leaf.rgb, vec3(0.3, 0.6, 0.1));
       diffuseColor.a *= leaf.a;`);
     shader.uniforms.uTime = shared.uTime;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n#ifdef CROWN_NORMALS\nnormal = normalize(vNormal);\n#endif')
+      // (leaves are thin: the sky's light comes through the crown from all round, and the sun's through the leaves
+      // in front of it; lit only on their faces, crowns stood near black at noon)
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n#ifdef CROWN_NORMALS\nreflectedLight.indirectDiffuse *= 1.5;\nreflectedLight.directDiffuse *= 1.2;\n#endif');
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform float uTime;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -387,7 +391,8 @@ function leafMaterial(map, tint, recolor = false) {
         float sway = 0.6 * sin(uTime * 1.3 + swayAt.x * 0.35 + swayAt.z * 0.27) + 0.3 * sin(uTime * 2.9 + swayAt.x * 1.1 + swayAt.y);
         transformed.xz += uv.y * sway * 0.07;`);
   };
-  m.customProgramCacheKey = () => (recolor ? 'leaves-recolor-v1' : 'leaves-v1');
+  m.customProgramCacheKey = () => (recolor ? 'leaves-recolor-v2' : 'leaves-v2');
+  if (crown) m.defines = { ...m.defines, CROWN_NORMALS: '' };
   return m;
 }
 
@@ -407,11 +412,24 @@ function buildTree(def) {
   const size = new THREE.Box3().setFromObject(tree).getSize(new THREE.Vector3());
   const s = def.height / size.y, k = def.spread ?? 1; // spread: a wider, flatter crown
   const prep = (mesh) => { const g = mesh.geometry.clone(); g.scale(s * k, s, s * k); g.computeBoundingSphere(); return g; };
+  // The leaf cards lit as one crown: each card's normal turned mostly out from the crown's middle. With their own
+  // normals (and the back face of a two-sided card turned away from the sun) half of every crown lay in its own
+  // shade, and broadleaf trees stood near black at noon beside sunlit lawns.
+  const leaves = prep(tree.leavesMesh), lp = leaves.attributes.position, ln = leaves.attributes.normal;
+  const box = new THREE.Box3().setFromBufferAttribute(lp), mid = box.getCenter(new THREE.Vector3()), half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+  const out = new THREE.Vector3(), own = new THREE.Vector3();
+  for (let i = 0; i < lp.count; i++) {
+    out.set((lp.getX(i) - mid.x) / half.x, ((lp.getY(i) - mid.y) / half.y) + 0.35, (lp.getZ(i) - mid.z) / half.z).normalize();
+    own.set(ln.getX(i), ln.getY(i), ln.getZ(i));
+    if (own.dot(out) < 0) own.negate();
+    out.multiplyScalar(0.75).addScaledVector(own, 0.25).normalize();
+    ln.setXYZ(i, out.x, out.y, out.z);
+  }
   return {
     radius: (Math.max(size.x, size.z) * s * k) / 2, height: def.height,
-    branches: prep(tree.branchesMesh), leaves: prep(tree.leavesMesh),
+    branches: prep(tree.branchesMesh), leaves,
     branchMat: new THREE.MeshStandardMaterial({ map: tree.branchesMesh.material.map, roughness: 0.95 }),
-    leafMat: leafMaterial(tree.leavesMesh.material.map, def.tint, def.recolor),
+    leafMat: leafMaterial(tree.leavesMesh.material.map, def.tint, def.recolor, true),
   };
 }
 
