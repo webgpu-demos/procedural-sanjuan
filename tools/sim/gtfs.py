@@ -49,6 +49,8 @@ def place(sid):
         for lane, d in sorted(net.getNeighboringLanes(x, y, 35), key=lambda ld: ld[1]):
             e = lane.getEdge()
             if e.getFunction() == 'internal' or not lane.allows('bus') or e.getPriority() >= 13: continue
+            # (not a dead end: a bus that called there could not go on, as at the access road to Cupey station)
+            if not any(o.allows('bus') and o.getToNode() != e.getFromNode() for o in e.getOutgoing()): continue
             if lane.getIndex() != 0: continue  # (the kerb lane)
             pos = lane.getClosestLanePosAndDist((x, y))[0]
             L = lane.getLength()
