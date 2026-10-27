@@ -39,6 +39,7 @@ X
 tr '\r' '\n' < $RES/sumo.txt | grep -v "^Warning" > $RES/sumo-steps.txt
 grep Teleporting $D/sumo.log | gzip > $RES/teleports.txt.gz
 $PY tools/sim/hotspots.py $S/sanjuan.net.xml.gz $D/sumo.log $D/ed.xml --top=60 > $RES/hotspots.txt 2>&1
+$PY tools/sim/validate.py --area=sanjuan --scenario=lab --edgedata=$D/ed.xml --out=$RES > $RES/validate.txt 2>&1
 gzip -c $D/summary.xml > $RES/summary.xml.gz
 gzip -c $D/ed.xml > $RES/ed.xml.gz
 cp $S/net/*.json $RES/ 2>/dev/null; gzip -f $RES/merged.json $RES/inside.json 2>/dev/null

@@ -73,9 +73,9 @@ if apagon:
         for tl in TLS: f.write(f'  <wautJunction wautID="grid" junctionID="{tl}"/>\n')
         f.write('</additional>\n')
     extra = [os.path.join(WORK, 'apagon.add.xml')]
-ROUTES = os.path.join(SIM, DEMAND, 'routes.rou.xml')  # routes made beforehand (route.py)
+ROUTES = args.get('routes', os.path.join(SIM, DEMAND, 'routes.rou.xml'))  # routes made beforehand (route.py; or assigned: --routes=a,b)
 STOPS = os.path.join(SIM, DEMAND, 'busstops.add.xml')  # the AMA's stops (gtfs.py)
-cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if os.path.exists(ROUTES) else os.path.join(SIM, DEMAND, 'trips.xml'),
+cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if os.path.exists(ROUTES.split(',')[0]) else os.path.join(SIM, DEMAND, 'trips.xml'),
        '--begin', str(begin), '--end', str(END),
        '--additional-files', ','.join([os.path.join(WORK, 'outputs.add.xml')] + ([STOPS] if os.path.exists(STOPS) else []) + extra),
        '--time-to-teleport', '240', '--ignore-route-errors', '--max-depart-delay', '900',
