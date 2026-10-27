@@ -211,12 +211,13 @@ function bar(a, b, t, rgb, code = 0, d = t) {
 export function beamTexture() {
   const W = 128, H = 128, data = new Uint8Array(W * H * 4), step = THREE.MathUtils.smoothstep;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    // A fan opening from the lamps (the middle of the near edge) to the full width of the quad at its far
-    // end: straight sides that fade softly, a rounded far edge, brightest near the car.
+    // Dipped headlamps: a pool the width of the car at its nose, widening to about three lanes' worth at the far
+    // end, every edge soft, brightest near the car. (A fan from a point, 35 degrees wide with hard sides, had
+    // drawn long straight lines of light across the lanes from every car alongside the one being followed.)
     const u = ((i + 0.5) / W) * 2 - 1, v = (j + 0.5) / H;
-    const side = 1 - step(Math.abs(u) / Math.max(v, 0.03), 0.3, 0.98);   // inside the two straight edges, which fade out widely
-    const reach = 1 - step(Math.hypot(u * 0.55, v), 0.55, 0.99);          // the arc at the far end
-    const value = side * reach * step(v, 0, 0.06) * (0.1 + 0.9 * Math.exp(-v * 3.4));
+    const side = 1 - step(Math.abs(u) / (0.2 + 0.8 * v), 0.55, 1.3);
+    const reach = 1 - step(v, 0.55, 1.0);
+    const value = side * reach * step(v, 0, 0.05) * (0.12 + 0.88 * Math.exp(-v * 2.6));
     data.set([value * 255, value * 255, value * 255, 255], (j * W + i) * 4);
   }
   const t = new THREE.DataTexture(data, W, H);
@@ -231,7 +232,7 @@ export function beamGeometry(L) {
     uv.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
     for (let i = 0; i < 6; i++) col.push(...rgb);
   };
-  quad(7.5, L / 2 - 0.3, L / 2 + 24, [1, 0.95, 0.84]);       // headlamps, dipped: a fan 24 m long, 35 degrees wide
+  quad(4.5, L / 2 - 0.3, L / 2 + 30, [1, 0.95, 0.84]);       // headlamps, dipped: a pool 30 m long, 9 m wide at its end
   quad(-3.2, -L / 2 + 0.3, -L / 2 - 6, [0.34, 0.02, 0.012]);  // tail lamps
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
