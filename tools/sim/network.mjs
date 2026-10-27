@@ -63,13 +63,22 @@ roads.edges.forEach((e, i) => {
     if (painted && attrs.fast) {
       const t = painted[i], p = t ?? paintOf(e, Math.max(1, lanesOf(e) || e.lanes || 1));
       lanes = p.lanes; width = Math.min(WIDEST, p.lw);
+    } else if (painted && lanes >= 2) {
+      // (a street: its lanes as wide as they are painted, where the paint has as many)
+      const p = paintOf(e, lanes);
+      if (p.lanes === lanes) width = Math.min(WIDEST, p.lw);
     }
     edges.push({ id: `e${i}`, from: a, to: b, lanes, width, spread: 'center', pts: p, ...attrs });
   } else {
     // lanes each way: the tagged split, else half the road each (a single shared lane: one narrow lane each way)
     const fwd = e.lanesForward ?? (e.lanes >= 2 ? Math.floor(e.lanes / 2) : 1);
     const bwd = e.lanesBackward ?? (e.lanes >= 2 ? Math.max(1, e.lanes - fwd) : 1);
-    const width = e.lanes >= 2 ? LANE : NARROW;
+    let width = e.lanes >= 2 ? LANE : NARROW;
+    if (painted && fwd === bwd && fwd >= 1 && e.lanes >= 2) {
+      // (the lanes as wide as they are painted, where the paint divides the street into as many, half each way)
+      const p = paintOf(e, fwd + bwd);
+      if (p.lanes === fwd + bwd) width = Math.min(WIDEST, p.lw);
+    }
     edges.push({ id: `e${i}`, from: e.a, to: e.b, lanes: fwd, width, spread: 'right', pts, ...attrs });
     edges.push({ id: `r${i}`, from: e.b, to: e.a, lanes: bwd, width, spread: 'right', pts: [...pts].reverse(), ...attrs });
   }
@@ -205,22 +214,37 @@ const inside = {};
   }
 }
 
-let zips = 0;
+// (a joined junction is one node, where its nodes were on average, a light if any of them was one; netconvert's own
+// <join> made a joined junction of lights a priority junction: 430 of the 658 lights went out)
+const lightType = flag('ror') ? 'traffic_light_right_on_red' : 'traffic_light';
+const nodeId = new Map(); // roads node -> SUMO node id
+for (const m of clusters) for (const k of m) nodeId.set(k, `c${Math.min(...m)}`);
+const idOf = (k) => nodeId.get(k) ?? `n${k}`;
+let zips = 0, lights = 0;
 const nodeXml = ['<nodes>'];
 for (const [k, [ins, outs]] of used) {
+  if (nodeId.has(k)) continue;
   const [x, y, z] = roads.nodes[k];
   let type = '';
-  if (signals.has(k)) type = flag('ror') ? 'traffic_light_right_on_red' : 'traffic_light';
-  else if (flag('zipper') && !inCluster.has(k) && ins.length >= 2 && outs.length === 1 && [...ins, ...outs].every((e) => e.fast && e.spread === 'center') &&
+  if (signals.has(k)) { type = lightType; lights++; }
+  else if (flag('zipper') && ins.length >= 2 && outs.length === 1 && [...ins, ...outs].every((e) => e.fast && e.spread === 'center') &&
     ins.reduce((s, e) => s + e.lanes, 0) > outs[0].lanes) { type = 'zipper'; zips++; }
   nodeXml.push(`  <node id="n${k}" x="${f(x)}" y="${f(-z)}" z="${f(y)}"${type ? ` type="${type}"` : ''}/>`);
 }
-for (const m of clusters) nodeXml.push(`  <join nodes="${m.map((k) => 'n' + k).join(' ')}"/>`);
+for (const m of clusters) {
+  const p = m.map((k) => roads.nodes[k]), avg = (j) => p.reduce((s, q) => s + q[j], 0) / p.length;
+  const lit = m.some((k) => signals.has(k));
+  if (lit) lights++;
+  nodeXml.push(`  <node id="${idOf(m[0])}" x="${f(avg(0))}" y="${f(-avg(2))}" z="${f(avg(1))}"${lit ? ` type="${lightType}"` : ''}/>`);
+}
 nodeXml.push('</nodes>');
 const shape = (p) => p.map(([x, y, z]) => `${f(x)},${f(y)},${f(z)}`).join(' ');
 const edgeXml = ['<edges>'];
+let dropped = 0;
 for (const e of mergedEdges) {
-  edgeXml.push(`  <edge id="${e.id}" from="n${e.from}" to="n${e.to}" priority="${e.priority}" numLanes="${e.lanes}" speed="${e.speed}" width="${f(e.width)}"` +
+  const a = idOf(e.from), b = idOf(e.to);
+  if (a === b && nodeId.has(e.from)) { dropped++; continue; } // (inside a joined junction: its internal lanes drive it)
+  edgeXml.push(`  <edge id="${e.id}" from="${a}" to="${b}" priority="${e.priority}" numLanes="${e.lanes}" speed="${e.speed}" width="${f(e.width)}"` +
     ` spreadType="${e.spread}"${e.name ? ` name="${esc(e.name)}"` : ''} shape="${shape(e.pts)}"/>`);
 }
 edgeXml.push('</edges>');
@@ -229,8 +253,8 @@ fs.writeFileSync(path.join(out, 'net/plain.edg.xml'), edgeXml.join('\n'));
 fs.writeFileSync(path.join(out, 'net/merged.json'), JSON.stringify(merged));
 fs.writeFileSync(path.join(out, 'net/lanes.json'), JSON.stringify(laneTable));
 fs.writeFileSync(path.join(out, 'net/inside.json'), JSON.stringify(inside));
-log(`plain network: ${used.size} nodes (${[...used.keys()].filter((k) => signals.has(k)).length} with lights, ${zips} zippers), ` +
-  `${mergedEdges.length} directed edges from ${roads.edges.length} roads`);
+log(`plain network: ${used.size - nodeId.size + clusters.length} nodes (${lights} with lights, ${zips} zippers), ` +
+  `${mergedEdges.length - dropped} directed edges from ${roads.edges.length} roads`);
 
 const bin = path.join(ROOT, '.venv-sim/bin/netconvert');
 const netFile = path.join(out, `${area.id}.net.xml.gz`);
