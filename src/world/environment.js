@@ -22,6 +22,11 @@ export class Environment {
     this.renderer = renderer;
     this.night = 0;  // how far the city's lights are on: they come on while it is still light
     this.dark = 0;   // how dark it is: this follows the sun all the way down through twilight
+    // how dark the sky's light is (the ambient and the environment map): faster than `dark`. The sky the atmosphere
+    // draws (atmosphere.js) has lost most of its light by the time the sun is down; the environment map's sky
+    // (sky.js) kept three quarters of the day's, and at 6:14, five minutes before sunrise, the open ground lay
+    // pale blue under a dark violet sky, as if under snow
+    this.shade = 0;
     this.daylight = 1; this.moonlight = 0; this.warmth = 0; this.elevation = 40;
     this.time = 0;
     this.cloudCover = 0; // the sky's cloud cover as the atmosphere draws it (setClouds)
@@ -59,7 +64,7 @@ export class Environment {
   // The map's sky follows the real one: its sun where the sun is, the colours of a sunset when it is low, clouds
   // only when the atmosphere draws clouds (else the water and the glass mirrored clouds the sky did not have).
   bakeEnvironment() {
-    this.baked = this.dark;
+    this.baked = this.shade;
     const u = this.envSky.material.uniforms;
     u.uNight.value = this.baked;
     u.uSunDir.value.copy(shared.uSunDir.value);
@@ -81,6 +86,7 @@ export class Environment {
     // then comes slowly, with the sun, until the end of nautical twilight (and the other way round at dawn).
     this.night = 1 - step(deg, 0, 9);
     this.dark = 1 - step(deg, -13, 5);
+    this.shade = Math.max(this.dark, 1 - step(deg, -8, 6));
     this.daylight = step(deg, -5, 9);          // how much of the sun's light arrives (the afterglow included)
     this.moonlight = 1 - step(deg, -14, -5.5);
     this.warmth = 1 - step(deg, 3, 24);        // 1 at the horizon: orange light
@@ -91,7 +97,7 @@ export class Environment {
     shared.uSunGlint.value.copy(DAY.sunColor).lerp(SUNSET, this.warmth).multiplyScalar(this.daylight * 3);
     this.apply();
     const moved = this.bakedSun && shared.uSunDir.value.angleTo(this.bakedSun) > 0.035, warmer = Math.abs(this.warmth * this.daylight - this.bakedWarm) > 0.04;
-    if (moved || warmer || Math.abs(this.dark - this.baked) > 0.04 || (this.dark !== this.baked && (this.dark === 0 || this.dark === 1))) this.bakeEnvironment();
+    if (moved || warmer || Math.abs(this.shade - this.baked) > 0.04 || (this.shade !== this.baked && (this.shade === 0 || this.shade === 1))) this.bakeEnvironment();
   }
 
   // The atmosphere's clouds (cover 0 when it draws none), for the sky of the environment map.
@@ -125,13 +131,13 @@ export class Environment {
   }
 
   apply() {
-    const t = this.dark, lerp = (a, b) => a + (b - a) * t;
+    const t = this.dark, lerp = (a, b, k = t) => a + (b - a) * k, sh = this.shade;
     this.sky.material.uniforms.uNight.value = t;
-    this.hemi.intensity = lerp(DAY.hemi, NIGHT.hemi);
-    this.hemi.color.copy(DAY.sky).lerp(NIGHT.sky, t); this.hemi.groundColor.copy(DAY.ground).lerp(NIGHT.ground, t);
+    this.hemi.intensity = lerp(DAY.hemi, NIGHT.hemi, sh);
+    this.hemi.color.copy(DAY.sky).lerp(NIGHT.sky, sh); this.hemi.groundColor.copy(DAY.ground).lerp(NIGHT.ground, sh);
     this.sun.intensity = DAY.sun * this.daylight + NIGHT.sun * this.moonlight;
     this.sun.color.copy(DAY.sunColor).lerp(SUNSET, this.warmth).lerp(NIGHT.sunColor, this.moonlight);
-    this.scene.environmentIntensity = lerp(DAY.env, NIGHT.env); // (the map itself darkens with the sky)
+    this.scene.environmentIntensity = lerp(DAY.env, NIGHT.env, sh); // (the map itself darkens with the sky)
     this.renderer.toneMappingExposure = lerp(DAY.exposure, NIGHT.exposure);
     this.bloom = lerp(DAY.bloom, NIGHT.bloom);
     shared.uNight.value = this.night;

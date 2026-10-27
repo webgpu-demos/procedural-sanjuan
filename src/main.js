@@ -93,11 +93,13 @@ const env = new Environment(scene, renderer);
 const clockTime = {
   live: params.get('time') == null && params.get('night') !== '1',
   hour: params.get('time') != null ? Number(params.get('time')) : params.get('night') === '1' ? 22 : 12,
-  // the moment on today's San Juan date at which its clock shows `hour`
+  // a San Juan date to keep to instead of today's (its midnight, ms): the opening's morning (experience.js)
+  day: null,
+  // the moment on today's San Juan date (or `day`) at which its clock shows `hour`
   date() {
     const AST = -4 * 3600e3, now = Date.now();
     if (this.live) { const t = new Date(now + AST); this.hour = t.getUTCHours() + t.getUTCMinutes() / 60 + t.getUTCSeconds() / 3600; return new Date(now); }
-    const midnight = Math.floor((now + AST) / 864e5) * 864e5 - AST;
+    const midnight = this.day ?? Math.floor((now + AST) / 864e5) * 864e5 - AST;
     return new Date(midnight + this.hour * 3600e3);
   },
   // the hour and the minute on their own, for the panel; setting either stops the live clock

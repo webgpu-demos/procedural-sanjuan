@@ -110,6 +110,10 @@ const clockLabel = (hour) => {
   return { t: `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}`, ap: h < 12 ? 'a.m.' : 'p.m.' };
 };
 
+// The morning the opening shows, whatever the day it is watched: a Tuesday in late October, when the sun rises at
+// 6:19. The shots are timed to its light (in January it is still dark at 6:30; in June the sun is up by 5:50).
+const MORNING = Date.UTC(2026, 9, 27, 4); // (midnight in San Juan, AST)
+
 // Where the grid failed in the apagón: the Monacillos transmission centre, Río Piedras (lon -66.075, lat 18.39)
 const GRID_ORIGIN = [4390, 8330];
 
@@ -251,7 +255,7 @@ export class Experience {
   }
   playApagon(at) {
     if (innerWidth < 700) return false; // (a phone: just the clock and the caption)
-    this.reel = this.apagonShots(at); this.reelName = 'apagon';
+    this.reel = this.apagonShots(at); this.reelName = 'apagon'; this.app.clockTime.day = MORNING;
     this.directing = true; this.app.controls.enabled = false;
     this.bars.classList.add('on'); this.skip.style.display = 'block';
     this.dock.classList.add('hidden'); // (the scene full frame: the clock's panel comes back when it ends)
@@ -261,7 +265,7 @@ export class Experience {
   }
   beginIntro() {
     this.clouds();
-    this.reel = this.shots; this.reelName = 'intro';
+    this.reel = this.shots; this.reelName = 'intro'; this.app.clockTime.day = MORNING;
     this.directing = true; this.app.controls.enabled = false;
     this.bars.classList.add('on'); this.skip.style.display = 'block';
     this.app.atmosphere.vignette.darkness = 0.55; this.app.atmosphere.grain.blendMode.opacity.value = 0.08;

@@ -447,8 +447,17 @@ const GROUND_MAIN = /* glsl */ `
       // texture's grain and relief under its colour make it ground)
       vec2 gst = st / uGroundScale[2];
       float grain = dot(texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0, vec3(0.333)) * 0.6 + dot(mix(a, b, 0.4), vec3(0.333)) * 0.4;
-      diffuseColor.rgb = photo * clamp(0.62 + 0.55 * grain, 0.6, 1.25);
-      gNm = texture(uGroundNor, vec3(gst, 2.0)).xyz * 2.0 - 1.0;
+      // Close up, the photo's five-metre pixels are smooth blots of colour, a car park's grey under the dawn sky
+      // as blue as a lagoon: there the ground is what the photo shows it to be, grass where it is green and
+      // bare, trodden ground elsewhere, in that texture, the photo's colour only its tint, and half as strong.
+      float near = 1.0 - smoothstep(60.0, 320.0, distance(vWPos, cameraPosition));
+      float veg = smoothstep(-0.005, 0.04, photo.g - max(photo.r, photo.b));
+      float pl = dot(photo, vec3(0.3, 0.59, 0.11));
+      vec2 dst = st / uGroundScale[3];
+      vec3 bare = texture(uGroundAlb, vec3(dst, 3.0)).rgb * 2.0, grass = texture(uGroundAlb, vec3(gst, 2.0)).rgb * 2.0;
+      vec3 closeUp = mix(vec3(pl), photo, 0.5) * mix(bare, grass, veg) * (0.9 + 0.2 * blotch);
+      diffuseColor.rgb = mix(photo * clamp(0.62 + 0.55 * grain, 0.6, 1.25), closeUp, near);
+      gNm = mix(texture(uGroundNor, vec3(gst, 2.0)).xyz, texture(uGroundNor, vec3(dst, 3.0)).xyz, near * (1.0 - veg)) * 2.0 - 1.0;
       gNm = normalize(vec3(gNm.xy * 0.55, gNm.z));
     }
   }
@@ -570,7 +579,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v9';
+  m.customProgramCacheKey = () => 'ground-v10';
   return m;
 }
 
