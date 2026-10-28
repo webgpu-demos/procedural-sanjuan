@@ -311,6 +311,21 @@ for (const edge of graph.edges) {
   edge.span = spans.has(edge) ? 1 : 0;  // a street-level bridge: treated as an ordinary road from here on
   edge.flyover = flyover(edge) ? 1 : 0; // carried on its own structure above the streets
 }
+// --road-levels=<roads.json>: the levels and the street-level spans of an earlier compile of the same graph, kept
+// (San Juan's: its simulated mornings were driven on them, and its expressway's structures checked shot by shot,
+// src/shared/profile.js; the 10 m grid smooths an embankment's top away, and the profile laid on the lidar ground
+// stood PR-22's approaches up to 7 m off it on walled ramps)
+if (argOf('road-levels')) {
+  const old = JSON.parse(fs.readFileSync(argOf('road-levels'), 'utf8'));
+  if (old.edges.length !== graph.edges.length) throw new Error(`--road-levels: ${old.edges.length} edges, the graph ${graph.edges.length}`);
+  graph.edges.forEach((edge, i) => {
+    const o = old.edges[i];
+    if (o.way !== edge.way || o.pts.length !== edge.ids.length * 3) throw new Error(`--road-levels: edge ${i} is not way ${edge.way} as it was`);
+    edge.span = o.span ? 1 : 0;
+    edge.ids.forEach((id, k) => level.set(id, o.pts[k * 3 + 1]));
+  });
+  log(`road levels and spans kept from ${path.relative(process.cwd(), argOf('road-levels'))} (${graph.edges.filter((e) => e.span).length} spans)`);
+}
 
 // ---------------------------------------------------------------- road surfaces
 // The streets widened to their right-of-way and the buildings cut out of them (roadsurface.mjs). A FEMA
@@ -366,9 +381,29 @@ const decks = roadsOut.edges.filter((e) => e.span).map((e) => {
   };
   return { pts: [...out(0, 3), ...p, ...out(n - 3, n - 6)], half: Math.max(1, e.lanes) * 1.65 + CORRIDOR_MARGIN };
 });
+// (and with --road-levels, the decks the earlier compile's manifest beside it holds for the same spans, their levels
+// as they were set there: tools/pipeline/reterrain.mjs moved them with the ground on either bank)
+if (argOf('road-levels')) {
+  const file = path.join(path.dirname(argOf('road-levels')), 'manifest.json');
+  const was = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).decks : null;
+  const same = was?.length === decks.length && was.every((d, k) => d.pts.length === decks[k].pts.length
+    && d.pts.every((v, i) => i % 3 === 1 || Math.abs(v - decks[k].pts[i]) < 0.02));
+  if (same) { decks.splice(0, decks.length, ...was); log(`  the ${decks.length} decks' levels kept from ${path.relative(process.cwd(), file)}`); }
+}
 // Under a road bridge the terrain model shows the bridge, not the track bed below it.
 const underBridge = (x, z) => decks.some((d) => { const p = projectOnDeck(d, x, z); return p.inside && p.dist <= d.half - CORRIDOR_MARGIN + 6; });
 const rails = profileRailways(buildRailways(osm, proj.project, inBounds), ground, inBounds, underBridge);
+// (with --road-levels, the railways' levels too, from the roads.json's area beside it: the same lines, as they were,
+// and their tunnel mouths, at the write)
+let railsWas = null;
+if (argOf('road-levels')) {
+  const file = path.join(path.dirname(argOf('road-levels')), 'rails.json');
+  const was = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+  const same = was?.length === rails.length && was.every((l, k) => l.pts.length === rails[k].pts.length
+    && l.pts.every((v, i) => i % 3 === 1 || Math.abs(v - rails[k].pts[i]) < 0.02));
+  if (same) { rails.forEach((l, k) => { for (let i = 1; i < l.pts.length; i += 3) l.pts[i] = was[k].pts[i]; }); railsWas = was; log(`  the ${rails.length} railways' levels kept from ${path.relative(process.cwd(), file)}`); }
+  else log(`  railways: ${path.relative(process.cwd(), file)} holds other lines; their levels are this compile's`);
+}
 // Record where each track crosses a building outline (a station built over the line) so the client can
 // put a tunnel mouth there: [x, y, z, dirX, dirZ], pointing in.
 let portals = 0;
@@ -794,6 +829,7 @@ if (far) fs.writeFileSync(path.join(area.outDir, far.file), Buffer.from(far.data
 const signalIds = new Set(landRaw.signals);
 roadsOut.signals = graph.nodes.map((n, i) => (signalIds.has(n.id) ? i : -1)).filter((i) => i >= 0);
 fs.writeFileSync(path.join(area.outDir, 'roads.json'), JSON.stringify(roadsOut));
+if (railsWas) rails.forEach((l, k) => { l.portals = railsWas[k].portals; });
 fs.writeFileSync(path.join(area.outDir, 'rails.json'), JSON.stringify(rails));
 fs.writeFileSync(path.join(area.outDir, 'structures.json'), JSON.stringify(extras.structures));
 fs.writeFileSync(path.join(area.outDir, 'channels.json'), JSON.stringify({ channels: chan.channels }));
