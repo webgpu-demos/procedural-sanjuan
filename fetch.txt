@@ -1,0 +1,24 @@
+   0.0s area sanjuan: bbox lat 18.29600..18.47600 lon -66.12900..-65.99100
+   0.0s dem terrarium: 266 tiles, 266 to download
+   9.5s lidar: 215 tiles listed, 15 under the area, 15 to download
+  21.4s   USGS_1M_19_x80y204_PR_PuertoRicoUSVI_D24.tif
+  23.3s   USGS_1M_19_x80y203_PR_PuertoRicoUSVI_D24.tif
+  24.7s   USGS_1M_19_x80y205_PR_PuertoRicoUSVI_D24.tif
+  34.3s   USGS_1M_19_x81y203_PR_PuertoRicoUSVI_D24.tif
+  37.5s   USGS_1M_19_x81y205_PR_PuertoRicoUSVI_D24.tif
+  48.9s   USGS_1M_20_x16y203_PR_PuertoRicoUSVI_D24.tif
+  61.8s   USGS_1M_20_x16y204_PR_PuertoRicoUSVI_D24.tif
+  66.6s   USGS_1M_20_x16y205_PR_PuertoRicoUSVI_D24.tif
+  76.8s   USGS_1M_19_x81y204_PR_PuertoRicoUSVI_D24.tif
+  80.0s   USGS_1M_20_x17y203_PR_PuertoRicoUSVI_D24.tif
+  90.5s   USGS_1M_20_x17y204_PR_PuertoRicoUSVI_D24.tif
+ 103.3s   USGS_1M_20_x18y203_PR_PuertoRicoUSVI_D24.tif
+ 105.3s   USGS_1M_20_x17y205_PR_PuertoRicoUSVI_D24.tif
+ 107.7s   USGS_1M_20_x18y205_PR_PuertoRicoUSVI_D24.tif
+ 117.0s   USGS_1M_20_x18y204_PR_PuertoRicoUSVI_D24.tif
+ 117.0s aerial photo: 266 tiles, 266 to download
+ 135.9s surroundings: 140 tiles, 140 to download
+ 144.9s fema structures: cached
+ 144.9s osm: cached
+ 145.1s garita: 60 building tiles (with ids), 120 files to get
+ 147.8s done

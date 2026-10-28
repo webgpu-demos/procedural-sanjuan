@@ -1,0 +1,11 @@
+   0.0s area sanjuan: 14576 x 19923 m around [-66.11656,18.4653]
+  17.5s   lidar USGS_1M_19_x80y203_PR_PuertoRicoUSVI_D24.tif: 325111 grid cells
+  50.0s   lidar USGS_1M_19_x80y204_PR_PuertoRicoUSVI_D24.tif: 684440 grid cells
+  63.0s   lidar USGS_1M_19_x80y205_PR_PuertoRicoUSVI_D24.tif: 183818 grid cells
+  80.4s   lidar USGS_1M_19_x81y203_PR_PuertoRicoUSVI_D24.tif: 382579 grid cells
+ 114.7s   lidar USGS_1M_19_x81y204_PR_PuertoRicoUSVI_D24.tif: 799593 grid cells
+ 128.1s   lidar USGS_1M_19_x81y205_PR_PuertoRicoUSVI_D24.tif: 203740 grid cells
+ 129.3s   lidar USGS_1M_20_x16y205_PR_PuertoRicoUSVI_D24.tif: 5 grid cells
+ 145.9s   lidar USGS_1M_20_x17y205_PR_PuertoRicoUSVI_D24.tif: 63 grid cells
+ 149.8s   lidar USGS_1M_20_x18y205_PR_PuertoRicoUSVI_D24.tif: 13 grid cells
+ 149.9s lidar grid saved to /mnt/res/lidar-grid.bin

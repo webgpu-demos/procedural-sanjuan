@@ -1,0 +1,43 @@
++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
++ git clone -q --depth 1 -b compile-inputs https://x-access-token:ghs_15368_eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRobmQiLCJjdHgiOiJ3Z2hOMDBScmhRVGwyOFhyUzFIY1g1TmRtTmVUNWVwbmpOUG1ETXhMbVVacFl0YTBWd1ZDZnh3IiwiZXhwIjoxNzkzMTY3MTMzLCJpYXQiOjE3OTMxNjM1MzMsImlzcyI6ImdpdGh1YiIsImp0aSI6ImQyNzBjMTI0LThlNTItNGE2MS04MmRjLTk5OGVmNGVlM2YxNyIsInZlciI6M30.0ZmQZn1NJhlPHMlheCLgMDPQJLrL4HjRYx_doFBTBu1FAqr8MSHFtFKiYmNKY_u_H8YUc9mt0AXoe3ZSSmU56A@github.com/webgpu-demos/procedural-sanjuan /mnt/sim/inputs
++ mkdir -p data/raw/sanjuan
++ for f in $W/inputs/sanjuan/*.gz
++ gunzip -c /mnt/sim/inputs/sanjuan/fema_structures.json.gz
+++ basename /mnt/sim/inputs/sanjuan/fema_structures.json.gz .gz
++ for f in $W/inputs/sanjuan/*.gz
++ gunzip -c /mnt/sim/inputs/sanjuan/osm.json.gz
+++ basename /mnt/sim/inputs/sanjuan/osm.json.gz .gz
++ for f in $W/inputs/sanjuan/*.gz
++ gunzip -c /mnt/sim/inputs/sanjuan/osm_buildings.json.gz
+++ basename /mnt/sim/inputs/sanjuan/osm_buildings.json.gz .gz
++ for f in $W/inputs/sanjuan/*.gz
++ gunzip -c /mnt/sim/inputs/sanjuan/osm_coast.json.gz
+++ basename /mnt/sim/inputs/sanjuan/osm_coast.json.gz .gz
++ for f in $W/inputs/sanjuan/*.gz
++ gunzip -c /mnt/sim/inputs/sanjuan/osm_extra.json.gz
+++ basename /mnt/sim/inputs/sanjuan/osm_extra.json.gz .gz
++ for f in $W/inputs/sanjuan/*.gz
++ gunzip -c /mnt/sim/inputs/sanjuan/osm_land.json.gz
+++ basename /mnt/sim/inputs/sanjuan/osm_land.json.gz .gz
++ for f in $W/inputs/sanjuan/*.gz
++ gunzip -c /mnt/sim/inputs/sanjuan/osm_poi.json.gz
+++ basename /mnt/sim/inputs/sanjuan/osm_poi.json.gz .gz
++ npm ci --no-audit --no-fund
++ node --max-old-space-size=4096 tools/pipeline/fetch.mjs --area=sanjuan
++ du -sh data/raw/sanjuan/dem data/raw/sanjuan/fema_structures.json data/raw/sanjuan/garita data/raw/sanjuan/osm.json data/raw/sanjuan/osm_buildings.json data/raw/sanjuan/osm_coast.json data/raw/sanjuan/osm_extra.json data/raw/sanjuan/osm_land.json data/raw/sanjuan/osm_poi.json data/raw/sanjuan/dem/far data/raw/sanjuan/dem/lidar data/raw/sanjuan/dem/terrarium
++ node --max-old-space-size=12000 tools/pipeline/compile.mjs --area=sanjuan --save-lidar-grid=/mnt/res/lidar-grid.bin
++ cd data/raw/sanjuan
++ tar czf /mnt/res/raw-small.tgz --exclude=dem/lidar dem garita
++ ls -la /mnt/res
+total 43016
+drwxr-xr-x 2 runner runner     4096 Oct 28 05:04 .
+drwxr-xr-x 4 root   root       4096 Oct 28 04:58 ..
+-rw-r--r-- 1 runner runner     1243 Oct 28 05:01 fetch.txt
+-rw-r--r-- 1 runner runner      824 Oct 28 05:04 grid.txt
+-rw-r--r-- 1 runner runner     2303 Oct 28 05:04 job.log
+-rw-r--r-- 1 runner runner 12016620 Oct 28 05:04 lidar-grid.bin
+-rw-r--r-- 1 runner runner      119 Oct 28 05:04 lidar-grid.bin.json
+-rw-r--r-- 1 runner runner       26 Oct 28 04:59 npm.txt
+-rw-r--r-- 1 runner runner 31996388 Oct 28 05:04 raw-small.tgz
+-rw-r--r-- 1 runner runner      310 Oct 28 05:01 sizes.txt
+exit 0 after 5 min

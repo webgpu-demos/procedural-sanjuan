@@ -1,0 +1,9 @@
+4.5G	data/raw/sanjuan/dem
+58M	data/raw/sanjuan/fema_structures.json
+18M	data/raw/sanjuan/garita
+13M	data/raw/sanjuan/osm.json
+125M	data/raw/sanjuan/osm_buildings.json
+260K	data/raw/sanjuan/osm_coast.json
+13M	data/raw/sanjuan/osm_extra.json
+12M	data/raw/sanjuan/osm_land.json
+2.8M	data/raw/sanjuan/osm_poi.json
