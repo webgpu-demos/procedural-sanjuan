@@ -33,7 +33,7 @@ import { readBuildingSources } from './buildings.mjs';
 import { readGarita } from './garita.mjs';
 import { buildSea } from './coast.mjs';
 import { buildRoadSurfaces } from './roadsurface.mjs';
-import { Tris, fort, wallGaritas, domeOn, lighthouse, cathedral, convention, encodeMesh, simplify } from './landmarks.mjs';
+import { Tris, fort, morro, uprTower, wallGaritas, domeOn, lighthouse, cathedral, convention, encodeMesh, simplify } from './landmarks.mjs';
 
 const TERRAIN_STEP_DEFAULT = 5; // metres (an area may set its own: config.mjs)
 const SEA = 0;            // the sea surface (m)
@@ -578,6 +578,9 @@ const LANDMARKS = {
   w59744985: { hint: 0xeeebe2 },                                               // the Capitol: white marble
   w255583481: { hint: 0xf1e6cc, model: 'cathedral', facing: [-1, 0] },         // San Juan Bautista, its facade on Calle del Cristo
   w196616058: { hint: 0xebeae4, model: 'convention', facing: [1, -1] },        // the Convention Center, its glass front to the boulevard
+  w561634537: { model: 'morro', land: [1, 0.25] },                             // El Morro, its landward front to the esplanade (east)
+  w464280727: { model: 'uprTower' },                                           // the UPR's Roosevelt Tower, Río Piedras
+  w72836163: { hint: 0xf3ead2, masonry: true },                                // the Baldorioty de Castro building under it (Spanish Revival)
 };
 const lmTiles = new Map();
 const lmTris = (x, z) => { const t = tileFor(x, z), k = tileKey(t.tx, t.tz); if (!lmTiles.has(k)) lmTiles.set(k, new Tris()); return lmTiles.get(k); };
@@ -592,7 +595,8 @@ const removeEntry = (b, keepForBlocks) => {
 // the forts first: the garitas on the walls keep clear of theirs
 for (const b of keptBuildings) {
   if (!(b.entry.flags & BFLAG.MASONRY)) continue;
-  const f = fort(b.polygons[0][0], ground, lmTris(b.cx, b.cz), spots);
+  const spec = LANDMARKS[b.id];
+  const f = spec?.model === 'morro' ? morro(b.polygons[0][0], ground, lmTris(b.cx, b.cz), spots, spec.land) : fort(b.polygons[0][0], ground, lmTris(b.cx, b.cz), spots);
   fortPieces.push(...f.pieces);
   removeEntry(b, true);
   lmCount.forts++;
@@ -623,6 +627,7 @@ const enclosing = (b) => { // the buildings round the middle of b
 for (const b of keptBuildings) {
   const entry = b.entry, ring = b.polygons[0][0], spec = LANDMARKS[b.id];
   if (spec?.hint) entry.hint = (0x80000000 | spec.hint | (MATERIAL.PLASTER << 24)) >>> 0;
+  if (spec?.masonry) entry.flags |= BFLAG.MASONRY;
   if (b.roof === 'dome') {
     // the walls stop a radius below the dome's top, or at the roof of the building it rises from
     const r = Math.sqrt(Math.abs(areaEN(ring)) / Math.PI), top = enclosing(b).reduce((y, o) => Math.max(y, o.base + o.height), -Infinity);
@@ -643,6 +648,10 @@ for (const b of keptBuildings) {
     }
     if (best) { cathedral(lmTris(b.cx, b.cz), ring, best, entry.base + entry.height, ground((best.ax + best.bx) / 2, (best.az + best.bz) / 2)); lmCount.models++; }
     entry.flags |= BFLAG.MASONRY; // plain walls: not an office block's window grid
+  } else if (spec?.model === 'uprTower') {
+    uprTower(lmTris(b.cx, b.cz), ring, entry.base, entry.height);
+    removeEntry(b, false); // (the model stands in its place)
+    lmCount.models++;
   } else if (spec?.model === 'convention') {
     convention(lmTris(b.cx, b.cz), ring, entry.base + entry.height, spec.facing, ground(b.cx, b.cz));
     entry.flags |= BFLAG.MASONRY; // plain panels, the glass is the model's
