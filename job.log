@@ -1,0 +1,22 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
+++ SCALE=0.6
+++ ITER=0
+++ RUNARGS='--reroute=1 --reroute-period=300'
+++ DEMANDARGS=--spread=15
+++ sh tools/sim/all.sh sanjuan
+++ code=0
+++ tr '\r' '\n'
+++ grep -v '^Warning'
+++ grep -v '^Step #'
+++ cp /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/stats.xml /mnt/res/stats-morning.xml
+++ cp /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/stats.xml /mnt/res/stats-apagon.xml
+++ mkdir -p /mnt/res/sim
+++ cp -r public/tiles/sanjuan/sim/apagon public/tiles/sanjuan/sim/buses.json public/tiles/sanjuan/sim/ferries.json public/tiles/sanjuan/sim/morning /mnt/res/sim/
+++ du -sh /mnt/res/sim/apagon /mnt/res/sim/buses.json /mnt/res/sim/ferries.json /mnt/res/sim/morning
+169M	/mnt/res/sim/apagon
+52K	/mnt/res/sim/buses.json
+4.0K	/mnt/res/sim/ferries.json
+251M	/mnt/res/sim/morning
+++ exit 0
+exit 0 after 278 min
