@@ -118,7 +118,7 @@ log(`${pois.length} places along the streets`);
 const heritage = area.heritage?.map(xz) ?? null;
 if (heritage) for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
   const x = gx0 + (i + 0.5) * GRID, z = gz0 + (j + 0.5) * GRID;
-  if (inRings(x, z, [heritage])) deposit(PROFILE.SIGHTS, x, z, 150);
+  if (inRings(x, z, [heritage])) deposit(PROFILE.SIGHTS, x, z, 250);
 }
 // spread: a few passes of a box blur (about a Gaussian of 45 m): what is round the corner counts too
 function blur(g, r) {
@@ -483,7 +483,7 @@ const raw_ = (l) => {
 // a block brings fewer people than the first): MAX (1 - exp(-raw / R)). Old San Juan's Calle Fortaleza comes to
 // some 20 at its busiest, Ashford in the Condado about 10, Ponce de León in the Milla de Oro about 6, a street of
 // houses well under one.
-const MAX = [12, 10, 22, 10, 10, 4, 1, 6, 8], R = [900, 250, 600, 300, 400, 200, 400, 300, 200];
+const MAX = [12, 14, 28, 10, 10, 4, 1, 6, 8], R = [900, 250, 600, 300, 400, 200, 400, 300, 200];
 const KIND_FACTOR = { [KIND.SIDEWALK]: 1, [KIND.CORNER]: 1, [KIND.CROSSING]: 0, [KIND.FOOTWAY]: 0.8, [KIND.PATH]: 0.5, [KIND.STEPS]: 0.6, [KIND.PEDESTRIAN]: 2.2, [KIND.ROADSIDE]: 1, [KIND.LINK]: 0.5, [KIND.MEDIAN]: 0 };
 for (const l of links) {
   const r = raw_(l), f = KIND_FACTOR[l.kind] ?? 1;

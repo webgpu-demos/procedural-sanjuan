@@ -96,23 +96,33 @@ varying vec4 vLook;
 flat varying float vLayer;`;
 // (a person fading in or out: a dither, as the cars do)
 const FADE = 'if (vLook.a < 0.999 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) > vLook.a) discard;';
+// Their shadows. The sun's depth bias (environment.js: -0.0003 of a 3,990 m depth range, some 1.2 m, against acne on
+// the buildings' and the terrain's large faces) is more than a person is deep, so a person would cast nothing: in the
+// sun's depth pass a person stands nearer the sun by PUSH (more than the bias), and where a person takes shadow its
+// sample is moved toward the sun by LIFT (more than PUSH less the bias), so a person does not shade itself; the cost,
+// people a step apart do not shade each other.
+export const SHADOW = { push: { value: 1.35 }, lift: { value: 1.0 }, range: { value: 3990 } };
+const SHADOW_LIFT = THREE.ShaderChunk.shadowmap_vertex.replace(
+  'shadowWorldPosition = worldPosition + vec4( shadowWorldNormal * directionalLightShadows[ i ].shadowNormalBias, 0 );',
+  'shadowWorldPosition = worldPosition + vec4( shadowWorldNormal * directionalLightShadows[ i ].shadowNormalBias + uSunDir * uShadowLift, 0 );');
 
 function personMaterial(cutout, textures) {
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0, side: cutout ? THREE.DoubleSide : THREE.FrontSide });
+  const m = new THREE.MeshStandardMaterial({ roughness: cutout ? 0.95 : 0.82, metalness: 0, side: cutout ? THREE.DoubleSide : THREE.FrontSide, envMapIntensity: cutout ? 0.4 : 1 });
   m.defines = { USE_UV: '', LAMP_SIDES: '' };
   m.onBeforeCompile = (shader) => {
     lampUniforms(shader); shader.uniforms.uNight = shared.uNight;
-    Object.assign(shader.uniforms, textures);
+    Object.assign(shader.uniforms, textures, { uSunDir: shared.uSunDir, uShadowLift: SHADOW.lift });
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
+      .replace('#include <common>', `#include <common>\n${VERT_PARS}\nuniform vec3 uSunDir;\nuniform float uShadowLift;`)
       .replace('#include <skinbase_vertex>', VERT_SKIN)
       .replace('#include <skinnormal_vertex>', 'objectNormal = (skinM * vec4(objectNormal, 0.0)).xyz;')
-      .replace('#include <skinning_vertex>', 'transformed = (skinM * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <skinning_vertex>', 'transformed = (skinM * vec4(transformed, 1.0)).xyz;')
+      .replace('#include <shadowmap_vertex>', SHADOW_LIFT);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uNight;`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FADE}`)
       // (at night a little of the city's glow along their edges, as the one you are has: a figure reads against the dark street)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += 0.5 * ${HERO_RIM} + diffuseColor.rgb * 0.035 * uNight;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += 0.5 * ${HERO_RIM} + diffuseColor.rgb * 0.08 * uNight;`)
       // the atlas: skin marked in alpha (0.75) takes the person's tone; the cutout keeps its own alpha (coverage)
       .replace('#include <map_fragment>', cutout
         ? 'vec4 texel = texture(uAtlas, vec3(vUv, vLayer)); if (texel.a < 0.5) discard; diffuseColor.rgb *= texel.rgb;'
@@ -120,24 +130,26 @@ function personMaterial(cutout, textures) {
       // (opaque: the alpha channel marks mirrors for the reflections, src/world/reflections.js)
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0;');
   };
-  m.customProgramCacheKey = () => (cutout ? 'people-cut-v1' : 'people-v1');
+  m.customProgramCacheKey = () => (cutout ? 'people-cut-v2' : 'people-v2');
   return m;
 }
 function personDepth(cutout, textures) {
   const m = new THREE.MeshDepthMaterial();
   m.defines = { USE_UV: '' };
   m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, textures);
+    Object.assign(shader.uniforms, textures, { uShadowPush: SHADOW.push, uShadowRange: SHADOW.range });
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
+      .replace('#include <common>', `#include <common>\n${VERT_PARS}\nuniform float uShadowPush, uShadowRange;`)
       .replace('#include <skinbase_vertex>', VERT_SKIN)
       .replace('#include <skinnormal_vertex>', '')
-      .replace('#include <skinning_vertex>', 'transformed = (skinM * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <skinning_vertex>', 'transformed = (skinM * vec4(transformed, 1.0)).xyz;')
+      // (the sun's camera is orthographic: depth is linear over its range)
+      .replace('#include <project_vertex>', '#include <project_vertex>\ngl_Position.z -= 2.0 * uShadowPush / uShadowRange * gl_Position.w;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FADE}\n${cutout ? 'if (texture(uAtlas, vec3(vUv, vLayer)).a < 0.5) discard;' : ''}`);
   };
-  m.customProgramCacheKey = () => (cutout ? 'people-depth-cut-v1' : 'people-depth-v1');
+  m.customProgramCacheKey = () => (cutout ? 'people-depth-cut-v2' : 'people-depth-v2');
   return m;
 }
 
@@ -365,6 +377,7 @@ export class People {
   constructor(walks, manifest, models, surface, lift, renderer) {
     Object.assign(this, { walks, manifest, models, surface, lift, renderer });
     this.group = new THREE.Group(); this.group.name = 'people';
+    this.shadow = SHADOW; // (their shadows' offsets, in metres: __app.people.shadow)
     this.people = []; this.free = Array.from({ length: POOL }, (_, i) => POOL - 1 - i);
     this.density = 1; this.enabled = true; this.ready = false;
     this.stats = { people: 0, drawn: 0, target: 0 };
@@ -458,11 +471,21 @@ export class People {
       ['clinic', share(P.HEALTH) / all > 0.25 ? 0.8 * share(P.HEALTH) / all : 0], // (near a hospital or a clinic, not across town)
       ['work', 0.03],
       ['running', (dawnOrDusk ? 0.3 : 0.03) * (0.05 + share(P.LEISURE) / all) + (dawnOrDusk ? 0.01 : 0)],
-      ['beach', day && share(P.LEISURE) / all > 0.5 ? 0.5 : 0],
+      ['beach', day && share(P.LEISURE) / all > 0.5 && w[P.LEISURE] > 3 ? 0.4 : 0], // (the streets along the sand and its paths, about a tenth of the beach's walks; not a block away)
     ]);
   }
   // (each by its weight: dressed for the heat more often than for an air-conditioned office)
-  avatarFor(role) { const list = this.byRole.get(role) ?? this.byRole.get('everyday'); return weighted(list.map((a) => [a, a.weight ?? 1])); }
+  // (by its weight: dressed for the heat more often than for an air-conditioned office; fair-haired ones less often
+  // away from where visitors are; not the one just picked, nor one of the same group)
+  avatarFor(role, w, avoid = null) {
+    const list = this.byRole.get(role) ?? this.byRole.get('everyday'), h = this.hour;
+    const visitors = w ? (w[P.SIGHTS] * dayShare(P.SIGHTS, h)) / (this.rateOf({ w }, h) || 1) : 0;
+    this.recent ??= [];
+    const options = list.map((a) => [a, (a.weight ?? 1) * (a.fairHair ? 0.35 + 0.65 * visitors : 1) * (avoid?.has(a) ? 0 : this.recent.includes(a) ? 0.15 : 1)]);
+    const a = options.some(([, x]) => x > 0) ? weighted(options) : pick(list);
+    this.recent.push(a); if (this.recent.length > 6) this.recent.shift();
+    return a;
+  }
   toneFor(a, w, h) {
     // fair-skinned avatars take a tone of San Juan's (tourists in the old city and the Condado more often stay fair)
     if (!a.tint) return [1, 1, 1];
@@ -495,7 +518,7 @@ export class People {
     leader.heading = leader.headingTo;
     let n = 1;
     for (let k = 0; k < company; k++) {
-      const f = this.person(kids && k === 0 ? 'child' : role, l.w);
+      const f = this.person(kids && k === 0 ? 'child' : role, l.w, new Set([leader, ...(leader.followers ?? [])].map((q) => q.avatar)));
       if (!f) break;
       Object.assign(f, { state: 'follow', leader, rank: k + 1, link: l, dir, u: leader.u, pace: leader.pace, born: now, fade: leader.fade, x: leader.x, z: leader.z, heading: leader.heading, clipA: leader.clipA, cycle: leader.cycle, phase: (leader.phase + 0.5) % 1 });
       leader.followers = (leader.followers ?? []).concat(f);
@@ -503,9 +526,9 @@ export class People {
     }
     return n;
   }
-  person(role, w) {
+  person(role, w, avoid = null) {
     if (!this.free.length) return null;
-    const a = this.avatarFor(role === 'child' ? 'child' : role);
+    const a = this.avatarFor(role === 'child' ? 'child' : role, w, avoid);
     if (!a) return null;
     const p = { slot: this.free.pop(), avatar: a, role, clips: a.clips, tone: this.toneFor(a, w, this.hour), scale: role === 'child' ? 1 : 0.95 + rnd() * 0.09,
       x: 0, y: null, z: 0, heading: 0, lat: 0, speed: 0, v: 0, phase: rnd(), clipA: 'idle', clipB: null, phaseB: 0, blend: 0, fade: 0, out: false, lod: -1 };
@@ -524,8 +547,9 @@ export class People {
     const n = kind === SPOT.BUS ? 1 + Math.floor(rnd() * 3) : kind === SPOT.SHELTER ? 1 + Math.floor(rnd() * 2) : kind === SPOT.BENCH ? 1 + (rnd() < 0.3 ? 1 : 0) : 2 + (rnd() < 0.35 ? 1 : 0);
     const role = kind === SPOT.FRONT && rnd() < 0.08 ? 'security' : this.roleFor(s.w, h);
     let made = 0;
+    const here = new Set();
     for (let k = 0; k < n; k++) {
-      const p = this.person(k === 0 && role === 'security' ? 'security' : role === 'running' || role === 'beach' ? 'everyday' : role, s.w);
+      const p = this.person(k === 0 && role === 'security' ? 'security' : role === 'running' || role === 'beach' ? 'everyday' : role, s.w, here);
       if (!p) break;
       let ox = 0, oz = 0, heading = s.heading, clip;
       if (kind === SPOT.BENCH || kind === SPOT.SHELTER) {
@@ -533,15 +557,19 @@ export class People {
         const along = (k - (n - 1) / 2) * 0.65, c = Math.cos(s.heading), si = Math.sin(s.heading);
         ox = c * along + si * 0.12; oz = -si * along + c * 0.12; clip = 'sit';
       } else if (kind === SPOT.BUS) {
-        const along = (k - (n - 1) / 2) * 1.1 + (rnd() - 0.5) * 0.4, c = Math.cos(s.heading), si = Math.sin(s.heading);
-        ox = c * along; oz = -si * along; heading += (rnd() - 0.5) * 1.2; clip = weighted([['wait', 3], ['text', 2], ['idle', 2], ['look', 1], ['call', 1]]);
+        // a loose knot by the sign: along the kerb and back from it, turned this way and that (some looking up the
+        // street for the bus)
+        const along = (rnd() - 0.5) * 3.2, back = -0.2 - rnd() * 1.1, c = Math.cos(s.heading), si = Math.sin(s.heading);
+        ox = c * along + si * back; oz = -si * along + c * back; heading += (rnd() < 0.35 ? (rnd() < 0.5 ? 1 : -1) * 1.4 : 0) + (rnd() - 0.5) * 1.1;
+        clip = weighted([['wait', 3], ['idle', 2], ['look', 2], ['call', 1]]);
       } else {
         // a few standing round, facing in, talking
         const a = (k / n) * Math.PI * 2 + rnd() * 0.5, r = 0.55 + rnd() * 0.15;
-        ox = Math.sin(a) * r; oz = Math.cos(a) * r; heading = a + Math.PI; clip = role === 'security' && k === 0 ? 'wait' : weighted([['talk', 3], ['idle', 1], ['text', 1], ['call', 0.5]]);
+        ox = Math.sin(a) * r; oz = Math.cos(a) * r; heading = a + Math.PI; clip = role === 'security' && k === 0 ? 'wait' : weighted([['talk', 4], ['idle', 1], ['call', 0.4]]);
         if (role === 'security' && k === 0) { ox = oz = 0; heading = s.heading; }
       }
       if (!p.clips[clip]) clip = 'idle';
+      here.add(p.avatar);
       Object.assign(p, { state: 'still', spot: s, x: s.x + ox, z: s.z + oz, heading, clipA: clip, phase: rnd(), until: now + 40 + rnd() * 240, born: now, fade: fill ? 1 : 0, link: s.link });
       made++;
     }
@@ -718,7 +746,7 @@ export class People {
     } else {
       // pace: its own, or the one in front's when close
       let target = p.speed;
-      if (p.ahead) { const gap = p.ahead.gap - 0.9; target = Math.min(target, Math.max(0, gap) * 1.2, gap < 1.6 ? p.ahead.p.v + 0.1 : target); }
+      if (p.ahead) { const gap = p.ahead.gap - 1.2; target = Math.min(target, Math.max(0, gap) * 1.2, gap < 1.4 ? p.ahead.p.v + 0.05 : target); }
       // the one you are (walking, cycling): stepped round, not walked through
       const pl = this.player;
       if (pl) {
@@ -731,7 +759,7 @@ export class People {
         // at a node: on to the next link (and at a crossing, first wait)
         const node = p.dir > 0 ? l.b : l.a, next = this.nextLink(p, node, l);
         if (!next) { p.dir = -p.dir; p.u = 0; }
-        else if (next[0].kind === KIND.CROSSING && p.state !== 'cross') { p.u = l.len; p.state = 'wait'; p.next = next; p.waitFrom = now; p.v = 0; this.switchClip(p, weighted([['wait', 2], ['idle', 2], ['look', 1], ['text', 1]])); }
+        else if (next[0].kind === KIND.CROSSING && p.state !== 'cross') { p.u = l.len; p.state = 'wait'; p.next = next; p.waitFrom = now; p.v = 0; this.switchClip(p, weighted([['wait', 2], ['idle', 2], ['look', 1]])); }
         else { const over = p.u - l.len; this.enter(p, next[0], next[1]); p.u = Math.min(over, p.link.len); p.state = 'walk'; }
       }
     }
