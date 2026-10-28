@@ -130,8 +130,11 @@ lidar takes its ground with `node tools/pipeline/reterrain.mjs --area=<id>`, wit
 rebased by the compiler's rule; signs, landmarks, roads, railways, footbridges and decks moved with the ground;
 roads keep the levels a simulation drove in `pts0` (the manifest says `terrain.lidar.applied` and `reterrained`).
 San Juan, which had it so, is compiled on the lidar again: its road graph comes out the same (every node and line
-where it was, the lanes as painted), so its simulated mornings still drive on it. What stands or drives on the
-ground takes the same triangles the tiles draw it with (`src/shared/terrain.js` `meshHeight`).
+where it was, the lanes as painted), so its simulated mornings still drive on it, and `--road-levels=<roads.json>`
+keeps the levels of the roads, the street-level decks and the railways from the compile before (checked shot by
+shot; a profile laid on the 10 m lidar grid, which smooths an embankment's top away, stood PR-22's approaches up
+to 7 m off it on walled ramps). What stands or drives on the ground takes the same triangles the tiles draw it with
+(`src/shared/terrain.js` `meshHeight`).
 The terrain tiles carry bathymetry offshore; the compiler flattens the sea to 0 m inside the coastline,
 levels lagoons and ponds at their lowest shore, and keeps dry land above the sea.
 
