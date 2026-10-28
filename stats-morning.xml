@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-10-28T00:32:52.057255+00:00 by Eclipse SUMO sumo 1.28.0
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz"/>
+        <route-files value="/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/buses.xml"/>
+        <additional-files value="/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml"/>
+    </input>
+
+    <output>
+        <fcd-output value="/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/fcd.csv.gz"/>
+        <fcd-output.attributes value="x,y,z"/>
+        <tripinfo-output value="/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/tripinfo.xml"/>
+        <tripinfo-output.write-unfinished value="true"/>
+        <statistic-output value="/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/stats.xml"/>
+        <save-state.times value="20700.0"/>
+        <save-state.files value="/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/state_20700.xml.gz"/>
+        <save-state.rng value="true"/>
+    </output>
+
+    <time>
+        <begin value="16200.0"/>
+        <end value="36900.0"/>
+    </time>
+
+    <processing>
+        <ignore-junction-blocker value="15"/>
+        <ignore-route-errors value="true"/>
+        <time-to-teleport value="240"/>
+        <max-depart-delay value="900"/>
+        <lanechange.duration value="2.5"/>
+        <time-to-impatience value="90"/>
+    </processing>
+
+    <routing>
+        <routing-algorithm value="astar"/>
+        <device.rerouting.probability value="0.25"/>
+        <device.rerouting.period value="300"/>
+        <device.rerouting.threads value="4"/>
+    </routing>
+
+    <report>
+        <no-warnings value="true"/>
+        <duration-log.statistics value="true"/>
+        <step-log.period value="900"/>
+    </report>
+
+</sumoConfiguration>
+-->
+
+<statistics xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/statistic_file.xsd">
+    <performance clockBegin="1793147573.11" clockEnd="1793154779.68" clockDuration="7206.57" traciDuration="146.90" realTimeFactor="2.87" vehicleUpdatesPerSecond="52302.15" personUpdatesPerSecond="0.00" begin="16200.00" end="36900.00" duration="20700.00"/>
+    <vehicles loaded="202402" inserted="194287" running="29441" waiting="1"/>
+    <teleports total="25745" jam="13296" yield="10208" wrongLane="2079"/>
+    <safety collisions="162" emergencyStops="0" emergencyBraking="70"/>
+    <persons loaded="0" running="0" jammed="0"/>
+    <personTeleports total="0" abortWait="0" wrongDest="0"/>
+    <vehicleTripStatistics count="194287" routeLength="8374.72" speed="8.80" duration="1940.01" waitingTime="1136.14" timeLoss="1369.26" departDelay="22.50" departDelayWaiting="901.00" totalTravelTime="376918646.00" totalDepartDelay="4373004.00"/>
+    <pedestrianStatistics number="0" routeLength="0.00" duration="0.00" timeLoss="0.00"/>
+    <rideStatistics number="0"/>
+    <transportStatistics number="0"/>
+</statistics>
