@@ -1,0 +1,79 @@
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (3712ms).
+Loading additional-files from '/mnt/sim/diag/ed.add.xml' ... done (44ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml' ... done (8ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml' ... done (4ms).
+Loading route-files incrementally from '/mnt/sim/pre/trips_009.rou.xml.gz'
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+Step #16200.00 (148ms ~= 6.76*RT, ~0.00UPS, vehicles TOT 0 ACT 0 BUF 0)                   
+Step #17100.00 (14ms ~= 71.43*RT, ~42714.29UPS, vehicles TOT 819 ACT 598 BUF 0)           
+Step #18000.00 (20ms ~= 50.00*RT, ~44550.00UPS, vehicles TOT 2007 ACT 891 BUF 6)          
+Step #18900.00 (37ms ~= 27.03*RT, ~54675.68UPS, vehicles TOT 4711 ACT 2023 BUF 0)         
+Step #19800.00Warning: Vehicle '5926' could not finish continuous lane change (lane disappeared) time=19800.00.
+ (44ms ~= 22.73*RT, ~58045.45UPS, vehicles TOT 7841 ACT 2554 BUF 3)         
+Step #20700.00 (49ms ~= 20.41*RT, ~59795.92UPS, vehicles TOT 11440 ACT 2930 BUF 3)        
+Step #21600.00 (56ms ~= 17.86*RT, ~58625.00UPS, vehicles TOT 15193 ACT 3283 BUF 3)        
+Step #22500.00 (86ms ~= 11.63*RT, ~69023.26UPS, vehicles TOT 22171 ACT 5936 BUF 3)        
+Step #23400.00 (106ms ~= 9.43*RT, ~70660.38UPS, vehicles TOT 29915 ACT 7490 BUF 112)      
+Step #24300.00 (122ms ~= 8.20*RT, ~70303.28UPS, vehicles TOT 37818 ACT 8577 BUF 557)      
+Step #25200.00 (134ms ~= 7.46*RT, ~74858.21UPS, vehicles TOT 46874 ACT 10031 BUF 915)     
+Step #26100.00 (211ms ~= 4.74*RT, ~79886.26UPS, vehicles TOT 63799 ACT 16856 BUF 721)     
+Step #27000.00Warning: Teleporting vehicle '27085'; waited too long (jam), lane='e26077_0', time=27000.00.
+ (270ms ~= 3.70*RT, ~87792.59UPS, vehicles TOT 83733 ACT 23704 BUF 809)     
+Step #27900.00Warning: Teleporting vehicle '83143'; waited too long (jam), lane=':n18270_0_2', time=27900.00.
+ (282ms ~= 3.55*RT, ~90500.00UPS, vehicles TOT 97695 ACT 25521 BUF 729)     
+Step #28800.00Warning: Teleporting vehicle '41817'; waited too long (wrong lane), lane='e23665_2', time=28800.00.
+ (278ms ~= 3.60*RT, ~94482.01UPS, vehicles TOT 107526 ACT 26266 BUF 874)    
+Step #29700.00Warning: Teleporting vehicle '107569'; waited too long (yield), lane='r11482_0', time=29700.00.
+ (281ms ~= 3.56*RT, ~98359.43UPS, vehicles TOT 116161 ACT 27639 BUF 1030)   
+Step #30600.00Warning: Vehicle '49634' ends teleporting on edge 'r26246', time=30600.00.
+ (295ms ~= 3.39*RT, ~99749.15UPS, vehicles TOT 124766 ACT 29426 BUF 1077)   
+Step #31500.00Warning: Teleporting vehicle '98461'; waited too long (jam), lane='e15171_0', time=31500.00.
+ (287ms ~= 3.48*RT, ~103324.04UPS, vehicles TOT 130790 ACT 29654 BUF 1007)  
+Step #32400.00 (292ms ~= 3.42*RT, ~104109.59UPS, vehicles TOT 136377 ACT 30400 BUF 714)   
+
+Simulation ended at time: 32400.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 2451.69s
+ Real time factor: 6.60768
+ UPS: 87640.508416
+Vehicles:
+ Inserted: 136377 (Loaded: 144187)
+ Running: 30400
+ Waiting: 714
+ Teleports: 11870 (Collisions: 113, Jam: 6186, Yield: 4268, Wrong Lane: 1303)
+ Emergency Braking: 33
+Statistics (avg of 105977):
+ RouteLength: 8508.32
+ Speed: 10.79
+ Duration: 1030.61
+ WaitingTime: 341.71
+ TimeLoss: 490.45
+ DepartDelay: 3.08
+AStarRouter answered 26539 queries and explored 158.32 edges on average.
+AStarRouter spent 4.56s answering queries (0.17ms on average).
+	Command being timed: "/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -r /mnt/sim/pre/trips_009.rou.xml.gz,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml --additional-files /mnt/sim/diag/ed.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml --begin 16200 --end 32400 --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --statistic-output /mnt/res/stats.xml --summary-output /mnt/sim/diag/summary.xml --summary-output.period 60 --log /mnt/sim/diag/sumo.log --duration-log.statistics --step-log.period 900"
+	User time (seconds): 2456.18
+	System time (seconds): 1.36
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 40:57.72
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1441140
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 9
+	Minor (reclaiming a frame) page faults: 359119
+	Voluntary context switches: 21
+	Involuntary context switches: 17102
+	Swaps: 0
+	File system inputs: 2680
+	File system outputs: 274640
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
