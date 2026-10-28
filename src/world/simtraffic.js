@@ -443,7 +443,7 @@ export class SimTraffic {
     const counts = this.fleets.map(() => 0);
     let mid = 0, lights = 0, active = 0, nearSpeed = 0, nearStopped = 0, nearN = 0;
     const m = this.m.elements, night = shared.uNight.value;
-    this.view = null; this.probeHits.length = 0; this.nearby.length = 0;
+    this.view = null; this.probeHits.length = 0; this.nearby.length = 0; (this.cars ??= []).length = 0;
     // A seen car's height follows the street exactly, but a step of more than half a metre from one frame to the
     // next (onto a deck, off it) is eased over a tenth of a second, or at the speed of the opening the car would
     // hop. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
@@ -556,6 +556,7 @@ export class SimTraffic {
       }
       if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], ground, deck, shown, heading, spec);
       if (d2 < 320 * 320) this.nearby.push([p[0], p[2]]); // (for the minimap)
+      if (d2 < 420 * 420) this.cars.push(p[0], p[2], heading, speed); // (for the people waiting to cross: src/world/people.js)
       if (d2 < 250 * 250) { nearN++; nearSpeed += speed; if (speed < 0.5) nearStopped++; }
       // near: the model; across the band at its edge it dissolves into the box, which stands in from there out
       const d = Math.sqrt(d2), near = this.near, handover = followed ? 0 : smooth(near - BAND, near, d);

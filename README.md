@@ -41,6 +41,16 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
 - **Traffic**: the simulated morning (below): every car a trip SUMO drove, with its brake lights, its
   lamps on the road at dawn, the signal heads showing the simulation's own lights. Outside the simulated
   hours, compacts, sedans, SUVs, pickups, delivery trucks and AMA buses drive around the camera.
+- **People on foot** (`people.js`): the sidewalks, crossings, footways and plazas walked by as many people as would be
+  there at that hour (below), each one of 38 of Microsoft's [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox)
+  avatars (MIT), chosen for a San Juan street: everyday clothes for the heat, office clothes in the Milla de Oro, a
+  clinic's whites and scrubs, runners on the promenades at dawn, swimwear by the beach, children with a grown-up; not
+  the library's winter clothes, other countries' uniforms, or headscarves and robes. Most of the library is fair;
+  the same avatar is drawn with a skin tone of San Juan's (fair to dark brown) by a mask of its skin in its atlas.
+  They keep right, slow behind the one in front, wait at a crossing for the simulation's lights and for a gap in the
+  cars, stand at bus stops and shop doors, talk in twos and threes, sit on benches; couples, friends and families
+  walk together. All of them are two draws (`THREE.BatchedMesh`), skinned on the GPU from a texture of every clip's
+  poses, in three levels of detail.
 - **Surroundings** (`far.js`): beyond the area, the rest of the island out to the horizon (the far shore of
   the bay, Cataño, Guaynabo, the mountains) as coarse terrain under a low-resolution aerial photo, over the sea.
 - **The city from afar at night** (`nightroads.js`, `far.js`): the streets of the whole area drawn into a map of light the
@@ -252,6 +262,36 @@ npm run sim:all                      # demand, buses, routes, the morning and th
 What it is not: real cars. The trips are drawn from survey data and simulated; they are checked against
 counts, not recorded from traffic.
 
+## Where people walk (`tools/pipeline/walkways.mjs`, `tools/assets/`)
+
+```
+node tools/pipeline/walkways.mjs --area=<id>                  # the walks of a compiled area -> public/tiles/<id>/walks*
+python tools/assets/crowd.py <Rocketbox Assets> <avatar> f|m <out> <id>   # an avatar for the crowd (Blender's bpy)
+node tools/assets/crowd_pack.mjs <out>                        # -> public/models/people/crowd/ (gltfpack)
+```
+
+- **The network**: every street's sidewalks, measured on the compiled tiles (from the centreline out to the kerb,
+  then across the paving), the corners where neighbouring streets' sidewalks meet, a crossing across each street's
+  mouth at a junction (on OSM's zebra where it maps one; at the lights where the junction has them), OSM's
+  mid-block crossings, its footways, paths, steps and pedestrian streets (their loose ends joined to the nearest
+  walk). A street of houses without a sidewalk is walked at its edge; the inner side of a divided road is a median,
+  crossed, not walked. Old San Juan's narrow streets are walked as streets.
+- **How many**: from what stands along each stretch (OSM's shops, cafés, bars, offices, schools, clinics, sights and
+  bus stops; the floor area of the buildings by their use; the beach; the historic district), as people per 100 m
+  at the busiest hour of each kind (shops, offices, sights, bars, schools, buses, homes, clinics, the beach and the
+  parks), each kind with its own day (`src/world/people.js` `DAY`). An estimate, scaled to a few places: about 20 on
+  Calle Fortaleza at its busiest, 10 on Ashford, 6 on the Milla de Oro, under one on a street of houses. Not a count.
+- **Where they stop**: bus stops (and their shelters' benches), benches, shop doors and cafés, bars at night.
+- In blocks of 1 km (`walks/<x>_<z>.bin`, listed in `walks.json`), loaded round the view. `npm run walks -- --area=<id>`
+  after a compile (which clears the area's folder). A bridge's sidewalks, which the tiles do not pave (the deck is
+  drawn on its own), are put where the street's would be; footbridges are left out (people would walk under them).
+  The municipality's walks come in a few large pieces (the expressways and the bay part them).
+- **The people** (`public/models/people/README.md`): `crowd.py` cuts a Rocketbox avatar's skeleton to the 22 bones a
+  walk moves, makes its three levels of detail and its atlas (`crowd_atlas.py`: the skin found by its colour against
+  the face's and the hair's, and marked in alpha), and retargets the clips; `crowd_pack.mjs` keeps one set of clips for
+  the women and one for the men (the retargeting gives every avatar of either the same rotations) and compresses the
+  rest. In the client every avatar's every clip is baked into the pose texture on its own skeleton.
+
 ## Publishing
 
 ```
@@ -277,6 +317,7 @@ World frame: metres, x east, y up (above mean sea level), z south; the origin is
 | `roads.json` | road graph: junction nodes `[x, y, z]`, edges with polylines (road level per point) and OSM attributes |
 | `rails.json` | surface and elevated railway polylines |
 | `structures.json` | footbridges, station platforms and canopies |
+| `walks.json`, `walks/<x>_<z>.bin` | where people walk, in blocks of 1 km: sidewalks, corners, crossings, footways; people per 100 m by kind of day; bus stops, benches, shop doors (`tools/pipeline/walkways.mjs`) |
 | `channels.json` | rivers, canals, streams and ditches: per stretch its kind, width, end flags and line with the water's level (`tools/pipeline/channels.mjs`) |
 
 `src/shared/` is used by both the compiler and the client.
@@ -286,4 +327,4 @@ World frame: metres, x east, y up (above mean sea level), z south; the origin is
 Buildings, roads, coastline and places: © OpenStreetMap contributors (ODbL); a redistributed compiled area
 is a derived database under the ODbL. Building heights: FEMA / ORNL USA Structures (public domain).
 Elevation: USGS 3DEP via the AWS Terrain Tiles. Aerial photo: USGS The National Map (public domain).
-Textures: Poly Haven (CC0). Trees: ez-tree (MIT). Original city engine: procedural-tokyo.
+Textures: Poly Haven (CC0). Trees: ez-tree (MIT). People: Microsoft Rocketbox (MIT; `public/models/people/README.md`). Original city engine: procedural-tokyo.

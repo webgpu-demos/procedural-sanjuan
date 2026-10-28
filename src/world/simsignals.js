@@ -10,7 +10,7 @@ const STATE = { G: 0, g: 0, y: 1, Y: 1, r: 2, R: 2, u: 2, s: 2, o: 3, O: 3, w: 3
 export class SimSignals {
   // signals: signals.json; roads: roads.json (the edges SUMO's "e<i>" / "r<i>" are made from)
   constructor(signals, roads) {
-    this.links = signals.links; this.timeline = signals.timeline;
+    this.links = signals.links; this.timeline = signals.timeline; this.roads = roads;
     this.heads = [];              // slot -> { tl, link } or null
     this.data = new Uint8Array(SIZE * 32);
     this.texture = new THREE.DataTexture(this.data, SIZE, 32, THREE.RedFormat, THREE.UnsignedByteType);
@@ -53,6 +53,27 @@ export class SimSignals {
     if (!this.timeline[tl]) return -1;
     this.heads.push({ tl, link });
     return this.heads.length - 1;
+  }
+
+  // The lights for the traffic arriving at road node `node` along roads.json edge `edge` at time T (for people
+  // waiting to cross it, src/world/people.js): 'g' going (green, yellow), 'r' stopped, 'o' dark (no power), or null
+  // where the simulation has no light for it (or no traffic arrives that way: a one-way leaving the junction)
+  approach(edge, node, T) {
+    const e = this.roads.edges[edge];
+    if (!e) return null;
+    const atB = e.b === node;
+    if (atB ? e.oneway === -1 : e.oneway === 1) return null;
+    const id = atB || e.oneway === -1 ? `e${edge}` : `r${edge}`;
+    const links = this.links[id] ?? Object.entries(this.links).find(([k]) => k.startsWith(id + '-'))?.[1];
+    if (!links?.length) return null;
+    const [tl, link] = links.find((l) => l[2] === 's') ?? links[0], line = this.timeline[tl];
+    if (!line) return null;
+    const { states, changes } = line;
+    let k = this.cursor.get(tl) ?? 0;
+    while (k < changes.length - 1 && changes[k + 1][0] <= T) k++;
+    while (k > 0 && changes[k][0] > T) k--;
+    const st = STATE[states[changes[k][1]][link]] ?? 2;
+    return st === 3 ? 'o' : st === 2 ? 'r' : 'g';
   }
 
   // Another run of the same network (the apagón): the same heads and links, another history of the lights.

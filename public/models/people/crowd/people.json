@@ -1,0 +1,923 @@
+{
+ "version": 1,
+ "groups": [
+  {
+   "id": "m",
+   "move": "m-move.glb",
+   "still": "m-still.glb",
+   "members": [
+    "m01",
+    "m06",
+    "m07",
+    "m08",
+    "m09",
+    "m11",
+    "m12",
+    "m14",
+    "m16",
+    "wm1",
+    "bm2",
+    "bm5",
+    "bm6",
+    "bm7",
+    "nm1",
+    "dm3",
+    "sm1",
+    "cm4",
+    "cm7",
+    "jm4",
+    "bchm",
+    "km1",
+    "km2"
+   ]
+  },
+  {
+   "id": "f",
+   "move": "f-move.glb",
+   "still": "f-still.glb",
+   "members": [
+    "f01",
+    "f02",
+    "f03",
+    "f05",
+    "f08",
+    "f13",
+    "f17",
+    "fp2",
+    "bf1",
+    "bf2",
+    "bf4",
+    "nf1",
+    "df2",
+    "jf2",
+    "bchf",
+    "kf1"
+   ]
+  }
+ ],
+ "avatars": [
+  {
+   "id": "m01",
+   "source": "Male_Adult_01",
+   "sex": "m",
+   "roles": [
+    "everyday"
+   ],
+   "group": "m",
+   "skin": [
+    63.3,
+    14.5,
+    21.2
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1.2,
+   "triangles": {
+    "LOD0": 5694,
+    "LOD1": 2094,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "f01",
+   "source": "Female_Adult_01",
+   "sex": "f",
+   "roles": [
+    "everyday"
+   ],
+   "group": "f",
+   "skin": [
+    66.4,
+    15.8,
+    23.8
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5868,
+    "LOD1": 2268,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "f02",
+   "source": "Female_Adult_02",
+   "sex": "f",
+   "roles": [
+    "everyday"
+   ],
+   "group": "f",
+   "skin": [
+    66,
+    17.8,
+    25
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 0.15,
+   "triangles": {
+    "LOD0": 5492,
+    "LOD1": 1892,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "f03",
+   "source": "Female_Adult_03",
+   "sex": "f",
+   "roles": [
+    "everyday"
+   ],
+   "group": "f",
+   "skin": [
+    57.7,
+    19.4,
+    24
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 6136,
+    "LOD1": 2535,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "f05",
+   "source": "Female_Adult_05",
+   "sex": "f",
+   "roles": [
+    "everyday",
+    "office"
+   ],
+   "group": "f",
+   "skin": [
+    61.6,
+    19.1,
+    26.2
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 0.4,
+   "triangles": {
+    "LOD0": 6120,
+    "LOD1": 2520,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "f08",
+   "source": "Female_Adult_08",
+   "sex": "f",
+   "roles": [
+    "everyday"
+   ],
+   "group": "f",
+   "skin": [
+    63.1,
+    15,
+    25
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5970,
+    "LOD1": 2369,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "f13",
+   "source": "Female_Adult_13",
+   "sex": "f",
+   "roles": [
+    "everyday"
+   ],
+   "group": "f",
+   "skin": [
+    63.1,
+    17.2,
+    26.8
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5944,
+    "LOD1": 2344,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "f17",
+   "source": "Female_Adult_17",
+   "sex": "f",
+   "roles": [
+    "everyday"
+   ],
+   "group": "f",
+   "skin": [
+    67,
+    17.1,
+    26.2
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5752,
+    "LOD1": 2152,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "fp2",
+   "source": "Female_Party_02",
+   "sex": "f",
+   "roles": [
+    "everyday"
+   ],
+   "group": "f",
+   "skin": [
+    62.1,
+    18.3,
+    34.9
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 6840,
+    "LOD1": 3240,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "m06",
+   "source": "Male_Adult_06",
+   "sex": "m",
+   "roles": [
+    "everyday"
+   ],
+   "group": "m",
+   "skin": [
+    65.6,
+    16.5,
+    24.5
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 0.4,
+   "triangles": {
+    "LOD0": 5848,
+    "LOD1": 2247,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "m07",
+   "source": "Male_Adult_07",
+   "sex": "m",
+   "roles": [
+    "everyday",
+    "office"
+   ],
+   "group": "m",
+   "skin": [
+    59.2,
+    18.1,
+    27.9
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 0.25,
+   "triangles": {
+    "LOD0": 5436,
+    "LOD1": 1835,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "m08",
+   "source": "Male_Adult_08",
+   "sex": "m",
+   "roles": [
+    "everyday",
+    "office"
+   ],
+   "group": "m",
+   "skin": [
+    63.3,
+    17.3,
+    25.4
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 0.6,
+   "triangles": {
+    "LOD0": 5502,
+    "LOD1": 1901,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "m09",
+   "source": "Male_Adult_09",
+   "sex": "m",
+   "roles": [
+    "everyday"
+   ],
+   "group": "m",
+   "skin": [
+    64.3,
+    14.3,
+    24.8
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5474,
+    "LOD1": 1874,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "m11",
+   "source": "Male_Adult_11",
+   "sex": "m",
+   "roles": [
+    "everyday"
+   ],
+   "group": "m",
+   "skin": [
+    71.4,
+    20,
+    26.1
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1599,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "m12",
+   "source": "Male_Adult_12",
+   "sex": "m",
+   "roles": [
+    "everyday"
+   ],
+   "group": "m",
+   "skin": [
+    32.3,
+    12.7,
+    17.4
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 0.2,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1599,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "m14",
+   "source": "Male_Adult_14",
+   "sex": "m",
+   "roles": [
+    "everyday"
+   ],
+   "group": "m",
+   "skin": [
+    63.3,
+    20.8,
+    26.1
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 0.5,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "m16",
+   "source": "Male_Adult_16",
+   "sex": "m",
+   "roles": [
+    "everyday"
+   ],
+   "group": "m",
+   "skin": [
+    69.3,
+    15.1,
+    22.8
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 478
+   }
+  },
+  {
+   "id": "wm1",
+   "source": "Wood_Male_01",
+   "sex": "m",
+   "roles": [
+    "everyday",
+    "work"
+   ],
+   "group": "m",
+   "skin": [
+    43.2,
+    14.5,
+    27.8
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 0.5,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bf1",
+   "source": "Business_Female_01",
+   "sex": "f",
+   "roles": [
+    "office"
+   ],
+   "group": "f",
+   "skin": [
+    52.7,
+    16.3,
+    31.9
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5814,
+    "LOD1": 2214,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bf2",
+   "source": "Business_Female_02",
+   "sex": "f",
+   "roles": [
+    "office"
+   ],
+   "group": "f",
+   "skin": [
+    63.6,
+    17.1,
+    24.4
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 6214,
+    "LOD1": 2613,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bf4",
+   "source": "Business_Female_04",
+   "sex": "f",
+   "roles": [
+    "office"
+   ],
+   "group": "f",
+   "skin": [
+    65.3,
+    17.5,
+    25.2
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5752,
+    "LOD1": 2152,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bm2",
+   "source": "Business_Male_02",
+   "sex": "m",
+   "roles": [
+    "office"
+   ],
+   "group": "m",
+   "skin": [
+    68,
+    14.9,
+    26.2
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5418,
+    "LOD1": 1817,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bm5",
+   "source": "Business_Male_05",
+   "sex": "m",
+   "roles": [
+    "office"
+   ],
+   "group": "m",
+   "skin": [
+    51.4,
+    16.4,
+    26.2
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bm6",
+   "source": "Business_Male_06",
+   "sex": "m",
+   "roles": [
+    "office"
+   ],
+   "group": "m",
+   "skin": [
+    59.1,
+    20.8,
+    26
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bm7",
+   "source": "Business_Male_07",
+   "sex": "m",
+   "roles": [
+    "office",
+    "everyday"
+   ],
+   "group": "m",
+   "skin": [
+    62.6,
+    21.1,
+    27.4
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1599,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "nf1",
+   "source": "Medical_Female_01",
+   "sex": "f",
+   "roles": [
+    "clinic"
+   ],
+   "group": "f",
+   "skin": [
+    63.3,
+    17.6,
+    29.6
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5756,
+    "LOD1": 2156,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "df2",
+   "source": "Medical_Female_02",
+   "sex": "f",
+   "roles": [
+    "clinic"
+   ],
+   "group": "f",
+   "skin": [
+    65.4,
+    17.4,
+    25.2
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5752,
+    "LOD1": 2151,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "nm1",
+   "source": "Medical_Male_01",
+   "sex": "m",
+   "roles": [
+    "clinic"
+   ],
+   "group": "m",
+   "skin": [
+    60.2,
+    15.8,
+    24.6
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5585,
+    "LOD1": 1984,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "dm3",
+   "source": "Medical_Male_03",
+   "sex": "m",
+   "roles": [
+    "clinic"
+   ],
+   "group": "m",
+   "skin": [
+    63,
+    20.6,
+    26
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "sm1",
+   "source": "Security_Male_01",
+   "sex": "m",
+   "roles": [
+    "security"
+   ],
+   "group": "m",
+   "skin": [
+    59.7,
+    19.8,
+    23.1
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5199,
+    "LOD1": 1600,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "cm4",
+   "source": "Construction_Male_04",
+   "sex": "m",
+   "roles": [
+    "work"
+   ],
+   "group": "m",
+   "skin": [
+    66,
+    15.1,
+    23
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5199,
+    "LOD1": 1600,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "cm7",
+   "source": "Construction_Male_07",
+   "sex": "m",
+   "roles": [
+    "work"
+   ],
+   "group": "m",
+   "skin": [
+    59.2,
+    17.2,
+    24.7
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1599,
+    "LOD2": 479
+   }
+  },
+  {
+   "id": "jf2",
+   "source": "Sports_Female_02",
+   "sex": "f",
+   "roles": [
+    "running"
+   ],
+   "group": "f",
+   "skin": [
+    63.9,
+    15.1,
+    25.2
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5720,
+    "LOD1": 2120,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "jm4",
+   "source": "Sports_Male_04",
+   "sex": "m",
+   "roles": [
+    "running"
+   ],
+   "group": "m",
+   "skin": [
+    63.2,
+    18.7,
+    24.1
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1599,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bchf",
+   "source": "Sports_Female_01",
+   "sex": "f",
+   "roles": [
+    "beach"
+   ],
+   "group": "f",
+   "skin": [
+    63.9,
+    16.2,
+    25.4
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "bchm",
+   "source": "Sports_Male_01",
+   "sex": "m",
+   "roles": [
+    "beach"
+   ],
+   "group": "m",
+   "skin": [
+    67.7,
+    17.6,
+    25.3
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 478
+   }
+  },
+  {
+   "id": "kf1",
+   "source": "Female_Child_01",
+   "sex": "f",
+   "roles": [
+    "child"
+   ],
+   "group": "f",
+   "skin": [
+    63.6,
+    17.5,
+    26.4
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 0.7,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1600,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "km1",
+   "source": "Male_Child_01",
+   "sex": "m",
+   "roles": [
+    "child"
+   ],
+   "group": "m",
+   "skin": [
+    64,
+    20.5,
+    25.3
+   ],
+   "tint": true,
+   "fairHair": true,
+   "weight": 0.3,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1599,
+    "LOD2": 480
+   }
+  },
+  {
+   "id": "km2",
+   "source": "Male_Child_02",
+   "sex": "m",
+   "roles": [
+    "child"
+   ],
+   "group": "m",
+   "skin": [
+    28,
+    12.4,
+    13.7
+   ],
+   "tint": true,
+   "fairHair": false,
+   "weight": 1.2,
+   "triangles": {
+    "LOD0": 5200,
+    "LOD1": 1599,
+    "LOD2": 479
+   }
+  }
+ ]
+}
