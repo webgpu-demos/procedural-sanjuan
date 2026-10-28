@@ -154,14 +154,14 @@ export class SimTraffic {
   // structure wherever its level stands RAMP_ABOVE over the ground). A car over one, at about its height in the
   // simulation, drives on it; any other on the street the tiles draw. (A road whose level stands off the ground
   // with nothing drawn under it, a hump the old elevation model put in it, is driven on the ground.)
-  // The expressway's lanes as SUMO drove them and as the tiles paint them. The network (tools/sim/network.mjs) gave
-  // each one-way expressway stretch its lanes 3 m wide about the centreline, and narrowed a stretch to at most one
-  // lane more than the lanes leaving its end (a toll plaza's six lanes into two); the tiles paint the lanes as the
-  // carriageway is wide, all of them. So on 4 km of San Juan's expressway SUMO drove three lanes where four are
-  // painted, and the opening's commuter rode down the painted line between two of them. Each seen car on a one-way
-  // expressway is moved across to the same lane counted from the left among the painted ones (the lane SUMO
-  // dropped is the right one), and in it as far off its middle as it was in SUMO's: a car changing lanes still
-  // crosses the line. (Where the lanes agree it moves at most the few decimetres the painted lanes are wider.)
+  // The expressway's lanes as SUMO drove them and as the tiles paint them. The tiles paint the lanes as the
+  // carriageway is wide (four-metre lanes on PR-22). The network (tools/sim/network.mjs) gives SUMO the same lanes,
+  // as wide, and lists them in the run's index; only where it narrowed a stretch (a toll plaza's six lanes into two,
+  // a lane at a time) does SUMO drive fewer. (An older run drove 3 m lanes, as many as OSM counts: on 4 km of San
+  // Juan's expressway three where four are painted, and the opening's commuter rode down a painted line.) Each seen
+  // car on a one-way expressway is moved across into the same lane counted from the left among the painted ones
+  // (a lane SUMO dropped is the right one), and in it as far off its middle as it was in SUMO's: a car changing
+  // lanes still crosses the line. Where the lanes agree, it only moves onto the painted carriageway's centre.
   relanes(roads) {
     const fast = (e) => /^(motorway|trunk)(_link)?$/.test(e.highway);
     const dir = [];
@@ -170,10 +170,18 @@ export class SimTraffic {
       const [a, b] = e.oneway === -1 ? [e.b, e.a] : [e.a, e.b];
       dir.push({ e, i, from: a, to: b, lanes: Math.max(1, e.lanes) });
     });
-    // (network.mjs's lane drops, on the same graph)
+    // SUMO's lanes on each, and their width: as the run's index lists them (tools/sim/network.mjs gives the expressway
+    // the lanes the tiles paint); a run without that list had 3 m lanes, narrowed by network.mjs's lane drops, which
+    // are made again here on the same graph
+    const listed = this.index?.lanes;
+    for (const d of dir) {
+      const l = listed?.[d.i];
+      d.sw = l ? l[1] : 3.0;
+      if (l) d.lanes = l[0];
+    }
     const outOf = new Map();
     for (const d of dir) (outOf.get(d.from) ?? outOf.set(d.from, []).get(d.from)).push(d);
-    for (let pass = 0; pass < 6; pass++) {
+    for (let pass = 0; pass < 6 && !listed; pass++) {
       let changed = 0;
       for (const d of dir) {
         if (d.e.highway.endsWith('_link')) continue;
@@ -213,7 +221,7 @@ export class SimTraffic {
       for (let k = 3; k < p.length; k += 3) {
         const x0 = p[k - 3], z0 = p[k - 1], x1 = p[k], z1 = p[k + 2], len = Math.hypot(x1 - x0, z1 - z0);
         if (len < 0.1) continue;
-        const seg = { x0, z0, tx: (x1 - x0) / len, tz: (z1 - z0) / len, len, sumo: d.lanes, painted, lw, off, rev: d.e.oneway === -1, step,
+        const seg = { x0, z0, tx: (x1 - x0) / len, tz: (z1 - z0) / len, len, sumo: d.lanes, sw: d.sw, painted, lw, off, rev: d.e.oneway === -1, step,
           s0: along, total, highway: d.e.highway };
         for (let s = 0; s <= len + 12; s += 12) {
           const f = Math.min(1, s / len), key = cellKey(x0 + (x1 - x0) * f, z0 + (z1 - z0) * f);
@@ -232,7 +240,7 @@ export class SimTraffic {
       for (const g of this.laneCells?.get(c + a * CELLS + b) ?? []) {
         if (g.tx * hx + g.tz * hz < 0.9 || /_link$/.test(g.highway)) continue;
         const u = (x - g.x0) * g.tx + (z - g.z0) * g.tz, d = (x - g.x0) * -g.tz + (z - g.z0) * g.tx;
-        if (u >= 0 && u <= g.len && Math.abs(d) <= g.sumo * 1.5 + 1) return true;
+        if (u >= 0 && u <= g.len && Math.abs(d) <= g.sumo * g.sw / 2 + 1) return true;
       }
     }
     return false;
@@ -248,13 +256,13 @@ export class SimTraffic {
         if (u < -0.5 || u > g.len + 0.5) continue;
         const d = (p[0] - g.x0) * -g.tz + (p[2] - g.z0) * g.tx; // (to the right of the way)
         // (out of its lanes: on another road where two meet or part, a ramp alongside; left as SUMO drove it)
-        if (Math.abs(d) > g.sumo * 1.5 + 0.5 || Math.abs(d) >= bd) continue;
+        if (Math.abs(d) > g.sumo * g.sw / 2 + 0.5 || Math.abs(d) >= bd) continue;
         bd = Math.abs(d); best = [g, u, d];
       }
     }
     if (!best) return null;
     const [g, u, d] = best;
-    const fromRight = g.sumo / 2 - 0.5 - d / 3.0;                 // SUMO's lane, counted from the right
+    const fromRight = g.sumo / 2 - 0.5 - d / g.sw;                // SUMO's lane, counted from the right
     // (more lanes in SUMO than painted, where the paint is narrower than OSM's count: SUMO's lanes share the painted
     // width evenly, so that two cars side by side in SUMO do not ride in one painted lane, the one through the other)
     const lane = g.sumo > g.painted
@@ -278,8 +286,16 @@ export class SimTraffic {
     this.decks = new Map();
     this.flush = new Map(); // (the bridges at grade where they lie on the ground: the deck a few centimetres up)
     // (where the expressway's height was corrected, src/shared/profile.js: the simulation drove the old levels,
-    // pts0; a car on one is put at the new: fixAt)
+    // pts0; a car on one is put at the new: fixAt. A run whose network was built on the roads' levels as they are,
+    // index.levels 'roads', drove those: nothing to fix)
     this.fixes = new Map();
+    if (this.index?.levels !== 'roads') this.fixLevels(roads);
+    // (the roads flyovers.js builds a structure for; a span's surface is the tiles' own, draped on its deck: the
+    // surface)
+    const built = structureEdges(roads.edges, ground);
+    this.deckSegments(roads, ground, built);
+  }
+  fixLevels(roads) {
     const keep = [];
     const file = (seg, only) => {
       const len = Math.hypot(seg[3] - seg[0], seg[5] - seg[2]);
@@ -304,9 +320,8 @@ export class SimTraffic {
     const fixed = new Set(this.fixes.keys());
     const near = (key) => { for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (fixed.has(key + a * CELLS + b)) return true; return false; };
     for (const seg of keep) file(seg, near);
-    // (the roads flyovers.js builds a structure for; a span's surface is the tiles' own, draped on its deck: the
-    // surface)
-    const built = structureEdges(roads.edges, ground);
+  }
+  deckSegments(roads, ground, built) {
     for (const e of roads.edges) {
       if (!built.has(e)) continue;
       const p = e.pts, [from, to] = built.get(e);

@@ -173,53 +173,52 @@ mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
 
 ## The simulated morning (`tools/sim/`)
 
-A weekday morning in San Juan, 4:30 to 10:15, simulated with [Eclipse SUMO](https://eclipse.dev/sumo/) on the
-city's own road graph and played back in the browser: some 360,000 car trips and the AMA's 520 bus trips. It
-opens with a title and four shots (the city before dawn, the headlights on PR-22, one commuter's ride, the sun
-coming up behind the Milla de Oro: it rises about 6:19 AST in late October); then the clock and its time line,
-the speed of time (the cars at their own speed by default), **free roaming** on foot, by bike, by car and by helicopter
-(below: the car rides the ground or the flyover it drove onto and stops against the buildings' walls and the
-simulated cars, which fade rather than drive through you), the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
-wave from the Monacillos transmission centre, and the rush is simulated without them, every dark signal an
-all-way stop as the law has it; it plays as a scene of
-its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two hours
-on), riding with any car
-(click it: where it comes from, why it drives, its delay), the jam map, the lancha crossing to Cataño on its
-timetable, and plenas on the radio ("Callejón de Panderetas", "Fiesta de la Memoria" and "Romanoctubre", made
-for the project with Suno, one after the other; in the apagón the radio dies with the power, and comes back
-faint, a battery radio somewhere down the street). The frame rate is kept up by stepping quality down and back
-up as needed (`?quality=high` keeps it all). `G` brings back
-the settings panel; `?xp=0` skips the experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
+A weekday morning in San Juan, 4:30 to 10:15, simulated with [Eclipse SUMO](https://eclipse.dev/sumo/) on the city's
+own road graph and played back in the browser: some 230,000 car trips (seven tenths of the morning's estimated
+demand) and the AMA's 500 bus trips. It opens with a title and four shots (the city before dawn, the headlights on
+PR-22, one commuter's ride, the sun coming up behind the Milla de Oro: it rises about 6:19 AST in late October);
+then the clock and its time line, the speed of time (the cars at their own speed by default), **free roaming** on
+foot, by bike, by car and by helicopter (below: the car rides the ground or the flyover it drove onto and stops
+against the buildings' walls and the simulated cars, which fade rather than drive through you), the **apagón** (at
+5:45 the grid fails: windows, street lamps and every signal go dark in a wave from the Monacillos transmission
+centre, and the rush is simulated without them, every dark signal an all-way stop as the law has it; it plays as a
+scene of its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two
+hours on), riding with any car (click it: where it comes from, why it drives, its delay), the jam map, the lancha
+crossing to Cataño on its timetable, and plenas on the radio ("Callejón de Panderetas", "Fiesta de la Memoria" and
+"Romanoctubre", made for the project with Suno, one after the other; in the apagón the radio dies with the power,
+and comes back faint, a battery radio somewhere down the street). The frame rate is kept up by stepping quality down
+and back up as needed (`?quality=high` keeps it all). `G` brings back the settings panel; `?xp=0` skips the
+experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
 
 ```
 npm run sim:setup                    # once: Python environment with SUMO 1.28 and libsumo (.venv-sim/)
 npm run sim:data                     # Census: commuting flows, departure times, municipio boundaries
 npm run sim:net                      # roads.json -> SUMO network; buildings as trip ends; FHWA counts
-npm run sim:demand                   # the morning's trips (data/sim/<area>/morning/trips.xml)
-npm run sim:run                      # simulate and record -> public/tiles/<area>/sim/morning/
-npm run sim:run -- --scenario=apagon # the blackout, from the morning's state at 5:45
-npm run sim:validate                 # simulated vs counted traffic (GEH) -> validation.json
+npm run sim:all                      # demand, buses, routes, the morning and the apagón, validated (SCALE=, RUNARGS=)
 ```
 
 - **Network** (`network.mjs`): the graph in `roads.json` becomes SUMO's plain XML, the frames coinciding
-  (SUMO's y is the world's -z), so simulated lanes lie on the painted ones; netconvert joins the junctions
-  OSM draws as several nodes and gives the mapped signals fixed plans.
+  (SUMO's y is the world's -z). The expressway is given the lanes the tiles paint, as wide (four-metre lanes on
+  PR-22), and a street its lanes as wide as painted; the run lists SUMO's lanes in its index, and the client
+  moves each car into its painted lane (`simtraffic.js` relane). A run of roads joined end to end with nothing
+  else meeting them is one SUMO edge (`net/merged.json`: run.py gives each road its speeds); junctions OSM draws
+  as several nodes within 20 m are one node (netconvert cut the pieces between them to nothing: 2,907 edges under
+  a metre, and a car that could not stop on one waited across the junction behind it); driveways and car parks
+  (OSM's unnamed service ways) are left out, where a signal had given a car park a phase of its own. Signals
+  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper; ramps get acceleration
+  lanes; an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
 - **Demand** (`demand.py`): a cordon model. Homes, jobs, schools and shops are the floor area of the city's
-  buildings, by use and municipio; the ACS municipio-to-municipio commuting flows say who drives where;
-  commuters from beyond the area enter through the roads that cross its edge, towards their municipio,
-  biggest roads first; departure times by municipio of residence (ACS B08302); school runs, errands,
-  deliveries and through traffic on top.
-- **Network fixes that made the rush hour flow** (measured on a quarter of the demand, 7:00-7:15: waiting time
-  down five-fold): acceleration lanes on the expressway ramps, junctions OSM draws as several nodes joined,
-  actuated signals, and San Juan merging (a driver at a give-way line takes a smaller gap after 90 s). And lane
-  drops: OSM draws a toll plaza as stretches of five or six lanes, and SUMO leaves the lanes beyond a narrowing
-  as dead ends drivers must leave at walking pace (PR-22 at Buchanan, six lanes into two and an exit, locked the
-  west of the city at the rush); an expressway is made at most one lane wider than the lanes leaving its end.
-- **Routes** (`route.py`): made beforehand with contraction hierarchies on the travel times a previous run
-  measured (a step towards the routes drivers settle on). Re-planning during the run is an option
-  (`--reroute=0.15`), off by default: SUMO then spends most of its time waiting (6.7x slower measured).
+  buildings, by use and municipio; the ACS municipio-to-municipio commuting flows say who drives where; a
+  commuter from beyond the area leaves by whichever of the roads towards their municipio the routes favour (a
+  TAZ of its gates); departure times by municipio of residence (ACS B08302, the six round the area; any other as
+  those six together), smoothed over the survey's half hours (`--spread=15`); school runs, errands, deliveries
+  and through traffic on top. The whole morning is about 334,000 trips.
+- **Routes** (`route.py`, `assign.py`): every driver re-plans on the way, every five minutes, on the travel times
+  of the moment (`--reroute=1`): at half the demand, the run teleported 355 cars where the same routes driven as
+  planned teleported 11,000 and locked Hato Rey from 7:30. `assign.py` (SUMO's iterative assignment on the
+  mesoscopic simulation) is the other way to spread the routes.
 - **Buses** (`gtfs.py`): the ATI's GTFS feed; every Tuesday bus trip in the morning with its stops placed on
-  the kerb lane, calling at each until its timetabled departure; the Cataño ferry for the client.
+  the kerb lane (never a dead end), calling at each until its timetabled departure; the Cataño ferry for the client.
 - **Simulation and recording** (`run.py`): microscopic, every car with its own car-following and continuous
   lane changes. Each car's track is kept to the fewest points that hold it within 30 cm sideways and 1.5 m
   along its way of where SUMO had it at every second, and packed into gzipped windows of two and a half minutes
@@ -230,9 +229,14 @@ npm run sim:validate                 # simulated vs counted traffic (GEH) -> val
   stops (`--dark=priority` keeps netconvert's priorities instead).
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
-  direction is matched to the counted line (which runs down the median of a divided road). A run at a quarter
-  of the demand carried 0.30 of the counted traffic (freeways 0.25, arterials 0.38; r² 0.43), which is what
-  set the demand at 0.8. The figures for the published run are in the experience (¿Qué tan real?).
+  direction is matched to the counted line (which runs down the median of a divided road). The published run, at
+  seven tenths of the demand, carried 0.48 of the counted traffic (freeways 0.40, arterials 0.59; r² 0.40), about
+  seven tenths of it scaled to the whole demand, and teleported 1,286 of its 228,000 cars; at half the demand 0.42
+  (328 teleported), at six tenths 0.45 (676), at 0.85 0.49 (3,119, and trips half as long again): past seven
+  tenths the rush hour mostly queues longer.
+  The figures for the published run are in the experience (¿Qué tan real?).
+- **Experiments** run on GitHub Actions (the `simlab` branch: `simlab/jobs.json` lists the jobs, each pushes what
+  it found to a branch `simres/<job>`); `hotspots.py` lists where a run teleports cars and why.
 
 What it is not: real cars. The trips are drawn from survey data and simulated; they are checked against
 counts, not recorded from traffic.

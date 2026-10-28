@@ -18,7 +18,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 args = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
 AREA, SCEN = args.get('area', 'sanjuan'), args.get('scenario', 'morning')
 SIM = os.path.join(ROOT, 'data/sim', AREA); WORK = os.path.join(SIM, SCEN)
-OUT = os.path.join(ROOT, 'public/tiles', AREA, 'sim', SCEN)
+OUT = args.get('out', os.path.join(ROOT, 'public/tiles', AREA, 'sim', SCEN))
 K = float(args.get('k', 0.08)); H0, H1 = 7 * 3600, 8 * 3600
 # HPMS functional system -> the SUMO priorities its road could have (tools/sim/network.mjs PRIORITY)
 FSYS = {1: (12, 13), 2: (11, 13), 3: (9, 12), 4: (8, 11), 5: (7, 10), 6: (5, 9), 7: (4, 8)}
@@ -79,7 +79,7 @@ def edges_under(seg):
 
 # simulated vehicles per edge, 7-8 a.m.
 entered = collections.Counter()
-for ev, el in ET.iterparse(os.path.join(WORK, 'edgedata.xml'), events=('end',)):
+for ev, el in ET.iterparse(args.get('edgedata', os.path.join(WORK, 'edgedata.xml')), events=('end',)):
     if el.tag == 'interval':
         b = float(el.get('begin'))
         if H0 <= b < H1:
