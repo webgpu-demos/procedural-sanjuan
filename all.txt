@@ -1,0 +1,176 @@
+   0.6s 16 expressway stretches narrowed to the lanes beyond them
+   0.7s 7072 joins: 42907 edges
+   0.8s 1030 junctions joined from 2382 nodes
+   1.1s plain network: 17442 nodes (427 with lights, 8 zippers), 40491 directed edges from 36830 roads
+Success.
+  11.0s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.1 MB)
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39268 of 39942 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+201299 trips: {'work': 130654, 'through': 8682, 'school': 25026, 'errand': 24040, 'airport': 6203, 'delivery': 8538} (scale 0.6)
+departures by half hour: 4.5h 2464 5.0h 6979 5.5h 9219 6.0h 17747 6.5h 22478 7.0h 44199 7.5h 30943 8.0h 22499 8.5h 16072 9.0h 13753 9.5h 14946
+-> data/sim/sanjuan/morning
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+> Executing step 0
+>> Running router on /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/trips.xml
+>>> Begin time: 2026-10-28 00:55:36.095169
+>>> End time: 2026-10-28 00:56:07.961219
+>>> Duration: 0:00:31.866050
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:56:07.961261
+>>> End time: 2026-10-28 00:57:50.466137
+>>> Duration: 0:01:42.504876
+<<
+< Step 0 ended (duration: 0:02:14.371033)
+------------------
+
+> Executing step 1
+>> Running router on 000/trips_000.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 00:57:50.467402
+>>> End time: 2026-10-28 00:59:57.736098
+>>> Duration: 0:02:07.268696
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:59:57.736140
+>>> End time: 2026-10-28 01:02:00.758490
+>>> Duration: 0:02:03.022350
+<<
+< Step 1 ended (duration: 0:04:10.291149)
+------------------
+
+> Executing step 2
+>> Running router on 001/trips_001.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 01:02:00.759400
+>>> End time: 2026-10-28 01:04:14.544246
+>>> Duration: 0:02:13.784846
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 01:04:14.544286
+>>> End time: 2026-10-28 01:06:06.436310
+>>> Duration: 0:01:51.892024
+<<
+< Step 2 ended (duration: 0:04:05.677020)
+------------------
+
+> Executing step 3
+>> Running router on 002/trips_002.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 01:06:06.437547
+>>> End time: 2026-10-28 01:08:29.134194
+>>> Duration: 0:02:22.696647
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 01:08:29.134237
+>>> End time: 2026-10-28 01:10:06.860766
+>>> Duration: 0:01:37.726529
+<<
+< Step 3 ended (duration: 0:04:00.423280)
+------------------
+
+> Executing step 4
+>> Running router on 003/trips_003.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 01:10:06.862555
+>>> End time: 2026-10-28 01:12:38.688876
+>>> Duration: 0:02:31.826321
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 01:12:38.688916
+>>> End time: 2026-10-28 01:14:46.627682
+>>> Duration: 0:02:07.938766
+<<
+< Step 4 ended (duration: 0:04:39.765190)
+------------------
+
+> Executing step 5
+>> Running router on 004/trips_004.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 01:14:46.628695
+>>> End time: 2026-10-28 01:17:24.837135
+>>> Duration: 0:02:38.208440
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 01:17:24.837181
+>>> End time: 2026-10-28 01:19:31.184415
+>>> Duration: 0:02:06.347234
+<<
+< Step 5 ended (duration: 0:04:44.555784)
+------------------
+
+> Executing step 6
+>> Running router on 005/trips_005.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 01:19:31.185922
+>>> End time: 2026-10-28 01:22:10.274931
+>>> Duration: 0:02:39.089009
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 01:22:10.274970
+>>> End time: 2026-10-28 01:24:12.348239
+>>> Duration: 0:02:02.073269
+<<
+< Step 6 ended (duration: 0:04:41.162380)
+------------------
+
+> Executing step 7
+>> Running router on 006/trips_006.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 01:24:12.349565
+>>> End time: 2026-10-28 01:26:56.267844
+>>> Duration: 0:02:43.918279
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 01:26:56.267887
+>>> End time: 2026-10-28 01:29:01.961898
+>>> Duration: 0:02:05.694011
+<<
+< Step 7 ended (duration: 0:04:49.612394)
+------------------
+
+> Executing step 8
+>> Running router on 007/trips_007.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 01:29:01.963769
+>>> End time: 2026-10-28 01:31:49.561860
+>>> Duration: 0:02:47.598091
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 01:31:49.561900
+>>> End time: 2026-10-28 01:33:56.759395
+>>> Duration: 0:02:07.197495
+<<
+< Step 8 ended (duration: 0:04:54.795685)
+------------------
+
+> Executing step 9
+>> Running router on 008/trips_008.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 01:33:56.760731
+>>> End time: 2026-10-28 01:36:41.615497
+>>> Duration: 0:02:44.854766
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 01:36:41.615538
+>>> End time: 2026-10-28 01:38:44.388970
+>>> Duration: 0:02:02.773432
+<<
+< Step 9 ended (duration: 0:04:47.628301)
+------------------
+
+dua-iterate ended (duration: 0:43:08.294977)
+10 rounds in 43 min -> data/sim/sanjuan/morning/assign/009/trips_009.rou.alt.xml.gz
+    2.3s sumo morning: 4.50 h to 10.25 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (4743ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml' ... done (46ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (10ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (5ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz'
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/buses.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
