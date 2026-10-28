@@ -1,0 +1,1 @@
+SCALE=0.5 PREROUTES=d50 END=9 BLOCKER=5 . simlab/diag.sh

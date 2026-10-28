@@ -10,7 +10,11 @@ export SUMO_HOME=$($PY -c "import sumo; print(sumo.SUMO_HOME)")
 node tools/sim/${NETSCRIPT:-network.mjs} $NETARGS > $RES/network.txt 2>&1 || exit 1
 $PY tools/sim/demand.py --area=sanjuan --scale=${SCALE:-1} --scenario=lab "--vtype=$VTYPE" > $RES/demand.txt 2>&1 || exit 1
 $PY tools/sim/gtfs.py --area=sanjuan --demand=lab > $RES/gtfs.txt 2>&1
-if [ -n "$ASSIGN" ]; then
+if [ -n "$PREROUTES" ]; then
+  # (the routes another job settled on, driven again with other options)
+  git clone -q --depth 1 -b simres/$PREROUTES "https://x-access-token:$GH_TOKEN@github.com/$REPO" $W/pre
+  ROUTES=$(ls $W/pre/*.rou.xml.gz | head -1),$S/lab/buses.xml
+elif [ -n "$ASSIGN" ]; then
   A=$W/assign; mkdir -p $A; cd $A
   /usr/bin/time -v $PY $SUMO_HOME/tools/assign/duaIterate.py -n $S/sanjuan.net.xml.gz -t $S/lab/trips.xml -l $ASSIGN \
     -b 16200 -e 36900 --mesosim -j --meso-recheck 10 --time-to-teleport 300 --routing-algorithm ${ASSIGNALG:-CH} -T -E -a 900 -D $S/lab/taz.add.xml \
@@ -35,7 +39,7 @@ cat > $D/ed.add.xml <<X
 X
 /usr/bin/time -v $BIN/sumo -n $S/sanjuan.net.xml.gz -r $ROUTES \
  --additional-files $D/ed.add.xml,$S/lab/busstops.add.xml$TAZADD --begin 16200 --end $(python3 -c "print(int(${END:-10.25}*3600))") \
- --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration ${LCDUR:-2.5} \
+ --time-to-teleport ${TTT:-240} --ignore-route-errors --max-depart-delay 900 --lanechange.duration ${LCDUR:-2.5} \
  --time-to-impatience ${IMPATIENCE:-90} --ignore-junction-blocker ${BLOCKER:-15} --routing-algorithm astar \
  --statistic-output $RES/stats.xml --summary-output $D/summary.xml --summary-output.period 60 \
  --log $D/sumo.log --duration-log.statistics --step-log.period 900 $SUMOARGS > $RES/sumo.txt 2>&1
