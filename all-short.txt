@@ -1,0 +1,139 @@
+   0.2s 16 expressway stretches narrowed to the lanes beyond them
+   0.3s 7072 joins: 42907 edges
+   0.4s 1030 junctions joined from 2382 nodes
+   0.6s plain network: 17442 nodes (427 with lights, 8 zippers), 40491 directed edges from 36830 roads
+Success.
+   9.9s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.1 MB)
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39268 of 39942 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+166842 trips: {'work': 108555, 'through': 6986, 'school': 20862, 'errand': 19834, 'airport': 5050, 'delivery': 7158} (scale 0.5)
+departures by half hour: 4.5h 2049 5.0h 5704 5.5h 7541 6.0h 14701 6.5h 18703 7.0h 36825 7.5h 25458 8.0h 18800 8.5h 13245 9.0h 11719 9.5h 12097
+-> data/sim/sanjuan/morning
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+Success.
+routes in 36s -> data/sim/sanjuan/morning/routes.rou.xml
+    2.3s sumo morning: 4.50 h to 10.25 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (4462ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml' ... done (41ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (10ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (5ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+
+Simulation ended at time: 36900.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 4566.46s
+ Real time factor: 4.53305
+ UPS: 28976.435571
+Vehicles:
+ Inserted: 167201 (Loaded: 167302)
+ Running: 152
+ Waiting: 0
+ Teleports: 328 (Collisions: 35, Jam: 52, Yield: 212, Wrong Lane: 29)
+ Emergency Stops: 4
+ Emergency Braking: 61
+Statistics (avg of 167201):
+ RouteLength: 8972.51
+ Speed: 12.16
+ Duration: 791.38
+ WaitingTime: 133.16
+ TimeLoss: 265.82
+ DepartDelay: 24.23
+ DepartDelayWaiting: 0.00
+AStarRouter answered 174899 queries and explored 7326.45 edges on average.
+AStarRouter spent 1608.73s answering queries (9.20ms on average).
+AStarRouter answered 162649 queries and explored 7320.47 edges on average.
+AStarRouter spent 1514.22s answering queries (9.31ms on average).
+AStarRouter answered 152083 queries and explored 7296.52 edges on average.
+AStarRouter spent 1426.92s answering queries (9.38ms on average).
+AStarRouter answered 142153 queries and explored 7258.24 edges on average.
+AStarRouter spent 1332.44s answering queries (9.37ms on average).
+ 4575.3s sumo done
+ 4618.0s tracks: 21 M samples read, up to 6.61 h, 26838 tracks, 6820 on the road
+ 4650.2s tracks: 41 M samples read, up to 7.22 h, 50694 tracks, 13109 on the road
+ 4678.6s tracks: 60 M samples read, up to 7.57 h, 72547 tracks, 17080 on the road
+ 4709.4s tracks: 81 M samples read, up to 7.94 h, 95060 tracks, 13117 on the road
+ 4739.1s tracks: 100 M samples read, up to 8.42 h, 116543 tracks, 9925 on the road
+ 4773.6s tracks: 121 M samples read, up to 9.22 h, 144143 tracks, 4499 on the road
+ 4793.4s 167453 tracks from 132 M samples; peak 17176 cars on the road at once
+ 4965.8s 138 windows, 180.7 MB (gzipped)
+ 4971.9s speeds: 69 intervals x 46803 edges
+ 4977.6s done: {"total": "328", "jam": "52", "yield": "212", "wrongLane": "29"}
+1239 counted roads matched; simulated/counted 0.42; GEH<5 7%, GEH<10 15%, r² 0.40
+  other                  n    4  ratio 3.86  GEH<5    0%  GEH<10    0%
+  interstate / freeway   n  343  ratio 0.35  GEH<5    6%  GEH<10   12%
+  arterials              n  789  ratio 0.52  GEH<5    8%  GEH<10   16%
+  collectors             n   81  ratio 0.39  GEH<5    1%  GEH<10   14%
+  local                  n   22  ratio 0.24  GEH<5    5%  GEH<10    5%
+worst: [('PR-18', 19472, 1311), ('PR-22', 15976, 46), ('PR-22', 19072, 1944), ('PR-22', 19072, 2067), ('PR-22', 15976, 841), ('PR-22', 19072, 2230)]
+    3.6s sumo apagon: 5.75 h to 8.50 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/allway.net.xml.gz' ... done (4477ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/outputs.add.xml' ... done (39ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (9ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (5ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/apagon.add.xml' ... done (4ms).
+Loading state from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/state_20700.xml.gz' ... done (2226ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 20700.00.
+
+Simulation ended at time: 30600.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 4406.16s
+ Real time factor: 2.24686
+ UPS: 22652.179281
+Vehicles:
+ Inserted: 123204 (Loaded: 130861)
+ Running: 10917
+ Waiting: 1869
+ Teleports: 304 (Collisions: 11, Jam: 67, Yield: 172, Wrong Lane: 54)
+ Emergency Braking: 51
+Statistics (avg of 114708):
+ RouteLength: 8524.07
+ Speed: 11.02
+ Duration: 880.91
+ WaitingTime: 125.31
+ TimeLoss: 370.36
+ DepartDelay: 74.01
+ DepartDelayWaiting: 433.38
+AStarRouter answered 169946 queries and explored 9461.26 edges on average.
+AStarRouter spent 2102.29s answering queries (12.37ms on average).
+AStarRouter answered 164141 queries and explored 9548.59 edges on average.
+AStarRouter spent 2061.74s answering queries (12.56ms on average).
+AStarRouter answered 158126 queries and explored 9600.71 edges on average.
+AStarRouter spent 2010.60s answering queries (12.72ms on average).
+AStarRouter answered 153475 queries and explored 9584.96 edges on average.
+AStarRouter spent 1948.84s answering queries (12.70ms on average).
+ 4416.4s sumo done
+ 4458.9s tracks: 21 M samples read, up to 6.88 h, 25346 tracks, 7586 on the road
+ 4490.1s tracks: 40 M samples read, up to 7.36 h, 47204 tracks, 15566 on the road
+ 4520.7s tracks: 62 M samples read, up to 7.71 h, 68342 tracks, 16740 on the road
+ 4549.2s tracks: 81 M samples read, up to 8.07 h, 85740 tracks, 13735 on the road
+ 4576.6s 114919 tracks from 100 M samples; peak 17210 cars on the road at once
+ 4699.8s 96 windows, 133.1 MB (gzipped)
+ 4703.3s speeds: 48 intervals x 46803 edges
+ 4705.3s done: {"total": "304", "jam": "67", "yield": "172", "wrongLane": "54"}
+1239 counted roads matched; simulated/counted 0.36; GEH<5 6%, GEH<10 13%, r² 0.44
+  other                  n    4  ratio 3.06  GEH<5    0%  GEH<10   25%
+  interstate / freeway   n  343  ratio 0.31  GEH<5    6%  GEH<10   10%
+  arterials              n  789  ratio 0.42  GEH<5    6%  GEH<10   14%
+  collectors             n   81  ratio 0.37  GEH<5    2%  GEH<10   15%
+  local                  n   22  ratio 0.24  GEH<5    0%  GEH<10    5%
+worst: [('PR-18', 19472, 1322), ('PR-22', 15976, 418), ('PR-22', 19072, 1833), ('PR-22', 19072, 1963), ('PR-22', 15976, 905), ('PR-22', 19072, 2210)]
+all runs done
