@@ -184,7 +184,7 @@ function sideLine(pts, cum, s, o, u0, u1) {
 // 1. each street's sidewalks, measured on the tiles: from the centreline out to the kerb (the carriageway's edge),
 // then across the paving to its far edge; where a side has none, a street of houses is walked at its edge
 const sides = new Map(); // edge index -> [{ o, w, kind } | null, same]
-let measured = 0, roadside = 0, none = 0, medians = 0;
+let measured = 0, roadside = 0, none = 0, medians = 0, bridges = 0;
 roads.edges.forEach((e, i) => {
   if (!walked(e)) return;
   const pts = P(e), L = lengthOf(pts);
@@ -205,6 +205,12 @@ roads.edges.forEach((e, i) => {
       k1s.push(k1); k2s.push(k2);
     }
     const med = (a) => a.sort((p, q) => p - q)[a.length >> 1];
+    // a bridge's deck has no paving drawn on the tiles (flyovers.js draws it, as wide as the street it carries): its
+    // sidewalks where the street's would be
+    if (e.bridge && (!k1s.length || med(k2s) - med(k1s) < 0.45)) {
+      const { half } = pavedHalf(e, lanesOf(e) ?? e.lanes), sw = Math.max(1, half - carriage / 2);
+      res.push({ o: half - sw / 2, w: sw, kind: KIND.SIDEWALK }); bridges++; continue;
+    }
     if (!k1s.length) { res.push(null); none++; continue; }
     const k1 = med(k1s), k2 = med(k2s);
     // the inner side of one carriageway of a divided road: another carriageway just beyond it (a median, not a
@@ -219,13 +225,14 @@ roads.edges.forEach((e, i) => {
       median = hits > tries / 2 && k2 - k1 < 4;
     }
     if (median) { res.push({ o: k1 + Math.max(0.6, (k2 - k1) / 2), w: Math.max(1, k2 - k1), kind: KIND.MEDIAN }); medians++; }
-    else if (k2 - k1 >= 0.9) { res.push({ o: (k1 + k2) / 2, w: k2 - k1, kind: KIND.SIDEWALK }); measured++; }
-    else if (['residential', 'living_street', 'unclassified'].includes(e.highway)) { res.push({ o: Math.max(1, k1 - 0.6), w: 1, kind: KIND.ROADSIDE }); roadside++; }
+    // (a narrow one, Old San Juan's, is still walked: in single file)
+    else if (k2 - k1 >= 0.45) { res.push({ o: (k1 + k2) / 2, w: Math.max(0.7, k2 - k1), kind: KIND.SIDEWALK }); measured++; }
+    else if (['residential', 'living_street', 'unclassified'].includes(e.highway)) { res.push({ o: Math.max(1, k1 - 0.3), w: 0.8, kind: KIND.ROADSIDE }); roadside++; }
     else { res.push(null); none++; }
   }
   sides.set(i, res);
 });
-log(`sidewalks: ${measured} measured, ${roadside} street edges walked, ${medians} medians, ${none} without`);
+log(`sidewalks: ${measured} measured, ${bridges} on bridges, ${roadside} street edges walked, ${medians} medians, ${none} without`);
 
 // 2. the junctions: the corners between neighbouring streets, and a crossing across the mouth of each street
 const incident = new Map(); // road node -> [{ i, end, theta, dx, dz }]
@@ -476,7 +483,7 @@ const raw_ = (l) => {
 // a block brings fewer people than the first): MAX (1 - exp(-raw / R)). Old San Juan's Calle Fortaleza comes to
 // some 20 at its busiest, Ashford in the Condado about 10, Ponce de León in the Milla de Oro about 6, a street of
 // houses well under one.
-const MAX = [12, 10, 22, 10, 10, 4, 1, 6, 8], R = [900, 600, 600, 300, 400, 200, 400, 300, 200];
+const MAX = [12, 10, 22, 10, 10, 4, 1, 6, 8], R = [900, 250, 600, 300, 400, 200, 400, 300, 200];
 const KIND_FACTOR = { [KIND.SIDEWALK]: 1, [KIND.CORNER]: 1, [KIND.CROSSING]: 0, [KIND.FOOTWAY]: 0.8, [KIND.PATH]: 0.5, [KIND.STEPS]: 0.6, [KIND.PEDESTRIAN]: 2.2, [KIND.ROADSIDE]: 1, [KIND.LINK]: 0.5, [KIND.MEDIAN]: 0 };
 for (const l of links) {
   const r = raw_(l), f = KIND_FACTOR[l.kind] ?? 1;
@@ -582,7 +589,7 @@ const index = [];
 let bytes = 0;
 for (const [k, b] of blocks) {
   const L = b.links.map((i) => links[i]), ids = [...new Set(L.flatMap((l) => [l.a, l.b]))];
-  const nN = ids.length, nL = L.length, nI = L.reduce((n, l) => n + l.pts.length - 2, 0), C = L.map((l, j) => [l, j]).filter(([l]) => l.kind === KIND.CROSSING), nS = b.spots.length;
+  const nN = ids.length, nL = L.length, nI = L.reduce((n, l) => n + Math.min(255, l.pts.length - 2), 0), C = L.map((l, j) => [l, j]).filter(([l]) => l.kind === KIND.CROSSING), nS = b.spots.length;
   const nodeId = new Uint32Array(ids), nodeXZ = new Float32Array(nN * 2);
   ids.forEach((id, j) => { nodeXZ[j * 2] = nodes[id][0]; nodeXZ[j * 2 + 1] = nodes[id][1]; });
   const la = new Uint32Array(L.map((l) => l.a)), lb = new Uint32Array(L.map((l) => l.b)), inner = new Uint8Array(nL), kind = new Uint8Array(nL), width = new Uint8Array(nL), w = new Uint8Array(nL * NP), pts = new Float32Array(nI * 2);

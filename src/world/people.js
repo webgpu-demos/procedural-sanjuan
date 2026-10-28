@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { shared } from './materials.js';
-import { lampUniforms } from './lamplight.js';
+import { lampUniforms, HERO_RIM } from './lamplight.js';
 import { streetAt } from '../shared/decks.js';
 
 // ---------------------------------------------------------------- constants
@@ -52,7 +52,7 @@ const dec = (q) => (q / 255) ** 2 * 40; // (people per 100 m, as walkways.mjs en
 const bisect = (cum, r) => { let lo = 0, hi = cum.length - 1; if (hi < 0) return null; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m][1] < r) lo = m + 1; else hi = m; } return cum[lo][0]; };
 
 // skin: the tone a person is drawn with, as a CIE lightness (San Juan: most people between fair and brown)
-const TONES = [[72, 0.12], [66, 0.24], [60, 0.26], [53, 0.2], [46, 0.12], [38, 0.06]];
+const TONES = [[72, 0.12], [66, 0.24], [60, 0.26], [54, 0.2], [48, 0.12], [42, 0.06]];
 let seed = 12345;
 const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 const pick = (list) => list[Math.floor(rnd() * list.length)];
@@ -101,7 +101,7 @@ function personMaterial(cutout, textures) {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0, side: cutout ? THREE.DoubleSide : THREE.FrontSide });
   m.defines = { USE_UV: '', LAMP_SIDES: '' };
   m.onBeforeCompile = (shader) => {
-    lampUniforms(shader);
+    lampUniforms(shader); shader.uniforms.uNight = shared.uNight;
     Object.assign(shader.uniforms, textures);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
@@ -109,8 +109,10 @@ function personMaterial(cutout, textures) {
       .replace('#include <skinnormal_vertex>', 'objectNormal = (skinM * vec4(objectNormal, 0.0)).xyz;')
       .replace('#include <skinning_vertex>', 'transformed = (skinM * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
+      .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uNight;`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FADE}`)
+      // (at night a little of the city's glow along their edges, as the one you are has: a figure reads against the dark street)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += 0.5 * ${HERO_RIM} + diffuseColor.rgb * 0.035 * uNight;`)
       // the atlas: skin marked in alpha (0.75) takes the person's tone; the cutout keeps its own alpha (coverage)
       .replace('#include <map_fragment>', cutout
         ? 'vec4 texel = texture(uAtlas, vec3(vUv, vLayer)); if (texel.a < 0.5) discard; diffuseColor.rgb *= texel.rgb;'
@@ -453,33 +455,40 @@ export class People {
     return weighted([
       ['everyday', 1],
       ['office', 1.6 * share(P.OFFICE) / all],
-      ['clinic', 0.5 * share(P.HEALTH) / all],
+      ['clinic', share(P.HEALTH) / all > 0.25 ? 0.8 * share(P.HEALTH) / all : 0], // (near a hospital or a clinic, not across town)
       ['work', 0.03],
-      ['running', (dawnOrDusk ? 0.5 : 0.05) * (0.15 + share(P.LEISURE) / all) + (dawnOrDusk ? 0.02 : 0)],
+      ['running', (dawnOrDusk ? 0.3 : 0.03) * (0.05 + share(P.LEISURE) / all) + (dawnOrDusk ? 0.01 : 0)],
       ['beach', day && share(P.LEISURE) / all > 0.5 ? 0.5 : 0],
     ]);
   }
-  avatarFor(role) { const list = this.byRole.get(role) ?? this.byRole.get('everyday'); return pick(list); }
+  // (each by its weight: dressed for the heat more often than for an air-conditioned office)
+  avatarFor(role) { const list = this.byRole.get(role) ?? this.byRole.get('everyday'); return weighted(list.map((a) => [a, a.weight ?? 1])); }
   toneFor(a, w, h) {
     // fair-skinned avatars take a tone of San Juan's (tourists in the old city and the Condado more often stay fair)
     if (!a.tint) return [1, 1, 1];
     const sights = w ? (w[P.SIGHTS] * dayShare(P.SIGHTS, h)) / (this.rateOf({ w }, h) || 1) : 0;
-    const L = weighted(TONES.map(([l, p], i) => [l, i === 0 ? p + sights * 0.5 : p]));
+    let L = weighted(TONES.map(([l, p], i) => [l, i === 0 ? p + sights * 0.5 : p]));
+    if (a.fairHair) L = Math.max(L, 58); // (fair hair over a much darker face reads as a dye job on every head)
     if (L >= a.base) return [1, 1, 1];
+    // (linear light: the same factor on the three keeps the skin's own warm hue; a touch warmer as it darkens)
     const k = ((L + 16) / (a.base + 16)) ** 3;
-    return [k, k ** 1.08, k ** 1.22];
+    return [k, k, k ** 1.06];
   }
 
   spawnWalker(l, u, now, fill) {
     const h = this.hour, dawnOrDusk = (h >= 5 && h < 8.5) || (h >= 16.5 && h < 19.5);
-    const role = (l.kind === KIND.PATH || l.kind === KIND.FOOTWAY) && dawnOrDusk && rnd() < 0.3 ? 'running' : this.roleFor(l.w, h);
+    const role = (l.kind === KIND.PATH || l.kind === KIND.FOOTWAY) && dawnOrDusk && rnd() < 0.12 ? 'running' : this.roleFor(l.w, h);
     // with company: a couple, friends, a grown-up and a child (in the morning to school, and later)
-    const kids = this.byRole.get('child') && role === 'everyday' && rnd() < 0.08 + 0.1 * dayShare(P.SCHOOL, h);
+    // (school days: children with a grown-up on the way to school and back, few while school is in, more where
+    // visitors are, families)
+    const inSchool = h >= 8.3 && h < 14.2, sightsShare = (l.w[P.SIGHTS] * dayShare(P.SIGHTS, h)) / (this.rateOf(l, h) || 1);
+    const kids = this.byRole.get('child') && role === 'everyday' && rnd() < (inSchool ? 0.01 + 0.04 * sightsShare : 0.04 + 0.12 * dayShare(P.SCHOOL, h));
     const company = role === 'running' || role === 'work' ? 0 : kids ? 1 : rnd() < 0.18 ? (rnd() < 0.8 ? 1 : 2) : 0;
     const dir = rnd() < 0.5 ? 1 : -1, leader = this.person(role, l.w);
     if (!leader) return 0;
     const pace = role === 'running' ? 'jog' : role === 'office' ? weighted([['brisk', 2], ['walk', 1], ['walk2', 1]]) : l.w[P.SIGHTS] > 4 ? weighted([['stroll', 2], ['walk', 1], ['walk2', 1]]) : weighted([['walk', 2], ['walk2', 2], ['stroll', 1], ['brisk', 1]]);
     Object.assign(leader, { state: 'walk', link: l, dir, u: dir > 0 ? u : l.len - u, pace, goal: rnd() * Math.PI * 2, born: now, fade: fill ? 1 : 0, lane: 0.25 + rnd() * 0.7 });
+    leader.lanePref = leader.lane;
     this.setPace(leader);
     leader.v = leader.speed;
     this.place(leader, 0);
@@ -594,10 +603,11 @@ export class People {
   update(dt, view) {
     if (!this.ready) return;
     const { camera } = view, now = (this.now = (this.now ?? 0) + dt);
-    this.hour = view.hour; this.T = view.T; this.cars = view.cars ?? []; this.signals = view.signals ?? null;
+    this.hour = view.hour; this.T = view.T; this.cars = view.cars ?? []; this.signals = view.signals ?? null; this.player = view.player ?? null;
     const eye = camera.position, ground = this.surface(eye.x, eye.z), up = Math.max(0, eye.y - ground);
     // where people are kept: round what the view looks at, from street level out to a few hundred metres up
-    const on = this.enabled && up < 700;
+    const on = this.enabled && up < 320; // (from higher a person is a pixel or less)
+    if (this.frozen) { this.draw(dt, camera, eye, new THREE.Vector3()); return; }
     // (what is looked at: the controls' target, or in a directed shot where the view meets the ground)
     let fx, fz;
     if (view.focus) { fx = view.focus.x; fz = view.focus.z; }
@@ -623,8 +633,10 @@ export class People {
     const want = on && this.census ? Math.min(POOL - 40, (this.census.total + this.census.stills * 2) * scale) : 0;
     this.stats.target = Math.round(want);
     // fewer than wanted: some come (all at once after a cut: the street is full when the picture comes)
+    // (after a cut, at the start, and while the walks round about arrive: the street is full when it is first seen)
+    if (this.walks.version !== this.seenVersion) { this.seenVersion = this.walks.version; this.fillUntil = now + 1.5; }
     if (on && this.census?.total > 0) {
-      const fill = jumped || !this.filled;
+      const fill = jumped || !this.filled || now < this.fillUntil;
       let budget = fill ? 400 : 6;
       while (this.people.length < want && budget-- > 0 && this.free.length > 3) {
         const stillShare = this.census.stills * 2 / ((this.census.total + this.census.stills * 2) || 1);
@@ -707,6 +719,12 @@ export class People {
       // pace: its own, or the one in front's when close
       let target = p.speed;
       if (p.ahead) { const gap = p.ahead.gap - 0.9; target = Math.min(target, Math.max(0, gap) * 1.2, gap < 1.6 ? p.ahead.p.v + 0.1 : target); }
+      // the one you are (walking, cycling): stepped round, not walked through
+      const pl = this.player;
+      if (pl) {
+        const dx = pl.x - p.x, dz = pl.z - p.z, d = Math.hypot(dx, dz), hs = Math.sin(p.heading), hc = Math.cos(p.heading);
+        if (d < 2.4 && dx * hs + dz * hc > 0) { p.lane = -dx * hc + dz * hs > 0 ? -0.8 : 1; target = Math.min(target, Math.max(0.25, (d - 0.7) * 0.8)); }
+      }
       p.v += (target - p.v) * Math.min(1, dt * 3);
       p.u += p.v * dt;
       if (p.u >= l.len) {
@@ -730,7 +748,7 @@ export class People {
   enter(p, l, dir) {
     p.link = l; p.dir = dir; p.u = 0;
     // its place across the way: right of centre (people keep right), some further out than others
-    p.lane = 0.25 + rnd() * 0.7;
+    p.lane = p.lanePref = 0.25 + rnd() * 0.7;
   }
   follow(f, dt) {
     const L = f.leader;
@@ -756,6 +774,7 @@ export class People {
     const lanes = new Map();
     for (const p of this.people) {
       p.ahead = null;
+      if (p.lanePref != null) p.lane += (p.lanePref - p.lane) * 0.12; // (back to its own side, once past)
       if ((p.state !== 'walk' && p.state !== 'cross') || !p.link) continue;
       const k = p.link; if (!lanes.has(k)) lanes.set(k, []); lanes.get(k).push(p);
     }
@@ -771,6 +790,12 @@ export class People {
         // overtaking: a slower one close ahead, room further out: step out to pass
         if (best && best.p.v < p.speed - 0.15 && best.gap < 3) p.lane = Math.min(1, p.lane + 0.35);
         p.ahead = best;
+        // and side by side with another (either way): a step apart
+        for (const q of list) {
+          if (q === p || Math.abs((q.dir === p.dir ? q.u : q.link.len - q.u) - p.u) > 0.9) continue;
+          const lq = q.dir === p.dir ? q.lat : -q.lat; // (its offset, from this one's side)
+          if (Math.abs(lq - p.lat) < 0.55) p.lane = Math.max(-1, Math.min(1, p.lane + (p.lat >= lq ? 0.3 : -0.3)));
+        }
       }
     }
   }
@@ -780,8 +805,9 @@ export class People {
     this.camera = camera;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), pos = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
     const D = this.data;
-    let drawn = 0;
+    let drawn = 0, seen = 0;
     this.frame = (this.frame ?? 0) + 1;
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)), at = new THREE.Vector3();
     for (const p of this.people) {
       const c = p.clips[p.clipA] ?? p.clips.idle;
       // the clip runs on: a walk at the pace it is carried, standing still in its own time
@@ -795,12 +821,13 @@ export class People {
       // the heading eases round
       if (p.headingTo != null) { const d = Math.atan2(Math.sin(p.headingTo - p.heading), Math.cos(p.headingTo - p.heading)); p.heading += d * Math.min(1, dt * 7); }
       const dist = Math.hypot(p.x - eye.x, p.z - eye.z, (p.y ?? eye.y) - eye.y);
-      const lod = dist < LOD[0] ? 0 : dist < LOD[1] ? 1 : 2;
-      // its height: on the street as drawn (each frame near, now and then far off)
-      if (p.y == null || lod < 2 || (this.frame + p.slot) % 6 === 0) {
-        const y = streetAt(this.surface, p.x, p.z, p.y ?? this.surface(p.x, p.z)) + ((p.leader ?? p).link?.kind === KIND.CROSSING ? 0 : this.lift(p.x, p.z));
-        p.y = p.y == null || Math.abs(y - p.y) > 2 ? y : p.y + (y - p.y) * Math.min(1, dt * 12);
+      const lod = this.forceLod ?? (dist < LOD[0] ? 0 : dist < LOD[1] ? 1 : 2);
+      // its height: on the street as drawn, looked up again when it has moved a little (or now and then)
+      if (p.y == null || Math.abs(p.x - p.hx) + Math.abs(p.z - p.hz) > (lod < 2 ? 0.35 : 1.5) || (this.frame + p.slot) % 15 === 0) {
+        p.hy = streetAt(this.surface, p.x, p.z, p.y ?? this.surface(p.x, p.z)) + ((p.leader ?? p).link?.kind === KIND.CROSSING ? 0 : this.lift(p.x, p.z));
+        p.hx = p.x; p.hz = p.z;
       }
+      p.y = p.y == null || Math.abs(p.hy - p.y) > 2 ? p.hy : p.y + (p.hy - p.y) * Math.min(1, dt * 12);
       const visible = dist < FAR && p.fade > 0;
       const a = p.avatar, g = a.geo[lod];
       if (!visible) { if (p.lod !== -1) { this.body.setVisibleAt(p.slot, false); if (this.hasHair) this.hair.setVisibleAt(p.slot, false); p.lod = -1; } continue; }
@@ -818,9 +845,25 @@ export class People {
       D[o + 4] = B ? B.start : 0; D[o + 5] = B ? B.frames : 1; D[o + 6] = B ? p.phaseB : 0; D[o + 7] = a.layer;
       D[o + 8] = p.tone[0]; D[o + 9] = p.tone[1]; D[o + 10] = p.tone[2]; D[o + 11] = p.fade;
       drawn++;
+      if (dist < 120 && frustum.containsPoint(at.set(p.x, p.y + 1, p.z))) seen++;
     }
     this.dataTexture.needsUpdate = true;
-    this.stats.drawn = drawn;
+    this.stats.drawn = drawn; this.stats.seen = seen;
+  }
+  // (for looking at them: every avatar in a row at (x, z), facing `heading`, each twice: as drawn, and with the
+  // darkest tone it may take; the crowd stands aside meanwhile, until lineup(null))
+  lineup(x, z, heading = 0, clip = 'idle', ids = null) {
+    for (const p of this.people) this.release(p);
+    this.people.length = 0;
+    this.frozen = x != null;
+    if (!this.frozen) return;
+    const ax = Math.cos(heading), az = -Math.sin(heading), list = this.avatars.filter((a) => !ids || ids.includes(a.id)).flatMap((a) => (a.tint ? [[a, false], [a, true]] : [[a, false]]));
+    list.forEach(([a, dark], i) => {
+      const p = this.person('everyday', null);
+      if (!p) return;
+      const k = (((a.fairHair ? 58 : 42) + 16) / (a.base + 16)) ** 3, o = (i - (list.length - 1) / 2) * 0.9;
+      Object.assign(p, { avatar: a, clips: a.clips, tone: dark && k < 1 ? [k, k, k ** 1.06] : [1, 1, 1], scale: 1, state: 'still', x: x + ax * o, z: z + az * o, heading, clipA: a.clips[clip] ? clip : 'idle', fade: 1, until: Infinity, label: `${a.id}${dark ? ' dark' : ''}` });
+    });
   }
   dispose() { this.body?.dispose(); this.hair?.dispose(); }
 }

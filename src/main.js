@@ -919,7 +919,8 @@ function frame(_, manual) {
       peopleCarsAt = 0.25; peopleCars = [];
       if (traffic.group.parent) for (const o of traffic.near(camera.position.x, camera.position.z, 420)) peopleCars.push(o.x, o.z, o.heading, o.speed);
     }
-    people.update(dt, { camera, focus: directed || chase.on ? null : controls.target, hour: clockTime.hour, T: clockTime.hour * 3600, cars: peopleCars, signals: simulating ? simSignals : null, detail: governor.detail });
+    people.update(dt, { camera, focus: directed || chase.on ? null : controls.target, hour: clockTime.hour, T: clockTime.hour * 3600, cars: peopleCars, signals: simulating ? simSignals : null, detail: governor.detail,
+      player: (mode === 'walk' || mode === 'bike') ? active()?.view : null });
   }
   // the one being played: on foot, in the car, in the air (the simulated cars round it fade rather than pass through)
   const player = active();

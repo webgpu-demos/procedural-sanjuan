@@ -282,7 +282,15 @@ node tools/assets/crowd_pack.mjs <out>                        # -> public/models
   parks), each kind with its own day (`src/world/people.js` `DAY`). An estimate, scaled to a few places: about 20 on
   Calle Fortaleza at its busiest, 10 on Ashford, 6 on the Milla de Oro, under one on a street of houses. Not a count.
 - **Where they stop**: bus stops (and their shelters' benches), benches, shop doors and cafés, bars at night.
-- In blocks of 1 km (`walks/<x>_<z>.bin`, listed in `walks.json`), loaded round the view.
+- In blocks of 1 km (`walks/<x>_<z>.bin`, listed in `walks.json`), loaded round the view. `npm run walks -- --area=<id>`
+  after a compile (which clears the area's folder). A bridge's sidewalks, which the tiles do not pave (the deck is
+  drawn on its own), are put where the street's would be; footbridges are left out (people would walk under them).
+  The municipality's walks come in a few large pieces (the expressways and the bay part them).
+- **The people** (`public/models/people/README.md`): `crowd.py` cuts a Rocketbox avatar's skeleton to the 22 bones a
+  walk moves, makes its three levels of detail and its atlas (`crowd_atlas.py`: the skin found by its colour against
+  the face's and the hair's, and marked in alpha), and retargets the clips; `crowd_pack.mjs` keeps one set of clips for
+  the women and one for the men (the retargeting gives every avatar of either the same rotations) and compresses the
+  rest. In the client every avatar's every clip is baked into the pose texture on its own skeleton.
 
 ## Publishing
 

@@ -18,6 +18,7 @@ const GLTFPACK = process.env.GLTFPACK ?? 'gltfpack';
 // Centro Médico, the clinics), security (at a bank's or a mall's door), work (a site, a delivery), running (the
 // promenades at dawn and dusk), beach (on the sand and the street behind it), child (with a grown-up)
 const ROLES = {
+  m01: 'everyday',
   f01: 'everyday', f02: 'everyday', f03: 'everyday', f05: 'everyday office', f08: 'everyday', f13: 'everyday', f17: 'everyday', fp2: 'everyday',
   m06: 'everyday', m07: 'everyday office', m08: 'everyday office', m09: 'everyday', m11: 'everyday', m12: 'everyday', m14: 'everyday', m16: 'everyday', wm1: 'everyday work',
   bf1: 'office', bf2: 'office', bf4: 'office', bm2: 'office', bm5: 'office', bm6: 'office', bm7: 'office everyday',
@@ -26,6 +27,11 @@ const ROLES = {
 };
 // (whose skin can take another tone: those whose skin the atlas marks cleanly; checked by eye)
 const NO_TINT = new Set(process.env.NO_TINT?.split(',') ?? []);
+// How often each is picked among those of its role, by what it wears for the heat: short sleeves, a tank top, a
+// dress, shorts 1; long sleeves rolled or light 0.5; a sweater, a jacket, a blazer out of the office 0.15
+const WEIGHT = { f02: 0.15, f05: 0.4, m06: 0.4, m07: 0.25, m08: 0.6, m12: 0.2, m14: 0.5, wm1: 0.5, km1: 0.3, kf1: 0.7, m01: 1.2, km2: 1.2 };
+// fair or red hair: a darker skin under it reads as a dye job on every head, so their tone stays nearer their own
+const FAIR_HAIR = new Set(['f01', 'f13', 'f17', 'm16', 'kf1', 'bf2', 'dm3', 'jf2', 'bchf', 'm08', 'km1']);
 
 const readGlb = (file) => {
   const b = fs.readFileSync(file), len = b.readUInt32LE(12);
@@ -55,7 +61,7 @@ for (const id of Object.keys(ROLES)) {
   const bare = path.join(tmp, `${id}.glb`); writeGlb(bare, json, glb.bin);
   pack(bare, path.join(OUT, `${id}.glb`), ['-vpf', '-vtf', '-kv']); // (-kv: the UVs, which no material here maps; -vpf -vtf: plain floats, no dequantizing transforms for the client to apply)
   fs.copyFileSync(path.join(SRC, `${id}.webp`), path.join(OUT, `${id}.webp`));
-  avatars.push({ id, source: info.source, sex: info.sex, roles: ROLES[id].split(' '), group: g.id, skin: info.skin, tint: !NO_TINT.has(id), triangles: info.triangles });
+  avatars.push({ id, source: info.source, sex: info.sex, roles: ROLES[id].split(' '), group: g.id, skin: info.skin, tint: !NO_TINT.has(id), fairHair: FAIR_HAIR.has(id), weight: WEIGHT[id] ?? 1, triangles: info.triangles });
   console.log(id, g.id, fs.statSync(path.join(OUT, `${id}.glb`)).size, fs.statSync(path.join(OUT, `${id}.webp`)).size);
 }
 // each sex's clips: its first avatar's, without its meshes
