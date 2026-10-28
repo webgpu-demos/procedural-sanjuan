@@ -1,0 +1,31 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ D=/mnt/sim/diag
+++ mkdir -p /mnt/sim/diag
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
++++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python -c 'import sumo; print(sumo.SUMO_HOME)'
+++ export SUMO_HOME=/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo
+++ SUMO_HOME=/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo
+++ node tools/sim/network.mjs
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=0.5 --scenario=lab --vtype=
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan --demand=lab
+++ '[' -n d50 ']'
+++ git clone -q --depth 1 -b simres/d50 https://x-access-token:ghs_15368_eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRobmQiLCJjdHgiOiJ3UWVCTGNLcV95aGJFbmw1d1FxSUJndTNaa0MxaTk4a2ZDWWJ4RmQwOW9fTVQ3S0lIWUt2cXZnIiwiZXhwIjoxNzkzMTUzNzY1LCJpYXQiOjE3OTMxNTAxNjUsImlzcyI6ImdpdGh1YiIsImp0aSI6Ijc3ODY1NDcyLWVjMWItNGI0NS1iMGRlLWVjNmU3ZmMyYzRhNyIsInZlciI6M30.dA7NM9uIDiYUna7DCziYiLhb-52w25NATX5bHlbiTi1GAThRNgtY9r43qIQoa6zQk3Gj5s8jiwNC8frmHKDwwA@github.com/webgpu-demos/procedural-sanjuan /mnt/sim/pre
++++ ls /mnt/sim/pre/trips_009.rou.xml.gz
++++ head -1
+++ ROUTES=/mnt/sim/pre/trips_009.rou.xml.gz,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml
+++ '[' -f /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml ']'
+++ TAZADD=,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml
+++ cat
++++ python3 -c 'print(int(9*3600))'
+++ /usr/bin/time -v /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -r /mnt/sim/pre/trips_009.rou.xml.gz,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml --additional-files /mnt/sim/diag/ed.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml --begin 16200 --end 32400 --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --statistic-output /mnt/res/stats.xml --summary-output /mnt/sim/diag/summary.xml --summary-output.period 60 --log /mnt/sim/diag/sumo.log --duration-log.statistics --step-log.period 900 --device.rerouting.probability 0.25 --device.rerouting.period 300 --device.rerouting.threads 4
+++ tr '\r' '\n'
+++ grep -v '^Warning'
+++ grep Teleporting /mnt/sim/diag/sumo.log
+++ gzip
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/hotspots.py /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz /mnt/sim/diag/sumo.log /mnt/sim/diag/ed.xml --top=60
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/validate.py --area=sanjuan --scenario=lab --edgedata=/mnt/sim/diag/ed.xml --out=/mnt/res
+++ gzip -c /mnt/sim/diag/summary.xml
+++ gzip -c /mnt/sim/diag/ed.xml
+++ cp /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/net/inside.json /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/net/lanes.json /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/net/merged.json /mnt/res/
+++ gzip -f /mnt/res/merged.json /mnt/res/inside.json
+exit 0 after 45 min
