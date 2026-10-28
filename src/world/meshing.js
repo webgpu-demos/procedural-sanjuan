@@ -8,6 +8,7 @@ import { KIND, CAT, WALL, GROUND } from './constants.js';
 import { buildTower } from './tower.js';
 import { createDraper } from './drape.js';
 import { decalMesh } from './decals.js';
+import { channelMesh } from './channels.js';
 
 // ---------------------------------------------------------------- helpers
 const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -56,7 +57,9 @@ function triangulate(rings) {
 }
 
 // ---------------------------------------------------------------- terrain
-export function terrainMesh(grid, tx, tz, tileSize) {
+// cut: the channels' (src/world/channels.js): the pieces of a triangle left standing over them, null where none is
+// under it. A triangle cut is replaced by its pieces, flat with it.
+export function terrainMesh(grid, tx, tz, tileSize, cut = null) {
   const seg = Math.ceil(tileSize / grid.step), n = seg + 1, d = tileSize / seg;
   const pos = new Float32Array(n * n * 3), nor = new Float32Array(n * n * 3), idx = new Uint16Array(seg * seg * 6);
   for (let j = 0; j < n; j++)
@@ -72,7 +75,34 @@ export function terrainMesh(grid, tx, tz, tileSize) {
       const a = j * n + i, b = a + 1, c = a + n, e = c + 1;
       idx[o++] = a; idx[o++] = c; idx[o++] = b; idx[o++] = b; idx[o++] = c; idx[o++] = e;
     }
-  return { position: pos, normal: nor, index: idx };
+  if (!cut) return { position: pos, normal: nor, index: idx };
+  // the triangles over a channel, cut: each piece's corners take the height and normal of the triangle there
+  const keep = [], extraPos = [], extraNor = [];
+  let next = n * n;
+  for (let t = 0; t < idx.length; t += 3) {
+    const v = [idx[t], idx[t + 1], idx[t + 2]], P = v.map((q) => [pos[q * 3], pos[q * 3 + 2]]);
+    const pieces = cut(P);
+    if (!pieces) { keep.push(...v); continue; }
+    const det = (P[1][0] - P[0][0]) * (P[2][1] - P[0][1]) - (P[2][0] - P[0][0]) * (P[1][1] - P[0][1]);
+    for (const piece of pieces) {
+      const base = next;
+      for (const [x, z] of piece) {
+        const w1 = ((x - P[0][0]) * (P[2][1] - P[0][1]) - (P[2][0] - P[0][0]) * (z - P[0][1])) / det;
+        const w2 = ((P[1][0] - P[0][0]) * (z - P[0][1]) - (x - P[0][0]) * (P[1][1] - P[0][1])) / det, w0 = 1 - w1 - w2;
+        extraPos.push(x, w0 * pos[v[0] * 3 + 1] + w1 * pos[v[1] * 3 + 1] + w2 * pos[v[2] * 3 + 1], z);
+        for (let c = 0; c < 3; c++) extraNor.push(w0 * nor[v[0] * 3 + c] + w1 * nor[v[1] * 3 + c] + w2 * nor[v[2] * 3 + c]);
+        next++;
+      }
+      // a fan over the piece, wound as the triangle was (its whole area's sign: the first corners can lie in a line)
+      let area = 0;
+      for (let k = 0; k < piece.length; k++) { const a = piece[k], b = piece[(k + 1) % piece.length]; area += a[0] * b[1] - b[0] * a[1]; }
+      const flip = Math.sign(area) !== Math.sign(det);
+      for (let k = 1; k + 1 < piece.length; k++) keep.push(base, flip ? base + k + 1 : base + k, flip ? base + k : base + k + 1);
+    }
+  }
+  const P2 = new Float32Array(next * 3), N2 = new Float32Array(next * 3);
+  P2.set(pos); P2.set(extraPos, n * n * 3); N2.set(nor); N2.set(extraNor, n * n * 3);
+  return { position: P2, normal: N2, index: next > 65535 ? Uint32Array.from(keep) : Uint16Array.from(keep) };
 }
 
 // ---------------------------------------------------------------- road surfaces
@@ -125,7 +155,10 @@ const DRAPE_EDGE = 6;
 
 // surface(x, z, deck): the height roads lie on — the terrain, or a bridge deck (src/shared/decks.js).
 // walls: bridge parapets as rows of [x1, z1, x2, z2, deck].
-export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(grid, surface)) {
+// cut (src/world/channels.js): the ground cover is taken out from over the channels (not the streets: where one
+// crosses a channel, the channel stops at it).
+const CUT = new Set([AREA.PARK, AREA.WOOD, AREA.OTHER, AREA.PITCH, AREA.BEACH, AREA.PATH, AREA.PLAZA, AREA.PARKING, AREA.STEPS]);
+export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(grid, surface), cut = null) {
   const pos = new Buf(), nor = new Buf(), col = new Buf(), lay = new Buf();
   let deck = -1; // deck of the parapet being meshed
   const emit = (p, style) => {
@@ -173,10 +206,12 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
     else parapet(walls[i], walls[i + 1], walls[i + 2], walls[i + 3]);
   }
   for (const a of areas) {
-    const style = styleOf(a);
+    const style = styleOf(a), cutting = cut && CUT.has(a.kind);
     for (const rings of a.polygons) {
       for (const [p, q, r] of triangulate(rings)) drape.triangle(p, q, r, (a, b, c) => {
-        emit(a, style); emit(b, style); emit(c, style);
+        const pieces = cutting ? cut([a, b, c]) : null;
+        if (!pieces) { emit(a, style); emit(b, style); emit(c, style); return; }
+        for (const piece of pieces) for (let k = 1; k + 1 < piece.length; k++) { emit(piece[0], style); emit(piece[k], style); emit(piece[k + 1], style); }
       });
       if (style.kerb) for (const ring of rings) {
         const n = ring.length / 2;
@@ -629,13 +664,23 @@ function liftRaster(areas, tx, tz, tileSize) {
   return { data, n, x0, z0, cell: LIFT_CELL };
 }
 
-export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z)) {
+// (arrays alike, end to end)
+function joinMeshes(a, b) {
+  if (!b || !b.position.length) return a;
+  const out = {};
+  for (const k of Object.keys(a)) { out[k] = new Float32Array(a[k].length + b[k].length); out[k].set(a[k]); out[k].set(b[k], a[k].length); }
+  return out;
+}
+
+// channels: prepareChannels() (src/world/channels.js), or null
+export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z), channels = null) {
   // (the default surface ignores decks: fine for tests, the worker passes makeSurface())
   const drape = createDraper(grid, surface, tileSize);
   tile = { ...tile, ...clearRoadway(tile) }; // (nothing standing out in the lanes: src/shared/roadway.js)
+  const ch = channels?.forTile(tile.tx, tile.tz), cut = ch?.cut ?? null;
   return {
-    terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize),
-    roads: roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape),
+    terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize, cut),
+    roads: joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null),
     paint: roadMesh(tile.areas.filter(isPaint), grid, surface, [], drape),
     decals: decalMesh(tile.props, drape),
     buildings: buildingMesh(tile.buildings, tile.tx, tile.tz),

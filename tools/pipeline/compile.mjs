@@ -27,13 +27,14 @@ import { profileRailways } from './rails.mjs';
 import { readPlaces, placeSigns, placeAds } from './signs.mjs';
 import { placeFurniture } from './furniture.mjs';
 import { readExtra, buildExtras } from './extras.mjs';
+import { buildChannels } from './channels.mjs';
 import { profileRoads, flyover, BANK } from './roadprofile.mjs';
 import { DECK_FLAG, CORRIDOR_MARGIN, projectOnDeck } from '../../src/shared/decks.js';
 import { readBuildingSources } from './buildings.mjs';
 import { readGarita } from './garita.mjs';
 import { buildSea } from './coast.mjs';
 import { buildRoadSurfaces } from './roadsurface.mjs';
-import { Tris, fort, wallGaritas, domeOn, lighthouse, cathedral, convention, encodeMesh, simplify } from './landmarks.mjs';
+import { Tris, fort, morro, uprTower, wallGaritas, domeOn, lighthouse, cathedral, convention, encodeMesh, simplify } from './landmarks.mjs';
 
 const TERRAIN_STEP_DEFAULT = 5; // metres (an area may set its own: config.mjs)
 const SEA = 0;            // the sea surface (m)
@@ -141,8 +142,23 @@ function rasterize(grid, polygons, fn) {
 
 // ---------------------------------------------------------------- terrain, the sea and the water
 const grid = buildHeightGrid(path.join(area.rawDir, 'dem'), proj, extent, TERRAIN_STEP);
-// the 1 m lidar ground where it covers the area (tools/pipeline/lidar.mjs), over the terrain tiles' 10 m surface
-const lidar = await applyLidar(grid, path.join(area.rawDir, 'dem', 'lidar'), proj, log);
+// the 1 m lidar ground where it covers the area (tools/pipeline/lidar.mjs), over the terrain tiles' 10 m surface.
+// The lidar tiles run to gigabytes: --save-lidar-grid=<file> writes the grid as they leave it (and their numbers,
+// <file>.json) and stops, and --lidar-grid=<file> takes it from there instead of from the tiles, on another machine.
+const argOf = (k) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
+let lidar;
+if (argOf('lidar-grid')) {
+  const saved = new Float32Array(fs.readFileSync(argOf('lidar-grid')).buffer.slice(0));
+  if (saved.length !== grid.data.length) throw new Error(`--lidar-grid holds ${saved.length} cells, the grid ${grid.data.length}`);
+  grid.data.set(saved);
+  lidar = JSON.parse(fs.readFileSync(argOf('lidar-grid') + '.json', 'utf8'));
+} else lidar = await applyLidar(grid, path.join(area.rawDir, 'dem', 'lidar'), proj, log);
+if (argOf('save-lidar-grid')) {
+  fs.writeFileSync(argOf('save-lidar-grid'), Buffer.from(grid.data.buffer));
+  fs.writeFileSync(argOf('save-lidar-grid') + '.json', JSON.stringify(lidar));
+  log(`lidar grid saved to ${argOf('save-lidar-grid')}`);
+  process.exit(0);
+}
 if (lidar.tiles) log(`lidar: ${lidar.covered} of ${lidar.cells} grid cells from ${lidar.tiles} tiles (${(lidar.covered / lidar.cells * 100).toFixed(0)}%), ` +
   `mean change ${lidar.meanAbsChange} m; land cells on a whole metre ${(lidar.plateauShareBefore * 100).toFixed(0)}% -> ${(lidar.plateauShareAfter * 100).toFixed(0)}%`);
 else log('lidar: none in data/raw (npm run fetch gets it); the terrain tiles alone');
@@ -155,10 +171,10 @@ const landRaw = readLand(path.join(area.rawDir, 'osm_land.json'));
 const xz = (ll) => ll.map(([lon, lat]) => proj.project(lon, lat));
 const seaIndex = new PolyIndex(64);
 for (const p of seaPolys) seaIndex.add(p);
-const land = landRaw.areas.map(({ kind, ring, code }) => {
+const land = landRaw.areas.map(({ kind, ring, code, trees }) => {
   const r = xz(ring).slice(0, -1); // drop the closing point
   if (areaEN(r) < 0) r.reverse();
-  return { kind, ring: r, code: kind === AREA.PITCH ? code : 0 };
+  return { kind, ring: r, code: kind === AREA.PITCH ? code : 0, trees };
 }).filter((a) => a.ring.length >= 3 && Math.abs(areaEN(a.ring)) > 4)
   // (water mapped inside the sea, a bay or a harbour basin, is already sea)
   .filter((a) => !(a.kind === AREA.WATER && seaIndex.has(...a.ring.reduce((s, p) => [s[0] + p[0] / a.ring.length, s[1] + p[1] / a.ring.length], [0, 0]))));
@@ -295,6 +311,21 @@ for (const edge of graph.edges) {
   edge.span = spans.has(edge) ? 1 : 0;  // a street-level bridge: treated as an ordinary road from here on
   edge.flyover = flyover(edge) ? 1 : 0; // carried on its own structure above the streets
 }
+// --road-levels=<roads.json>: the levels and the street-level spans of an earlier compile of the same graph, kept
+// (San Juan's: its simulated mornings were driven on them, and its expressway's structures checked shot by shot,
+// src/shared/profile.js; the 10 m grid smooths an embankment's top away, and the profile laid on the lidar ground
+// stood PR-22's approaches up to 7 m off it on walled ramps)
+if (argOf('road-levels')) {
+  const old = JSON.parse(fs.readFileSync(argOf('road-levels'), 'utf8'));
+  if (old.edges.length !== graph.edges.length) throw new Error(`--road-levels: ${old.edges.length} edges, the graph ${graph.edges.length}`);
+  graph.edges.forEach((edge, i) => {
+    const o = old.edges[i];
+    if (o.way !== edge.way || o.pts.length !== edge.ids.length * 3) throw new Error(`--road-levels: edge ${i} is not way ${edge.way} as it was`);
+    edge.span = o.span ? 1 : 0;
+    edge.ids.forEach((id, k) => level.set(id, o.pts[k * 3 + 1]));
+  });
+  log(`road levels and spans kept from ${path.relative(process.cwd(), argOf('road-levels'))} (${graph.edges.filter((e) => e.span).length} spans)`);
+}
 
 // ---------------------------------------------------------------- road surfaces
 // The streets widened to their right-of-way and the buildings cut out of them (roadsurface.mjs). A FEMA
@@ -350,9 +381,29 @@ const decks = roadsOut.edges.filter((e) => e.span).map((e) => {
   };
   return { pts: [...out(0, 3), ...p, ...out(n - 3, n - 6)], half: Math.max(1, e.lanes) * 1.65 + CORRIDOR_MARGIN };
 });
+// (and with --road-levels, the decks the earlier compile's manifest beside it holds for the same spans, their levels
+// as they were set there: tools/pipeline/reterrain.mjs moved them with the ground on either bank)
+if (argOf('road-levels')) {
+  const file = path.join(path.dirname(argOf('road-levels')), 'manifest.json');
+  const was = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).decks : null;
+  const same = was?.length === decks.length && was.every((d, k) => d.pts.length === decks[k].pts.length
+    && d.pts.every((v, i) => i % 3 === 1 || Math.abs(v - decks[k].pts[i]) < 0.02));
+  if (same) { decks.splice(0, decks.length, ...was); log(`  the ${decks.length} decks' levels kept from ${path.relative(process.cwd(), file)}`); }
+}
 // Under a road bridge the terrain model shows the bridge, not the track bed below it.
 const underBridge = (x, z) => decks.some((d) => { const p = projectOnDeck(d, x, z); return p.inside && p.dist <= d.half - CORRIDOR_MARGIN + 6; });
 const rails = profileRailways(buildRailways(osm, proj.project, inBounds), ground, inBounds, underBridge);
+// (with --road-levels, the railways' levels too, from the roads.json's area beside it: the same lines, as they were,
+// and their tunnel mouths, at the write)
+let railsWas = null;
+if (argOf('road-levels')) {
+  const file = path.join(path.dirname(argOf('road-levels')), 'rails.json');
+  const was = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+  const same = was?.length === rails.length && was.every((l, k) => l.pts.length === rails[k].pts.length
+    && l.pts.every((v, i) => i % 3 === 1 || Math.abs(v - rails[k].pts[i]) < 0.02));
+  if (same) { rails.forEach((l, k) => { for (let i = 1; i < l.pts.length; i += 3) l.pts[i] = was[k].pts[i]; }); railsWas = was; log(`  the ${rails.length} railways' levels kept from ${path.relative(process.cwd(), file)}`); }
+  else log(`  railways: ${path.relative(process.cwd(), file)} holds other lines; their levels are this compile's`);
+}
 // Record where each track crosses a building outline (a station built over the line) so the client can
 // put a tunnel mouth there: [x, y, z, dirX, dirZ], pointing in.
 let portals = 0;
@@ -527,11 +578,47 @@ for (const m of [...extras.marks, ...courtLines.map((ring) => ({ kind: AREA.MARK
 for (const b of extras.barriers) tileFor((b[0] + b[2]) / 2, (b[1] + b[3]) / 2).walls.push(b);
 log(`OSM extras: ${Object.entries(extras.count).map(([k, v]) => `${k} ${v}`).join(', ')}`);
 
+// ---- rivers and streams, in channels cut into the ground (channels.mjs; the client cuts them: src/world/channels.js).
+// A channel stops where a street crosses it at street level and under a building; it runs on under a bridge.
+const raisedSegs = new Map(), RC = 24;
+for (const e of roadsOut.edges) {
+  if (!e.bridge && !e.flyover && !e.span) continue;
+  const half = Math.max(1, e.lanes ?? 2) * 1.8 + 3;
+  for (let i = 3; i < e.pts.length; i += 3) {
+    const s = [e.pts[i - 3], e.pts[i - 2], e.pts[i - 1], e.pts[i], e.pts[i + 1], e.pts[i + 2], half];
+    for (let a = Math.floor((Math.min(s[0], s[3]) - half) / RC); a <= Math.floor((Math.max(s[0], s[3]) + half) / RC); a++)
+      for (let b = Math.floor((Math.min(s[2], s[5]) - half) / RC); b <= Math.floor((Math.max(s[2], s[5]) + half) / RC); b++) {
+        const k = a + ',' + b;
+        if (!raisedSegs.has(k)) raisedSegs.set(k, []);
+        raisedSegs.get(k).push(s);
+      }
+  }
+}
+// a road over (x, z) on a bridge, well above the ground there
+const overhead = (x, z) => (raisedSegs.get(Math.floor(x / RC) + ',' + Math.floor(z / RC)) ?? []).some(([ax, ay, az, bx, by, bz, half]) => {
+  const dx = bx - ax, dz = bz - az, u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+  return Math.hypot(x - ax - dx * u, z - az - dz * u) < half && ay + (by - ay) * u - ground(x, z) > 2;
+});
+const chan = buildChannels(extraRaw.ways, { ground, inBounds, wet,
+  blocked: (x, z) => idx.building.has(x, z) || (idx.road.has(x, z) && !overhead(x, z)) });
+const inChannel = new PolyIndex(32);
+for (const ring of chan.rings) inChannel.add([ring]);
+// every tile a channel runs through is written, even with nothing else in it (the client cuts its ground there, and
+// a stretch is drawn by the tile its middle is in)
+for (const c of chan.channels) for (let i = 0; i < c.p.length; i += 3) {
+  if (inBounds(c.p[i], c.p[i + 1])) tileFor(c.p[i], c.p[i + 1]);
+  if (i && inBounds((c.p[i] + c.p[i - 3]) / 2, (c.p[i + 1] + c.p[i - 2]) / 2)) tileFor((c.p[i] + c.p[i - 3]) / 2, (c.p[i + 1] + c.p[i - 2]) / 2);
+}
+log(`channels: ${chan.stats.km} km in ${chan.stats.runs} stretches of ${chan.stats.ways} waterways (${Object.entries(chan.stats.byKind).map(([k, v]) => `${k} ${v} km`).join(', ')}); ` +
+  `stopped at ${chan.stats.blocked} points under streets and buildings, ${chan.stats.deep} where the line climbs out of its bed, ${chan.stats.wet} in open water`);
+
+// (the old city's lawns are open: El Morro's esplanade, the slopes below the walls; its trees are mapped)
+const centroid = (r) => [r.reduce((s, p) => s + p[0], 0) / r.length, r.reduce((s, p) => s + p[1], 0) / r.length];
 const placed = placeProps({
-  land, trees: landRaw.trees.map(([lon, lat, g]) => [...proj.project(lon, lat), g]), treeRows: landRaw.treeRows.map((row) => Object.assign(xz(row), { genus: row.genus })), vending: xz(landRaw.vending),
+  land: land.map((a) => (a.trees < 1 && heritageRing && inRings(...centroid(a.ring), heritageRing) ? { ...a, trees: 0 } : a)), trees: landRaw.trees.map(([lon, lat, g]) => [...proj.project(lon, lat), g]), treeRows: landRaw.treeRows.map((row) => Object.assign(xz(row), { genus: row.genus })), vending: xz(landRaw.vending),
   edges: roadsOut.edges, idx, inBounds,
 });
-const allProps = [...placed.props, ...paint.props, ...extras.props];
+const allProps = [...placed.props, ...paint.props, ...extras.props].filter((p) => !inChannel.has(p.x, p.z)); // (nothing standing in the water)
 for (const p of allProps) tileFor(p.x, p.z).props.push({ ...p, x: r2(p.x), z: r2(p.z) });
 for (const w of placed.wires) tileFor(w[0], w[1]).wires.push(w.map(r2));
 const propName = Object.fromEntries(Object.entries(PROP).map(([k, v]) => [v, k.toLowerCase()]));
@@ -578,6 +665,9 @@ const LANDMARKS = {
   w59744985: { hint: 0xeeebe2 },                                               // the Capitol: white marble
   w255583481: { hint: 0xf1e6cc, model: 'cathedral', facing: [-1, 0] },         // San Juan Bautista, its facade on Calle del Cristo
   w196616058: { hint: 0xebeae4, model: 'convention', facing: [1, -1] },        // the Convention Center, its glass front to the boulevard
+  w561634537: { model: 'morro', land: [1, 0.25] },                             // El Morro, its landward front to the esplanade (east)
+  w464280727: { model: 'uprTower' },                                           // the UPR's Roosevelt Tower, Río Piedras
+  w72836163: { hint: 0xf3ead2, masonry: true },                                // the Baldorioty de Castro building under it (Spanish Revival)
 };
 const lmTiles = new Map();
 const lmTris = (x, z) => { const t = tileFor(x, z), k = tileKey(t.tx, t.tz); if (!lmTiles.has(k)) lmTiles.set(k, new Tris()); return lmTiles.get(k); };
@@ -592,7 +682,8 @@ const removeEntry = (b, keepForBlocks) => {
 // the forts first: the garitas on the walls keep clear of theirs
 for (const b of keptBuildings) {
   if (!(b.entry.flags & BFLAG.MASONRY)) continue;
-  const f = fort(b.polygons[0][0], ground, lmTris(b.cx, b.cz), spots);
+  const spec = LANDMARKS[b.id];
+  const f = spec?.model === 'morro' ? morro(b.polygons[0][0], ground, lmTris(b.cx, b.cz), spots, spec.land) : fort(b.polygons[0][0], ground, lmTris(b.cx, b.cz), spots);
   fortPieces.push(...f.pieces);
   removeEntry(b, true);
   lmCount.forts++;
@@ -614,6 +705,16 @@ for (const e of JSON.parse(fs.readFileSync(path.join(area.rawDir, 'osm_poi.json'
   lighthouse(lmTris(x, z), x, z, on > -Infinity ? on : ground(x, z));
   lmCount.lighthouses++;
 }
+// The walks OSM maps as bridges inside a fort (its ramps and the bridges between its levels) are its masonry, which
+// the model has: no steel footbridge over them
+const inFort = (x, z) => fortPieces.some((p) => inRings(x, z, [p.ring]));
+const footbridges0 = extras.structures.footbridges.length;
+extras.structures.footbridges = extras.structures.footbridges.filter((f) => {
+  let inside = 0, n = 0;
+  for (let i = 0; i < f.pts.length; i += 3, n++) if (inFort(f.pts[i], f.pts[i + 2])) inside++;
+  return inside * 2 < n;
+});
+if (footbridges0 > extras.structures.footbridges.length) log(`  ${footbridges0 - extras.structures.footbridges.length} footbridges inside the forts left to their masonry`);
 const enclosing = (b) => { // the buildings round the middle of b
   const [tx, tz] = tileOf(b.cx, b.cz), out = [];
   for (let i = tx - 1; i <= tx + 1; i++) for (let j = tz - 1; j <= tz + 1; j++)
@@ -623,6 +724,7 @@ const enclosing = (b) => { // the buildings round the middle of b
 for (const b of keptBuildings) {
   const entry = b.entry, ring = b.polygons[0][0], spec = LANDMARKS[b.id];
   if (spec?.hint) entry.hint = (0x80000000 | spec.hint | (MATERIAL.PLASTER << 24)) >>> 0;
+  if (spec?.masonry) entry.flags |= BFLAG.MASONRY;
   if (b.roof === 'dome') {
     // the walls stop a radius below the dome's top, or at the roof of the building it rises from
     const r = Math.sqrt(Math.abs(areaEN(ring)) / Math.PI), top = enclosing(b).reduce((y, o) => Math.max(y, o.base + o.height), -Infinity);
@@ -643,6 +745,10 @@ for (const b of keptBuildings) {
     }
     if (best) { cathedral(lmTris(b.cx, b.cz), ring, best, entry.base + entry.height, ground((best.ax + best.bx) / 2, (best.az + best.bz) / 2)); lmCount.models++; }
     entry.flags |= BFLAG.MASONRY; // plain walls: not an office block's window grid
+  } else if (spec?.model === 'uprTower') {
+    uprTower(lmTris(b.cx, b.cz), ring, entry.base, entry.height);
+    removeEntry(b, false); // (the model stands in its place)
+    lmCount.models++;
   } else if (spec?.model === 'convention') {
     convention(lmTris(b.cx, b.cz), ring, entry.base + entry.height, spec.facing, ground(b.cx, b.cz));
     entry.flags |= BFLAG.MASONRY; // plain panels, the glass is the model's
@@ -723,8 +829,10 @@ if (far) fs.writeFileSync(path.join(area.outDir, far.file), Buffer.from(far.data
 const signalIds = new Set(landRaw.signals);
 roadsOut.signals = graph.nodes.map((n, i) => (signalIds.has(n.id) ? i : -1)).filter((i) => i >= 0);
 fs.writeFileSync(path.join(area.outDir, 'roads.json'), JSON.stringify(roadsOut));
+if (railsWas) rails.forEach((l, k) => { l.portals = railsWas[k].portals; });
 fs.writeFileSync(path.join(area.outDir, 'rails.json'), JSON.stringify(rails));
 fs.writeFileSync(path.join(area.outDir, 'structures.json'), JSON.stringify(extras.structures));
+fs.writeFileSync(path.join(area.outDir, 'channels.json'), JSON.stringify({ channels: chan.channels }));
 const manifest = {
   format: VERSION, area: area.id, name: area.name, compiled: new Date().toISOString(),
   origin: { lon: area.origin[0], lat: area.origin[1] },
@@ -744,6 +852,8 @@ const manifest = {
   // distant buildings, BLOCK x BLOCK tiles to a file: [cx, cz, file, buildings]
   blocks: { size: BLOCK, chunks: blockFiles },
   roads: 'roads.json', rails: 'rails.json', structures: 'structures.json',
+  // rivers and streams in their channels: [{ k, w, e, p: [x, z, level, ...] }] (tools/pipeline/channels.mjs)
+  channels: 'channels.json',
   // street-level bridge decks: road polygons marked with a deck, and street objects, follow these instead of the terrain (src/shared/decks.js)
   decks,
   tiles: tileList,
