@@ -769,7 +769,7 @@ const BLOCK = 4, blockFiles = [];
     const file = `k_${k}.bin`, [cx, cz] = k.split('_').map(Number);
     fs.writeFileSync(path.join(area.outDir, file), out);
     blockFiles.push([cx, cz, file, list.reduce((n, t) => n + t.buildings.length + t.blockOnly.length, 0)]);
-    bytes += mesh.length;
+    bytes += out.length;
   }
 }
 fs.writeFileSync(path.join(area.outDir, 'terrain.bin'), Buffer.from(grid.data.buffer));

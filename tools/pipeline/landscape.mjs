@@ -83,9 +83,10 @@ function landKind(t) {
 }
 
 // How thickly a park or a wood is filled with trees not mapped one by one (a share of TREE_SPACING's): open ground
-// none (a cemetery, a meadow, grassland), a lawn few (San Juan maps its trees: some 27,000 of them), scrub a
-// third (bushes on a slope, not a forest).
-const treeFill = (t) => (t.landuse === 'cemetery' || t.landuse === 'meadow' || t.natural === 'grassland' ? 0
+// none (a cemetery, a meadow, grassland; a national park's boundary, which is a line on a map: the San Juan
+// National Historic Site runs round El Morro's esplanade and the walls), a lawn few (San Juan maps its trees: some
+// 27,000 of them), scrub a third (bushes on a slope, not a forest).
+const treeFill = (t) => (t.boundary || t.landuse === 'cemetery' || t.landuse === 'meadow' || t.natural === 'grassland' ? 0
   : t.landuse === 'grass' ? 0.25 : t.natural === 'scrub' ? 0.35 : 1);
 const sportOf = (t) => (/tennis/.test(t.sport ?? '') ? SPORT.TENNIS : /soccer|futsal|multi|american_football|rugby/.test(t.sport ?? '') ? SPORT.TURF
   : /baseball|softball/.test(t.sport ?? '') ? SPORT.DIRT : SPORT.OTHER);

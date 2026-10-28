@@ -93,8 +93,10 @@ export function terrainMesh(grid, tx, tz, tileSize, cut = null) {
         for (let c = 0; c < 3; c++) extraNor.push(w0 * nor[v[0] * 3 + c] + w1 * nor[v[1] * 3 + c] + w2 * nor[v[2] * 3 + c]);
         next++;
       }
-      // a fan over the piece, wound as the triangle was
-      const flip = Math.sign(((piece[1][0] - piece[0][0]) * (piece[2][1] - piece[0][1]) - (piece[2][0] - piece[0][0]) * (piece[1][1] - piece[0][1]))) !== Math.sign(det);
+      // a fan over the piece, wound as the triangle was (its whole area's sign: the first corners can lie in a line)
+      let area = 0;
+      for (let k = 0; k < piece.length; k++) { const a = piece[k], b = piece[(k + 1) % piece.length]; area += a[0] * b[1] - b[0] * a[1]; }
+      const flip = Math.sign(area) !== Math.sign(det);
       for (let k = 1; k + 1 < piece.length; k++) keep.push(base, flip ? base + k + 1 : base + k, flip ? base + k : base + k + 1);
     }
   }
