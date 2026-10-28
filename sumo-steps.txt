@@ -1,0 +1,138 @@
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (4774ms).
+Loading additional-files from '/mnt/sim/diag/ed.add.xml' ... done (42ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml' ... done (10ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml' ... done (5ms).
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+  To avoid deadlock/collisions, either: rebuild the signal plan with a newer version of netconvert/netedit
+  or rebuild the network with option '--tls.ignore-internal-junction-jam' or include the program when building.
+Loading route-files incrementally from '/mnt/sim/assign/009/trips_009.rou.alt.xml.gz'
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+Step #16200.00 (140ms ~= 7.14*RT, ~0.00UPS, vehicles TOT 0 ACT 0 BUF 0)                   
+Step #17100.00 (13ms ~= 76.92*RT, ~45769.23UPS, vehicles TOT 819 ACT 595 BUF 0)           
+Step #18000.00 (20ms ~= 50.00*RT, ~44700.00UPS, vehicles TOT 2007 ACT 894 BUF 6)          
+Step #18900.00 (40ms ~= 25.00*RT, ~50400.00UPS, vehicles TOT 4711 ACT 2016 BUF 0)         
+Step #19800.00Warning: Vehicle '6551' could not finish continuous lane change (lane disappeared) time=19800.00.
+ (48ms ~= 20.83*RT, ~53000.00UPS, vehicles TOT 7842 ACT 2544 BUF 2)         
+Step #20700.00 (52ms ~= 19.23*RT, ~56000.00UPS, vehicles TOT 11441 ACT 2912 BUF 3)        
+Step #21600.00 (60ms ~= 16.67*RT, ~53450.00UPS, vehicles TOT 15194 ACT 3207 BUF 3)        
+Step #22500.00 (96ms ~= 10.42*RT, ~60968.75UPS, vehicles TOT 22172 ACT 5853 BUF 3)        
+Step #23400.00Warning: Vehicle '15928' could not finish continuous lane change (turn lane) time=23400.00.
+ (107ms ~= 9.35*RT, ~68532.71UPS, vehicles TOT 29917 ACT 7333 BUF 111)      
+Step #24300.00 (118ms ~= 8.47*RT, ~69957.63UPS, vehicles TOT 37756 ACT 8255 BUF 599)      
+Step #25200.00 (128ms ~= 7.81*RT, ~75507.81UPS, vehicles TOT 46794 ACT 9665 BUF 946)      
+Step #26100.00 (201ms ~= 4.98*RT, ~82154.23UPS, vehicles TOT 63702 ACT 16513 BUF 743)     
+Step #27000.00Warning: Teleporting vehicle '77834'; waited too long (yield), lane='e31058_0', time=27000.00.
+ (245ms ~= 4.08*RT, ~95097.96UPS, vehicles TOT 83668 ACT 23299 BUF 777)     
+Step #27900.00Warning: Vehicle '95563' could not finish continuous lane change (turn lane) time=27900.00.
+ (252ms ~= 3.97*RT, ~99928.57UPS, vehicles TOT 97758 ACT 25182 BUF 573)     
+Step #28800.00Warning: Vehicle '103421' ends teleporting on edge 'e24637-AddedOffRampEdge', time=28800.00.
+ (255ms ~= 3.92*RT, ~101164.71UPS, vehicles TOT 107333 ACT 25797 BUF 994)   
+Step #29700.00Warning: Vehicle '89642' could not finish continuous lane change (turn lane) time=29700.00.
+ (262ms ~= 3.82*RT, ~103396.95UPS, vehicles TOT 116009 ACT 27090 BUF 973)   
+Step #30600.00Warning: Teleporting vehicle '127034'; waited too long (wrong lane), lane='e32574_1', time=30600.00.
+ (271ms ~= 3.69*RT, ~107800.74UPS, vehicles TOT 124571 ACT 29214 BUF 1072)  
+Step #31500.00Warning: Teleporting vehicle '131465'; waited too long (jam), lane='r29898_0', time=31500.00.
+ (274ms ~= 3.65*RT, ~108485.40UPS, vehicles TOT 130425 ACT 29725 BUF 1140)  
+Step #32400.00Warning: Teleporting vehicle '117873'; waited too long (jam), lane='r10072_0', time=32400.00.
+ (274ms ~= 3.65*RT, ~112018.25UPS, vehicles TOT 136022 ACT 30693 BUF 723)   
+Step #33300.00Warning: Vehicle '148342' could not finish continuous lane change (turn lane) time=33300.00.
+ (282ms ~= 3.55*RT, ~111471.63UPS, vehicles TOT 141062 ACT 31435 BUF 643)   
+Step #34200.00Warning: Teleporting vehicle '20827'; waited too long (wrong lane), lane='r32490_1', time=34200.00.
+ (303ms ~= 3.30*RT, ~109359.74UPS, vehicles TOT 146434 ACT 33136 BUF 668)   
+Step #35100.00Warning: Teleporting vehicle '147388'; waited too long (jam), lane=':n4392_1_0', time=35100.00.
+ (320ms ~= 3.12*RT, ~107253.12UPS, vehicles TOT 151761 ACT 34321 BUF 821)   
+Step #36000.00Warning: Teleporting vehicle '158196'; waited too long (jam), lane='e23566_1', time=36000.00.
+ (319ms ~= 3.13*RT, ~112595.61UPS, vehicles TOT 157765 ACT 35918 BUF 738)   
+Step #36900.00 (294ms ~= 3.40*RT, ~112428.57UPS, vehicles TOT 157866 ACT 33054 BUF 2)     
+
+Simulation ended at time: 36900.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 3738.33s
+ Real time factor: 5.53723
+ UPS: 96828.277332
+Vehicles:
+ Inserted: 157866 (Loaded: 167672)
+ Running: 33054
+ Waiting: 2
+ Teleports: 29190 (Collisions: 148, Jam: 15892, Yield: 9932, Wrong Lane: 3218)
+ Emergency Braking: 51
+Statistics (avg of 124812):
+ RouteLength: 8343.72
+ Speed: 10.28
+ Duration: 1294.18
+ WaitingTime: 583.20
+ TimeLoss: 743.29
+ DepartDelay: 3.76
+AStarRouter answered 31485 queries and explored 214.03 edges on average.
+AStarRouter spent 8.00s answering queries (0.25ms on average).
+	Command being timed: "/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -r /mnt/sim/assign/009/trips_009.rou.alt.xml.gz,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml --additional-files /mnt/sim/diag/ed.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml --begin 16200 --end 36900 --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --statistic-output /mnt/res/stats.xml --summary-output /mnt/sim/diag/summary.xml --summary-output.period 60 --log /mnt/sim/diag/sumo.log --duration-log.statistics --step-log.period 900"
+	User time (seconds): 3743.00
+	System time (seconds): 1.87
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:02:25
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1645696
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 404036
+	Voluntary context switches: 459
+	Involuntary context switches: 26432
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 362320
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

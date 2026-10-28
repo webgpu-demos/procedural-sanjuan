@@ -1,0 +1,133 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ D=/mnt/sim/diag
+++ mkdir -p /mnt/sim/diag
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
++++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python -c 'import sumo; print(sumo.SUMO_HOME)'
+++ export SUMO_HOME=/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo
+++ SUMO_HOME=/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo
+++ node tools/sim/network.mjs
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=0.5 --scenario=lab --vtype=
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan --demand=lab
+++ '[' -n 10 ']'
+++ A=/mnt/sim/assign
+++ mkdir -p /mnt/sim/assign
+++ cd /mnt/sim/assign
+++ /usr/bin/time -v /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo/tools/assign/duaIterate.py -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -t /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/trips.xml -l 10 -b 16200 -e 36900 --mesosim -j --meso-recheck 10 --time-to-teleport 300 --routing-algorithm CH -T -E -a 900 -D /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml duarouter--routing-threads 4 sumo--ignore-route-errors true sumo--max-depart-delay 900 sumo--duration-log.statistics true
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
++++ ls -d /mnt/sim/assign/000 /mnt/sim/assign/001 /mnt/sim/assign/002 /mnt/sim/assign/003 /mnt/sim/assign/004 /mnt/sim/assign/005 /mnt/sim/assign/006 /mnt/sim/assign/007 /mnt/sim/assign/008 /mnt/sim/assign/009
++++ sort
++++ tail -1
+++ last=/mnt/sim/assign/009
++++ ls /mnt/sim/assign/009/trips_009.rou.alt.xml.gz
++++ head -1
+++ ROUTES=/mnt/sim/assign/009/trips_009.rou.alt.xml.gz,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml
+++ ls -la /mnt/sim/assign/009
+++ cp /mnt/sim/assign/009/trips_009.rou.xml.gz /mnt/res/
++++ ls -d /mnt/sim/assign/000 /mnt/sim/assign/001 /mnt/sim/assign/002 /mnt/sim/assign/003 /mnt/sim/assign/004 /mnt/sim/assign/005 /mnt/sim/assign/006 /mnt/sim/assign/007 /mnt/sim/assign/008 /mnt/sim/assign/009
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/000'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/000/iteration_000.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/001'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/001/iteration_001.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/002'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/002/iteration_002.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/003'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/003/iteration_003.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/004'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/004/iteration_004.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/005'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/005/iteration_005.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/006'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/006/iteration_006.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/007'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/007/iteration_007.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/008'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/008/iteration_008.sumo.log
+++ grep -v Warning
+++ tail -8
+++ for it in $(ls -d $A/0*)
+++ echo '== /mnt/sim/assign/009'
+++ grep -E 'Inserted|Running|Waiting|Teleports|Speed|Duration|TimeLoss' /mnt/sim/assign/009/iteration_009.sumo.log
+++ grep -v Warning
+++ tail -8
++++ ls -d /mnt/sim/assign/000 /mnt/sim/assign/001 /mnt/sim/assign/002 /mnt/sim/assign/003 /mnt/sim/assign/004 /mnt/sim/assign/005 /mnt/sim/assign/006 /mnt/sim/assign/007 /mnt/sim/assign/008 /mnt/sim/assign/009
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/000/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/000 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/001/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/001 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/002/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/002 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/003/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/003 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/004/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/004 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/005/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/005 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/006/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/006 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/007/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/007 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/008/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/008 '
+++ for it in $(ls -d $A/0*)
++++ grep -o 'meanTravelTime="[^"]*"' '/mnt/sim/assign/009/*summary*'
++++ tail -1
+++ echo '/mnt/sim/assign/009 '
+++ '[' -f /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml ']'
+++ TAZADD=,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml
+++ cat
++++ python3 -c 'print(int(10.25*3600))'
+++ /usr/bin/time -v /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -r /mnt/sim/assign/009/trips_009.rou.alt.xml.gz,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml --additional-files /mnt/sim/diag/ed.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml --begin 16200 --end 36900 --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --statistic-output /mnt/res/stats.xml --summary-output /mnt/sim/diag/summary.xml --summary-output.period 60 --log /mnt/sim/diag/sumo.log --duration-log.statistics --step-log.period 900
+++ tr '\r' '\n'
+++ grep -v '^Warning'
+++ grep Teleporting /mnt/sim/diag/sumo.log
+++ gzip
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/hotspots.py /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz /mnt/sim/diag/sumo.log /mnt/sim/diag/ed.xml --top=60
+++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python tools/sim/validate.py --area=sanjuan --scenario=lab --edgedata=/mnt/sim/diag/ed.xml --out=/mnt/res
+++ gzip -c /mnt/sim/diag/summary.xml
+++ gzip -c /mnt/sim/diag/ed.xml
+++ cp /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/net/inside.json /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/net/lanes.json /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/net/merged.json /mnt/res/
+++ gzip -f /mnt/res/merged.json /mnt/res/inside.json
+exit 0 after 100 min
