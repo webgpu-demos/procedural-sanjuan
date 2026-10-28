@@ -35,7 +35,8 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   edge lines, continental crosswalks with stop lines on the right, PARE at stop signs, signals on the
   right-hand kerb. Speed limits read from OSM in mph.
 - **Street objects** (`src/world/props.js`): coconut palms, royal palms and flamboyanes in flower among the
-  shade trees, concrete utility poles with wires, street lights, signals that cycle, USPS collection
+  shade trees (the trees OSM maps, and parks and woods filled out; a lawn only lightly, open ground such as El
+  Morro's esplanade not at all), concrete utility poles with wires, street lights, signals that cycle, USPS collection
   boxes, pillar hydrants, bus stops, statues (Columbus on his column at Plaza Colón).
 - **Traffic**: the simulated morning (below): every car a trip SUMO drove, with its brake lights, its
   lamps on the road at dawn, the signal heads showing the simulation's own lights. Outside the simulated
