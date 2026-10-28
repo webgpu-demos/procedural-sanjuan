@@ -21,6 +21,7 @@ import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad } from './world/drive.js';
 import { Walker, Cyclist, Flyer } from './world/player.js';
+import { People } from './world/people.js';
 import { Hud } from './hud.js';
 import { SimSignals } from './world/simsignals.js';
 import { Experience } from './experience.js';
@@ -190,6 +191,7 @@ scene.add(railways);
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));
 if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
 const traffic = new Traffic(roads, streamer.surface);
+let people = null, peopleOn = true, peopleCars = [], peopleCarsAt = 0; // (people on foot: loadPeople below)
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
 // The simulated morning (tools/sim): every car a trip SUMO drove. Without a time in the link it opens on it,
@@ -311,6 +313,7 @@ let guiState, clockText, guiPanel;
     get info() { return document.getElementById('hud').style.display !== 'none'; }, set info(v) { document.getElementById('hud').style.display = v ? '' : 'none'; },
 
     get traffic() { return !!traffic.group.parent; }, set traffic(v) { if (v) scene.add(traffic.group); else scene.remove(traffic.group); },
+    get people() { return peopleOn; }, set people(v) { peopleOn = v; if (people) people.enabled = v; },
     get trains() { return trains.visible; }, set trains(v) { trains.visible = v; },
     get photo() { return orthoWanted; }, set photo(v) { orthoWanted = v; shared.uOrthoOn.value = v && orthoLoaded ? 1 : 0; },
     shadowsWanted: true, get shadows() { return this.shadowsWanted; }, set shadows(v) { this.shadowsWanted = v; },
@@ -351,6 +354,7 @@ let guiState, clockText, guiPanel;
     f.add(sim, 'headlights', 0, 20, 0.5).name('car headlights');
   }
   gui.add(state, 'traffic');
+  gui.add(state, 'people').name('people on foot');
   gui.add(traffic, 'count', 0, MAX_CARS, 10).name('cars');
   gui.add(traffic, 'highway', 0, 20, 0.5).name('highway traffic');
   gui.add(traffic, 'headlights', 0, 20, 0.5).name('car headlights');
@@ -576,6 +580,15 @@ function stopRiding() { setMode('explore'); if (!sim) return; sim.followed = nul
 // cinematic). Where you were, and how, is kept for the next visit.
 const tiles = () => scene.children.filter((o) => o.name.startsWith('tile '));
 const lift = (x, z) => streamer.lift(x, z); // (how high the paving stands: what stands on it is not sunk in it)
+// People on foot (world/people.js): their walks and avatars load once the city around the view has (?people=0: none;
+// ?people=2: twice as many)
+const PEOPLE = params.get('people') == null ? 1 : Number(params.get('people'));
+function loadPeople() {
+  if (!(PEOPLE > 0)) return;
+  People.load({ base: `tiles/${AREA}`, surface: streamer.surface, lift, renderer })
+    .then((p) => { if (!p) return; people = p; p.density = PEOPLE; p.enabled = peopleOn; scene.add(p.group); })
+    .catch((e) => console.warn('the people stay at home:', e));
+}
 const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift });
 const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
@@ -887,7 +900,7 @@ function frame(_, manual) {
     const size = manifest.tileSize, wanted = manifest.tiles.filter((t) => Math.hypot((t.x + 0.5) * size - controls.target.x, (t.z + 0.5) * size - controls.target.z) <= Math.min(streamer.radius, 900)).length || 1;
     const got = Math.min(1, streamer.stats.loaded / wanted);
     loader.set(0.2 + 0.8 * got, `city tiles ${streamer.stats.loaded} / ${manifest.tiles.length}`);
-    if (got >= 1) { loading = false; loader.hide(); xp?.showTitle(Number(sim?.index.stats?.vehicles?.inserted) || sim?.index.tripinfo?.count); }
+    if (got >= 1) { loading = false; loader.hide(); loadPeople(); xp?.showTitle(Number(sim?.index.stats?.vehicles?.inserted) || sim?.index.tripinfo?.count); }
   }
   props.update(dt);
   props.mats.wire.uniforms.uPx.value = renderer.domElement.height * 0.5 * camera.projectionMatrix.elements[5];
@@ -899,6 +912,15 @@ function frame(_, manual) {
   if (traffic.group.parent && !simulating) traffic.update(dt, controls.target);
   if (sim) { sim.rate = clockTime.rate; if (simulating) sim.update(clockTime.hour * 3600, camera, dt); else sim.hide(); }
   if (simSignals) { props.mats.lens.uniforms.uSigOn.value = simulating ? 1 : 0; if (simulating) simSignals.update(clockTime.hour * 3600); }
+  // people on foot, round what is looked at (the cars round them: for crossing the street)
+  if (people) {
+    if (simulating) peopleCars = sim.cars ?? [];
+    else if ((peopleCarsAt -= dt) <= 0) {
+      peopleCarsAt = 0.25; peopleCars = [];
+      if (traffic.group.parent) for (const o of traffic.near(camera.position.x, camera.position.z, 420)) peopleCars.push(o.x, o.z, o.heading, o.speed);
+    }
+    people.update(dt, { camera, focus: directed || chase.on ? null : controls.target, hour: clockTime.hour, T: clockTime.hour * 3600, cars: peopleCars, signals: simulating ? simSignals : null, detail: governor.detail });
+  }
   // the one being played: on foot, in the car, in the air (the simulated cars round it fade rather than pass through)
   const player = active();
   aroundYou(player, simulating);
@@ -945,6 +967,7 @@ function frame(_, manual) {
     `${fps.toFixed(0)} fps${governor.level ? ` (quality step ${governor.level})` : ''} · ${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)}M tris\n` +
     `tiles ${s.loaded}/${manifest.tiles.length}${streamer.pending ? ` (+${streamer.pending})` : ''} · ${s.buildings} buildings\n` +
     (sim && simOn() ? `simulated: ${sim.stats.active.toLocaleString()} cars on the road · ${sim.stats.near} near · ${clockTime.rate}×\n` : '') +
+    (people ? `people on foot: ${people.stats.people} (${people.stats.target} wanted) · ${people.stats.drawn} drawn\n` : '') +
     (picked ? `\n▸ ${USAGE[picked.usage] ?? 'usage ' + picked.usage}, ${picked.height.toFixed(1)} m` +
       `${picked.storeys ? `, ${picked.storeys} floors` : ''}, base ${picked.base.toFixed(1)} m` +
       `${picked.osm ? `\n  OSM ${picked.osm}` : ''}${picked.gers ? `${picked.osm ? ' · ' : '\n  '}GERS ${picked.gers.slice(0, 8)}…` : ''}\n` : '') +
@@ -953,7 +976,7 @@ function frame(_, manual) {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
+window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, get people() { return people; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
   proj, manifest,
   // synthetic drone images with labels (src/synth/synth.js; tools/synth/export.mjs), made on first use
   get synth() { return (synthApi ??= import('./synth/synth.js').then(({ Synth }) => new Synth(window.__app))); } };
