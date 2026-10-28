@@ -73,11 +73,16 @@ if apagon:
         for tl in TLS: f.write(f'  <wautJunction wautID="grid" junctionID="{tl}"/>\n')
         f.write('</additional>\n')
     extra = [os.path.join(WORK, 'apagon.add.xml')]
-ROUTES = os.path.join(SIM, DEMAND, 'routes.rou.xml')  # routes made beforehand (route.py)
+# routes made beforehand: assigned (assign.py), the buses with them (gtfs.py: SUMO routes each through its stops), or
+# else on the free roads (route.py, buses and all); or --routes=a,b
+ASSIGNED, BUSES = os.path.join(SIM, DEMAND, 'assigned.rou.alt.xml.gz'), os.path.join(SIM, DEMAND, 'buses.xml')
+ROUTES = args.get('routes') or (ASSIGNED + (',' + BUSES if os.path.exists(BUSES) else '') if os.path.exists(ASSIGNED)
+                                else os.path.join(SIM, DEMAND, 'routes.rou.xml'))
+TAZ = os.path.join(SIM, DEMAND, 'taz.add.xml')  # (the gates of trips from beyond the edge: demand.py)
 STOPS = os.path.join(SIM, DEMAND, 'busstops.add.xml')  # the AMA's stops (gtfs.py)
-cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if os.path.exists(ROUTES) else os.path.join(SIM, DEMAND, 'trips.xml'),
+cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if os.path.exists(ROUTES.split(',')[0]) else os.path.join(SIM, DEMAND, 'trips.xml'),
        '--begin', str(begin), '--end', str(END),
-       '--additional-files', ','.join([os.path.join(WORK, 'outputs.add.xml')] + ([STOPS] if os.path.exists(STOPS) else []) + extra),
+       '--additional-files', ','.join([os.path.join(WORK, 'outputs.add.xml')] + [f for f in (STOPS, TAZ) if os.path.exists(f)] + extra),
        '--time-to-teleport', '240', '--ignore-route-errors', '--max-depart-delay', '900',
        '--lanechange.duration', '2.5',  # a lane change takes its time (SUMO's default is instant): it reads as one
        # San Juan merging: after a minute and a half at a give-way line a driver takes a smaller gap, and a car
@@ -88,11 +93,13 @@ cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if
        '--tripinfo-output', os.path.join(WORK, 'tripinfo.xml'), '--tripinfo-output.write-unfinished',
        '--statistic-output', os.path.join(WORK, 'stats.xml'), '--duration-log.statistics', '--no-warnings',
        '--step-log.period', '900']
-# Drivers keep the routes made beforehand from a previous run's travel times (route.py). Re-planning on the way
-# (--reroute=0.15: that share of drivers, every quarter hour) is closer to a navigation app, but on this machine
-# SUMO then spends most of its time waiting: measured 6.7x slower at full scale.
+# Re-planning on the way: --reroute=1 (every driver) with --reroute-period=300 (every five minutes, on the travel
+# times of the moment) is how the published runs drive (tools/sim/all.sh); without it, a driver keeps the route made
+# beforehand (route.py, assign.py), and at the rush the drivers on one shortest way lock it.
 if float(args.get('reroute', 0)) > 0:
-    cmd += ['--device.rerouting.probability', args['reroute'], '--device.rerouting.period', '900']
+    cmd += ['--device.rerouting.probability', args['reroute'], '--device.rerouting.period', args.get('reroute-period', '900'),
+            '--device.rerouting.threads', str(os.cpu_count() or 1)]
+cmd += args.get('sumoargs', '').split()  # (more of SUMO's options: --sumoargs="--a 1 --b 2")
 if not apagon: cmd += ['--save-state.times', str(APAGON_AT), '--save-state.files', STATE, '--save-state.rng']
 if begin != BEGIN: cmd += ['--load-state', STATE]  # (the apagón: the same morning until the failure)
 if args.get('skip-sumo') != '1':
@@ -266,6 +273,12 @@ for w0 in np.arange(begin, END, WINDOW):
 log(f'{len(windows)} windows, {total / 1e6:.1f} MB (gzipped)')
 
 # ---------------------------------------------------------------- edge speeds every 5 min
+# (a SUMO edge joining a run of roads, end to end, is named after its last: each road of it gets its speeds;
+# network.mjs net/merged.json)
+def netjson(name):
+    p = os.path.join(SIM, 'net', name)
+    return json.load(open(p)) if os.path.exists(p) else {}
+MERGED = netjson('merged.json')
 edges = {}  # edge id -> index (the client maps them to roads: "e<i>" / "r<i>")
 intervals = []
 for ev, el in ET.iterparse('edgedata.xml', events=('end',)):
@@ -273,13 +286,14 @@ for ev, el in ET.iterparse('edgedata.xml', events=('end',)):
         row = {}
         for e in el.findall('edge'):
             if e.get('speed') is None: continue
-            row[e.get('id')] = float(e.get('speed'))
+            for k in MERGED.get(e.get('id'), [e.get('id')]): row[k] = float(e.get('speed'))
         intervals.append((float(el.get('begin')), row)); el.clear()
 free = {}
 for e in net.iter('edge'):
     if e.get('function') == 'internal': continue
     ln = e.find('lane')
-    if ln is not None: free[e.get('id')] = float(ln.get('speed'))
+    if ln is not None:
+        for k in MERGED.get(e.get('id'), [e.get('id')]): free[k] = float(ln.get('speed'))
 ids = sorted(free); index = {k: i for i, k in enumerate(ids)}
 grid = np.full((len(intervals), len(ids)), 255, np.uint8)  # 255: no cars in that interval
 for r, (_, row) in enumerate(intervals):
@@ -299,6 +313,9 @@ links = collections.defaultdict(list)  # incoming edge -> [(tls, link index, dir
 for c in net.iter('connection'):
     if c.get('tl') and not c.get('from').startswith(':'):
         links[c.get('from')].append([c.get('tl'), int(c.get('linkIndex')), c.get('dir')])
+# (a road inside a joined junction: the lights of the way in that carries on along it; network.mjs net/inside.json)
+for k, via in netjson('inside.json').items():
+    if via in links and k not in links: links[k] = links[via]
 # what each signal showed, as it changed: states numbered per signal ([time, state index] pairs)
 if begin != BEGIN:  # (the apagón: the normal morning's lights until the failure)
     m = json.load(open(os.path.join(os.path.join(ROOT, 'public/tiles', AREA, 'sim', 'morning'), 'signals.json')))['timeline']
@@ -326,6 +343,8 @@ json.dump({'version': 1, 'scenario': SCEN, 'begin': BEGIN, 'end': END, 'window':
            'share': float(args['share']) if 'share' in args else None,  # (of the estimated demand: --share)
            'types': TYPES, 'kinds': KINDS, 'municipios': munis, 'edges': ids, 'speedInterval': 300, 'speedBegin': speed_begin,
            'apagon': APAGON_AT if apagon else None, 'stats': stats, 'peak': peak,
+           'lanes': netjson('lanes.json'),  # (each one-way expressway road: SUMO's lanes on it and their width; simtraffic.js relane)
+           'levels': 'roads',  # (network.mjs built the network on roads.json's levels as they are: simtraffic.js raise)
            'tripinfo': {'count': len(ti), 'meanDuration': float(np.mean([v[0] for v in ti.values()])) if ti else 0,
                         'meanTimeLoss': float(np.mean([v[1] for v in ti.values()])) if ti else 0}},
           open(os.path.join(OUT, 'index.json'), 'w'))

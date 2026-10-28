@@ -19,7 +19,10 @@ cmd = [os.path.join(ROOT, '.venv-sim/bin/duarouter'), '-n', os.path.join(SIM, f'
        '-r', files, '-o', os.path.join(SIM, DEMAND, 'routes.rou.xml'),
        '--routing-algorithm', 'CH', '--ignore-errors', '--no-warnings', '--no-step-log', '--repair',
        '--write-trips.junctions', 'false', '--departlane', 'best', '--departspeed', 'max']
-if os.path.exists(stops): cmd += ['--additional-files', stops]
+taz = os.path.join(SIM, DEMAND, 'taz.add.xml')  # (trips from beyond the edge: their municipio's gates, demand.py)
+extra = [f for f in (stops, taz) if os.path.exists(f)]
+if extra: cmd += ['--additional-files', ','.join(extra)]
+if os.path.exists(taz): cmd += ['--with-taz']
 if WEIGHTS:
     # edgeData of that run: its travel times, every five minutes
     cmd += ['--weight-files', os.path.join(SIM, WEIGHTS, 'edgedata.xml'), '--weight-attribute', 'traveltime']

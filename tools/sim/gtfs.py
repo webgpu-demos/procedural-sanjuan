@@ -49,6 +49,8 @@ def place(sid):
         for lane, d in sorted(net.getNeighboringLanes(x, y, 35), key=lambda ld: ld[1]):
             e = lane.getEdge()
             if e.getFunction() == 'internal' or not lane.allows('bus') or e.getPriority() >= 13: continue
+            # (not a dead end: a bus that called there could not go on, as at the access road to Cupey station)
+            if not any(o.allows('bus') and o.getToNode() != e.getFromNode() for o in e.getOutgoing()): continue
             if lane.getIndex() != 0: continue  # (the kerb lane)
             pos = lane.getClosestLanePosAndDist((x, y))[0]
             L = lane.getLength()
@@ -85,6 +87,8 @@ first = int(args.get('first', 10_000_000))  # bus ids: after every car's (run.py
 info = {}
 with open(os.path.join(OUT, 'buses.xml'), 'w') as f:
     f.write('<routes>\n')
+    # (the bus's type here, with the buses: driven on assigned routes, the cars' types come with theirs; demand.py)
+    f.write('  <vType id="bus" vClass="bus" length="12.0" width="2.55" accel="1.2" decel="4.0" maxSpeed="25" sigma="0.3" tau="1.0" minGap="2.0" impatience="0.5"/>\n')
     for k, (tid, cs) in enumerate(sorted(buses, key=lambda b: b[1][0][3])):
         vid = first + k; r = routes[trips[tid]['route_id']]
         f.write(f'  <trip id="{vid}" type="bus" depart="{max(BEGIN, cs[0][3] - 30)}" from="{placed[cs[0][1]][3]}" to="{placed[cs[-1][1]][3]}" departPos="base" departLane="best">\n')
