@@ -258,7 +258,7 @@ export class Experience {
         cap: ['5:45 a.m.', 'Monacillos, Río Piedras · el centro de transmisión'], capAt: 1.5 },
       { hour: 7.0, rate: 1, dur: 15, eye: [[12490, 6.5, 7473], [12458, 5.5, 7476]], at: [[12230, 2, 7500], [12230, 2, 7500]],
         cap: ['7:00 a.m. · Avenida 65 de Infantería', 'sin semáforos: cada esquina, un pare · every signal dark, every corner a stop'] },
-      { hour: 7.3, rate: 1, dur: 15, map: true, eye: [[13300, 380, 6200], [13100, 330, 6350]], at: [[11500, 0, 6900], [11450, 0, 6950]],
+      { hour: 7.3, rate: 1, dur: 15, map: true, eye: [[12500, 260, 5900], [12380, 230, 6020]], at: [[11450, 0, 6800], [11420, 0, 6830]],
         cap: ['7:18 a.m. · sin semáforos', 'the rush hour, with no signals: red is the jam'] },
     ];
   }
