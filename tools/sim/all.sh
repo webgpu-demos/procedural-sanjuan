@@ -10,7 +10,9 @@ PY=.venv-sim/bin/python
 node tools/sim/network.mjs --area=$AREA
 $PY tools/sim/demand.py --area=$AREA --scale=${SCALE:-1} $DEMANDARGS
 $PY tools/sim/gtfs.py --area=$AREA
-$PY tools/sim/assign.py --area=$AREA --iter=${ITER:-10}
+# (ITER=0: routes on the free roads, route.py; with every driver rerouting on the way, RUNARGS=--reroute=1, as good)
+if [ "${ITER:-10}" = 0 ]; then rm -f data/sim/$AREA/morning/assigned.rou.alt.xml.gz; $PY tools/sim/route.py --area=$AREA
+else $PY tools/sim/assign.py --area=$AREA --iter=${ITER:-10}; fi
 $PY tools/sim/run.py --area=$AREA --scenario=morning --demand=morning --end=10.25 --share=${SCALE:-1} $RUNARGS
 $PY tools/sim/validate.py --area=$AREA --scenario=morning
 $PY tools/sim/run.py --area=$AREA --scenario=apagon --demand=morning --end=8.5 --share=${SCALE:-1} $RUNARGS
