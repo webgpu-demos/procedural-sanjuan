@@ -181,23 +181,22 @@ mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
 
 ## The simulated morning (`tools/sim/`)
 
-A weekday morning in San Juan, 4:30 to 10:15, simulated with [Eclipse SUMO](https://eclipse.dev/sumo/) on the
-city's own road graph and played back in the browser: {{TRIPS}} car trips and the AMA's 500 bus trips. It
-opens with a title and four shots (the city before dawn, the headlights on PR-22, one commuter's ride, the sun
-coming up behind the Milla de Oro: it rises about 6:19 AST in late October); then the clock and its time line,
-the speed of time (the cars at their own speed by default), **free roaming** on foot, by bike, by car and by helicopter
-(below: the car rides the ground or the flyover it drove onto and stops against the buildings' walls and the
-simulated cars, which fade rather than drive through you), the **apagón** (at 5:45 the grid fails: windows, street lamps and every signal go dark in a
-wave from the Monacillos transmission centre, and the rush is simulated without them, every dark signal an
-all-way stop as the law has it; it plays as a scene of
-its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two hours
-on), riding with any car
-(click it: where it comes from, why it drives, its delay), the jam map, the lancha crossing to Cataño on its
-timetable, and plenas on the radio ("Callejón de Panderetas", "Fiesta de la Memoria" and "Romanoctubre", made
-for the project with Suno, one after the other; in the apagón the radio dies with the power, and comes back
-faint, a battery radio somewhere down the street). The frame rate is kept up by stepping quality down and back
-up as needed (`?quality=high` keeps it all). `G` brings back
-the settings panel; `?xp=0` skips the experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
+A weekday morning in San Juan, 4:30 to 10:15, simulated with [Eclipse SUMO](https://eclipse.dev/sumo/) on the city's
+own road graph and played back in the browser: some 230,000 car trips (seven tenths of the morning's estimated
+demand) and the AMA's 500 bus trips. It opens with a title and four shots (the city before dawn, the headlights on
+PR-22, one commuter's ride, the sun coming up behind the Milla de Oro: it rises about 6:19 AST in late October);
+then the clock and its time line, the speed of time (the cars at their own speed by default), **free roaming** on
+foot, by bike, by car and by helicopter (below: the car rides the ground or the flyover it drove onto and stops
+against the buildings' walls and the simulated cars, which fade rather than drive through you), the **apagón** (at
+5:45 the grid fails: windows, street lamps and every signal go dark in a wave from the Monacillos transmission
+centre, and the rush is simulated without them, every dark signal an all-way stop as the law has it; it plays as a
+scene of its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two
+hours on), riding with any car (click it: where it comes from, why it drives, its delay), the jam map, the lancha
+crossing to Cataño on its timetable, and plenas on the radio ("Callejón de Panderetas", "Fiesta de la Memoria" and
+"Romanoctubre", made for the project with Suno, one after the other; in the apagón the radio dies with the power,
+and comes back faint, a battery radio somewhere down the street). The frame rate is kept up by stepping quality down
+and back up as needed (`?quality=high` keeps it all). `G` brings back the settings panel; `?xp=0` skips the
+experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
 
 ```
 npm run sim:setup                    # once: Python environment with SUMO 1.28 and libsumo (.venv-sim/)
@@ -238,7 +237,11 @@ npm run sim:all                      # demand, buses, routes, the morning and th
   stops (`--dark=priority` keeps netconvert's priorities instead).
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
-  direction is matched to the counted line (which runs down the median of a divided road). {{VALIDATION}}
+  direction is matched to the counted line (which runs down the median of a divided road). The published run, at
+  seven tenths of the demand, carried 0.48 of the counted traffic (freeways 0.40, arterials 0.59; r² 0.40), about
+  seven tenths of it scaled to the whole demand, and teleported 1,286 of its 228,000 cars; at half the demand 0.42
+  (328 teleported), at six tenths 0.45 (676), at 0.85 0.49 (3,119, and trips half as long again): past seven
+  tenths the rush hour mostly queues longer.
   The figures for the published run are in the experience (¿Qué tan real?).
 - **Experiments** run on GitHub Actions (the `simlab` branch: `simlab/jobs.json` lists the jobs, each pushes what
   it found to a branch `simres/<job>`); `hotspots.py` lists where a run teleports cars and why.
