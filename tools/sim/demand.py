@@ -128,8 +128,26 @@ def gate_for(name, gates):
     w = np.array([capacity(g) for g in gates]) * np.exp(-(d - d.min()) / 2500)
     return gates, w / w.sum(), d.min()
 GATE_CACHE = {}
+# A trip from beyond the edge leaves its municipio by whichever of the roads towards it the router finds best (a
+# TAZ: the gates within GATE_REACH of the nearest, roads of some size): drawn by the gates' sizes, half of
+# Carolina's commuters had come in on Avenida 65 de Infantería, two lanes, and it stood still from five o'clock.
+# (--taz=0: drawn by size and distance, as before)
+TAZ, GATE_REACH = args.get('taz', '1') == '1', float(args.get('gatereach', 3000))
+TAZ_IDS, TAZ_USED = {n: f'm{i}' for i, n in enumerate(sorted(MUNI))}, {}
+def gate_set(name, inbound):
+    gates = gates_in if inbound else gates_out
+    cx, cy = CENTRE[name]
+    pos = np.array([(g.getToNode() if inbound else g.getFromNode()).getCoord() for g in gates])
+    d = np.hypot(pos[:, 0] - cx, pos[:, 1] - cy)
+    big = np.array([g.getPriority() >= 9 or g.getLaneNumber() >= 2 for g in gates])
+    keep = (d <= d.min() + GATE_REACH) & big; keep[d.argmin()] = True
+    return [gates[i].getID() for i in np.flatnonzero(keep)], d.min()
 def pick_gate(name, inbound):
     k = (name, inbound)
+    if TAZ:
+        if k not in GATE_CACHE: GATE_CACHE[k] = gate_set(name, inbound)
+        ids, dist = GATE_CACHE[k]; TAZ_USED[k] = ids
+        return 'taz:' + TAZ_IDS[name], dist
     if k not in GATE_CACHE: GATE_CACHE[k] = gate_for(name, gates_in if inbound else gates_out)
     gates, p, dist = GATE_CACHE[k]
     return gates[np.searchsorted(np.cumsum(p), rng.random())].getID(), dist
@@ -142,11 +160,18 @@ def profile(name):
     d = DEP.get(name) or {k: sum(v[k] for v in DEP.values()) for k in ['total'] + LABELS}
     w = np.array([d[l] for l in LABELS], float); w[0] *= 0.35  # (of those leaving before 5, the ones still on the road after 4:30)
     return w
-AM_SHARE = {n: profile(n).sum() / (DEP.get(n) or DEP['San Juan'])['total'] for n in MUNI}
+# (the departures are tabled for the six municipios round the area; any other leaves home as all six together do. The
+# share had been their sum over San Juan's workers alone, 2.4 for 0.83: Toa Baja and Toa Alta drove in three times over)
+ALL = {k: sum(v[k] for v in DEP.values()) for k in ['total'] + LABELS}
+AM_SHARE = {n: profile(n).sum() / (DEP.get(n) or ALL)['total'] for n in MUNI}
+SPREAD = float(args.get('spread', 0)) * 60  # (--spread=minutes: each departure moved by up to that, either way)
 def depart_time(name):
     w = profile(name); i = np.searchsorted(np.cumsum(w), rng.random() * w.sum())
     lo, hi = BINS[i]; lo = max(lo, 4.5)
-    return (lo + rng.random() * (hi - lo)) * 3600
+    t = (lo + rng.random() * (hi - lo)) * 3600
+    # (people answer the survey in round half hours: half past seven stands for 7:20 as much as 7:40, and the
+    # half hours' steps smooth into a slope)
+    return t + (rng.random() - rng.random()) * SPREAD if SPREAD else t
 
 # ---------------------------------------------------------------- trip ends inside the area
 def zone_sampler(name, kind):
@@ -273,26 +298,38 @@ hours = collections.Counter(int(t // 1800) / 2 for t, *_ in trips)
 print('departures by half hour:', ' '.join(f'{h:.1f}h {hours[h]}' for h in sorted(hours)))
 
 # ---------------------------------------------------------------- write
-VTYPES = {  # lengths as the models (src/world/traffic.js TYPES); Puerto Rico drives a little over the limit
+VTYPES = {  # lengths as the models (src/world/traffic.js TYPES); Puerto Rico drives a little over the limit (the bus: gtfs.py)
     'compact': dict(length=4.2, width=1.74, accel=2.8, decel=4.5, maxSpeed=48),
     'sedan': dict(length=4.8, width=1.82, accel=2.6, decel=4.5, maxSpeed=50),
     'suv': dict(length=4.7, width=1.9, accel=2.5, decel=4.5, maxSpeed=48),
     'pickup': dict(length=5.6, width=1.95, accel=2.4, decel=4.5, maxSpeed=46),
     'truck': dict(length=7.0, width=2.3, accel=1.3, decel=4.0, maxSpeed=30, vClass='delivery'),
-    'bus': dict(length=12.0, width=2.55, accel=1.2, decel=4.0, maxSpeed=25, vClass='bus'),
 }
 # (San Juan drives close: 2 m gaps, less dawdling than SUMO's default driver; the capacity that comes of it is
 # what the counts are checked against. The headway, tau, stays at SUMO's step of 1 s: below it Krauss drivers
 # can run into the car ahead, and SUMO clears each crash by teleporting a car: at 0.9 s, one car in six.)
+# (--vtype=a=1;b=2: more of SUMO's driver parameters, for every type)
+VEXTRA = dict(kv.split('=', 1) for kv in args.get('vtype', '').split(';') if '=' in kv)
 with open(os.path.join(OUT, 'trips.xml'), 'w') as fx:
     fx.write('<routes>\n')
     for k, v in VTYPES.items():
         cls = v.pop('vClass', 'passenger')
-        fx.write(f'  <vType id="{k}" vClass="{cls}" ' + ' '.join(f'{a}="{b}"' for a, b in v.items()) +
-                 ' speedFactor="normc(1.06,0.1,0.75,1.35)" sigma="0.3" tau="1.0" minGap="2.0" lcStrategic="1.2" lcCooperative="0.8" lcAssertive="1.3" impatience="0.5"/>\n')
+        drive = dict(speedFactor='normc(1.06,0.1,0.75,1.35)', sigma=0.3, tau=1.0, minGap=2.0, lcStrategic=1.2, lcCooperative=0.8, lcAssertive=1.3, impatience=0.5)
+        drive.update(VEXTRA)
+        fx.write(f'  <vType id="{k}" vClass="{cls}" ' + ' '.join(f'{a}="{b}"' for a, b in {**v, **drive}.items()) + '/>\n')
+    end = lambda k, e: f'{k}Taz="{e[4:]}"' if e.startswith('taz:') else f'{k}="{e}"'
     for i, (t, a, b, typ, kind, story) in enumerate(trips):
-        fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" from="{a}" to="{b}" departLane="best" departSpeed="max" departPos="random_free"/>\n')
+        fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" {end("from", a)} {end("to", b)} departLane="best" departSpeed="max" departPos="random_free"/>\n')
     fx.write('</routes>\n')
+# the municipios' gates (route.py and the assignment route with --with-taz)
+with open(os.path.join(OUT, 'taz.add.xml'), 'w') as fx:
+    fx.write('<additional>\n')
+    for name in sorted({n for n, _ in TAZ_USED}):
+        fx.write(f'  <taz id="{TAZ_IDS[name]}" name="{name}">\n')
+        for g in TAZ_USED.get((name, True), []): fx.write(f'    <tazSource id="{g}" weight="1"/>\n')
+        for g in TAZ_USED.get((name, False), []): fx.write(f'    <tazSink id="{g}" weight="1"/>\n')
+        fx.write('  </taz>\n')
+    fx.write('</additional>\n')
 json.dump({'begin': BEGIN, 'end': END, 'kinds': sorted({k for *_, k, _ in trips}),
            'trips': [[round(t), k, s[0], s[1]] for t, a, b, typ, k, s in trips]}, open(os.path.join(OUT, 'trips.json'), 'w'))
 print('->', os.path.relpath(OUT, ROOT))

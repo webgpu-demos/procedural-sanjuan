@@ -12,7 +12,7 @@
     "compile": "node --max-old-space-size=6144 tools/pipeline/compile.mjs",
     "preview": "node tools/pipeline/preview.mjs",
     "test": "node tools/tests/tileformat.test.mjs && node tools/tests/road-markings.test.mjs && node tools/tests/lidar.test.mjs && node tools/tests/twin-links.test.mjs && node tools/tests/garita-tiles.test.mjs && node tools/tests/synth-labels.test.mjs && node tools/tests/ground.test.mjs && node tools/tests/channels.test.mjs",
-    "sim:setup": "python3 -m venv .venv-sim && .venv-sim/bin/pip install -q eclipse-sumo==1.28.0 libsumo==1.28.0 numpy openpyxl pyshp",
+    "sim:setup": "python3 -m venv .venv-sim && .venv-sim/bin/pip install -q eclipse-sumo==1.28.0 libsumo==1.28.0 numpy openpyxl pyshp pyarrow",
     "sim:net": "node tools/sim/network.mjs && node tools/sim/buildings.mjs && .venv-sim/bin/python tools/sim/hpms.py",
     "sim:demand": ".venv-sim/bin/python tools/sim/demand.py",
     "sim:run": ".venv-sim/bin/python tools/sim/run.py",
