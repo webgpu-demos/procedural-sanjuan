@@ -568,6 +568,12 @@ const chan = buildChannels(extraRaw.ways, { ground, inBounds, wet,
   blocked: (x, z) => idx.building.has(x, z) || (idx.road.has(x, z) && !overhead(x, z)) });
 const inChannel = new PolyIndex(32);
 for (const ring of chan.rings) inChannel.add([ring]);
+// every tile a channel runs through is written, even with nothing else in it (the client cuts its ground there, and
+// a stretch is drawn by the tile its middle is in)
+for (const c of chan.channels) for (let i = 0; i < c.p.length; i += 3) {
+  if (inBounds(c.p[i], c.p[i + 1])) tileFor(c.p[i], c.p[i + 1]);
+  if (i && inBounds((c.p[i] + c.p[i - 3]) / 2, (c.p[i + 1] + c.p[i - 2]) / 2)) tileFor((c.p[i] + c.p[i - 3]) / 2, (c.p[i + 1] + c.p[i - 2]) / 2);
+}
 log(`channels: ${chan.stats.km} km in ${chan.stats.runs} stretches of ${chan.stats.ways} waterways (${Object.entries(chan.stats.byKind).map(([k, v]) => `${k} ${v} km`).join(', ')}); ` +
   `stopped at ${chan.stats.blocked} points under streets and buildings, ${chan.stats.deep} where the line climbs out of its bed, ${chan.stats.wet} in open water`);
 
