@@ -1,0 +1,42 @@
+++ set -e
+++ node tools/sim/network.mjs --area=sanjuan
+   0.1s 16 expressway stretches narrowed to the lanes beyond them
+   0.2s 7072 joins: 42907 edges
+   0.2s 1030 junctions joined from 2382 nodes
+   0.4s plain network: 17442 nodes (427 with lights, 8 zippers), 40491 directed edges from 36830 roads
+Success.
+   6.4s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.1 MB)
+++ .venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=0.7 --spread=15
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39268 of 39942 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+233965 trips: {'work': 151939, 'through': 9756, 'school': 29334, 'errand': 27911, 'airport': 7009, 'delivery': 10145} (scale 0.7)
+departures by half hour: 4.5h 2940 5.0h 8131 5.5h 10474 6.0h 20349 6.5h 26205 7.0h 51597 7.5h 36065 8.0h 25978 8.5h 18633 9.0h 16080 9.5h 17513
+-> data/sim/sanjuan/morning
+++ .venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+++ rm -f /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz
+++ .venv-sim/bin/python tools/sim/route.py --area=sanjuan
+Success.
+routes in 28s -> data/sim/sanjuan/morning/routes.rou.xml
+++ timeout 320m .venv-sim/bin/python tools/sim/run.py --area=sanjuan --scenario=morning --demand=morning --end=10.25 --share=0.7 --reroute=1 --reroute-period=300
+    2.2s sumo morning: 4.50 h to 10.25 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (2745ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml' ... done (43ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (6ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (3ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
