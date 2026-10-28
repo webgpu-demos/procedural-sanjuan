@@ -93,9 +93,9 @@ cmd = [os.path.join(ROOT, '.venv-sim/bin/sumo'), '-n', SUMO_NET, '-r', ROUTES if
        '--tripinfo-output', os.path.join(WORK, 'tripinfo.xml'), '--tripinfo-output.write-unfinished',
        '--statistic-output', os.path.join(WORK, 'stats.xml'), '--duration-log.statistics', '--no-warnings',
        '--step-log.period', '900']
-# Drivers keep the routes made beforehand from a previous run's travel times (route.py). Re-planning on the way
-# (--reroute=0.15: that share of drivers, every quarter hour) is closer to a navigation app, but on this machine
-# SUMO then spends most of its time waiting: measured 6.7x slower at full scale.
+# Re-planning on the way: --reroute=1 (every driver) with --reroute-period=300 (every five minutes, on the travel
+# times of the moment) is how the published runs drive (tools/sim/all.sh); without it, a driver keeps the route made
+# beforehand (route.py, assign.py), and at the rush the drivers on one shortest way lock it.
 if float(args.get('reroute', 0)) > 0:
     cmd += ['--device.rerouting.probability', args['reroute'], '--device.rerouting.period', args.get('reroute-period', '900'),
             '--device.rerouting.threads', str(os.cpu_count() or 1)]
