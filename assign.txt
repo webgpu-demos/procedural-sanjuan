@@ -1,0 +1,273 @@
+> Executing step 0
+>> Running router on /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/trips.xml
+>>> Begin time: 2026-10-27 22:51:01.654870
+>>> End time: 2026-10-27 22:51:46.900360
+>>> Duration: 0:00:45.245490
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:51:46.900400
+>>> End time: 2026-10-27 22:53:51.474028
+>>> Duration: 0:02:04.573628
+<<
+< Step 0 ended (duration: 0:02:49.819221)
+------------------
+
+> Executing step 1
+>> Running router on 000/trips_000.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:53:51.475469
+>>> End time: 2026-10-27 22:56:16.861116
+>>> Duration: 0:02:25.385647
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 22:56:16.861158
+>>> End time: 2026-10-27 22:58:44.921525
+>>> Duration: 0:02:28.060367
+<<
+< Step 1 ended (duration: 0:04:53.446121)
+------------------
+
+> Executing step 2
+>> Running router on 001/trips_001.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 22:58:44.922783
+>>> End time: 2026-10-27 23:01:35.988458
+>>> Duration: 0:02:51.065675
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:01:35.988505
+>>> End time: 2026-10-27 23:04:09.045551
+>>> Duration: 0:02:33.057046
+<<
+< Step 2 ended (duration: 0:05:24.122832)
+------------------
+
+> Executing step 3
+>> Running router on 002/trips_002.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:04:09.047077
+>>> End time: 2026-10-27 23:07:25.417264
+>>> Duration: 0:03:16.370187
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:07:25.417304
+>>> End time: 2026-10-27 23:09:56.713269
+>>> Duration: 0:02:31.295965
+<<
+< Step 3 ended (duration: 0:05:47.666253)
+------------------
+
+> Executing step 4
+>> Running router on 003/trips_003.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:09:56.714403
+>>> End time: 2026-10-27 23:13:30.646637
+>>> Duration: 0:03:33.932234
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:13:30.646699
+>>> End time: 2026-10-27 23:16:07.990964
+>>> Duration: 0:02:37.344265
+<<
+< Step 4 ended (duration: 0:06:11.276620)
+------------------
+
+> Executing step 5
+>> Running router on 004/trips_004.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:16:07.992131
+>>> End time: 2026-10-27 23:19:59.592730
+>>> Duration: 0:03:51.600599
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:19:59.592771
+>>> End time: 2026-10-27 23:22:38.941620
+>>> Duration: 0:02:39.348849
+<<
+< Step 5 ended (duration: 0:06:30.949570)
+------------------
+
+> Executing step 6
+>> Running router on 005/trips_005.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:22:38.942880
+>>> End time: 2026-10-27 23:26:37.116649
+>>> Duration: 0:03:58.173769
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:26:37.116712
+>>> End time: 2026-10-27 23:29:20.404729
+>>> Duration: 0:02:43.288017
+<<
+< Step 6 ended (duration: 0:06:41.461910)
+------------------
+
+> Executing step 7
+>> Running router on 006/trips_006.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:29:20.405920
+>>> End time: 2026-10-27 23:33:18.256193
+>>> Duration: 0:03:57.850273
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:33:18.256233
+>>> End time: 2026-10-27 23:36:04.415461
+>>> Duration: 0:02:46.159228
+<<
+< Step 7 ended (duration: 0:06:44.009599)
+------------------
+
+> Executing step 8
+>> Running router on 007/trips_007.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:36:04.416722
+>>> End time: 2026-10-27 23:40:05.103167
+>>> Duration: 0:04:00.686445
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:40:05.103209
+>>> End time: 2026-10-27 23:42:49.319800
+>>> Duration: 0:02:44.216591
+<<
+< Step 8 ended (duration: 0:06:44.903137)
+------------------
+
+> Executing step 9
+>> Running router on 008/trips_008.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:42:49.320919
+>>> End time: 2026-10-27 23:46:46.103014
+>>> Duration: 0:03:56.782095
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:46:46.103058
+>>> End time: 2026-10-27 23:49:29.944556
+>>> Duration: 0:02:43.841498
+<<
+< Step 9 ended (duration: 0:06:40.623736)
+------------------
+
+dua-iterate ended (duration: 0:58:28.290841)
+	Command being timed: "/home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/lib/python3.12/site-packages/sumo/tools/assign/duaIterate.py -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz -t /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/trips.xml -l 10 -b 16200 -e 36900 --mesosim -j --meso-recheck 10 --time-to-teleport 300 --routing-algorithm CH -T -E -a 900 -D /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml duarouter--routing-threads 4 sumo--ignore-route-errors true sumo--max-depart-delay 900 sumo--duration-log.statistics true"
+	User time (seconds): 5622.71
+	System time (seconds): 28.25
+	Percent of CPU this job got: 161%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 58:28.58
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 2317876
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 9
+	Minor (reclaiming a frame) page faults: 6743043
+	Voluntary context switches: 19626
+	Involuntary context switches: 452516
+	Swaps: 0
+	File system inputs: 2680
+	File system outputs: 5180920
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+total 288980
+drwxr-xr-x  2 runner runner      4096 Oct 27 23:46 .
+drwxr-xr-x 12 runner runner      4096 Oct 27 23:42 ..
+-rw-r--r--  1 runner runner  25109061 Oct 27 23:49 dump_900.0.xml.gz
+-rw-r--r--  1 runner runner  20011375 Oct 27 23:49 iteration_009.sumo.log
+-rw-r--r--  1 runner runner      1483 Oct 27 23:46 iteration_009.sumocfg
+-rw-r--r--  1 runner runner      1599 Oct 27 23:42 iteration_009_trips_008.duarcfg
+-rw-r--r--  1 runner runner 205759058 Oct 27 23:46 trips_009.rou.alt.xml.gz
+-rw-r--r--  1 runner runner  45005089 Oct 27 23:46 trips_009.rou.xml.gz
+== /mnt/sim/assign/000
+ Inserted: 249395 (Loaded: 334439)
+ Running: 133896
+ Waiting: 5
+ Teleports: 152464 (Jam: 152464)
+ Speed: 6.90
+ Duration: 2751.39
+ WaitingTime: 353.57
+ TimeLoss: 2394.21
+== /mnt/sim/assign/001
+ Inserted: 260099 (Loaded: 334439)
+ Running: 158840
+ Waiting: 4
+ Teleports: 160246 (Jam: 160246)
+ Speed: 7.77
+ Duration: 2187.57
+ WaitingTime: 280.42
+ TimeLoss: 1763.61
+== /mnt/sim/assign/002
+ Inserted: 262539 (Loaded: 334439)
+ Running: 150102
+ Waiting: 5
+ Teleports: 142878 (Jam: 142878)
+ Speed: 8.58
+ Duration: 1944.45
+ WaitingTime: 241.69
+ TimeLoss: 1505.00
+== /mnt/sim/assign/003
+ Inserted: 263609 (Loaded: 334439)
+ Running: 141557
+ Waiting: 5
+ Teleports: 138719 (Jam: 138719)
+ Speed: 8.64
+ Duration: 1917.61
+ WaitingTime: 225.77
+ TimeLoss: 1465.83
+== /mnt/sim/assign/004
+ Inserted: 265972 (Loaded: 334439)
+ Running: 136118
+ Waiting: 4
+ Teleports: 116116 (Jam: 116116)
+ Speed: 8.70
+ Duration: 1784.36
+ WaitingTime: 192.53
+ TimeLoss: 1320.60
+== /mnt/sim/assign/005
+ Inserted: 272010 (Loaded: 334439)
+ Running: 140259
+ Waiting: 3
+ Teleports: 109722 (Jam: 109722)
+ Speed: 8.81
+ Duration: 1743.05
+ WaitingTime: 186.46
+ TimeLoss: 1274.12
+== /mnt/sim/assign/006
+ Inserted: 276317 (Loaded: 334439)
+ Running: 139056
+ Waiting: 4
+ Teleports: 112167 (Jam: 112167)
+ Speed: 8.74
+ Duration: 1763.10
+ WaitingTime: 186.31
+ TimeLoss: 1287.83
+== /mnt/sim/assign/007
+ Inserted: 275345 (Loaded: 334439)
+ Running: 139316
+ Waiting: 2
+ Teleports: 125392 (Jam: 125392)
+ Speed: 8.72
+ Duration: 1813.72
+ WaitingTime: 200.09
+ TimeLoss: 1335.53
+== /mnt/sim/assign/008
+ Inserted: 276522 (Loaded: 334439)
+ Running: 137752
+ Waiting: 4
+ Teleports: 115921 (Jam: 115921)
+ Speed: 8.81
+ Duration: 1762.92
+ WaitingTime: 188.09
+ TimeLoss: 1282.51
+== /mnt/sim/assign/009
+ Inserted: 280356 (Loaded: 334439)
+ Running: 141813
+ Waiting: 4
+ Teleports: 116715 (Jam: 116715)
+ Speed: 8.85
+ Duration: 1730.06
+ WaitingTime: 185.97
+ TimeLoss: 1255.05
+/mnt/sim/assign/000 
+/mnt/sim/assign/001 
+/mnt/sim/assign/002 
+/mnt/sim/assign/003 
+/mnt/sim/assign/004 
+/mnt/sim/assign/005 
+/mnt/sim/assign/006 
+/mnt/sim/assign/007 
+/mnt/sim/assign/008 
+/mnt/sim/assign/009 
