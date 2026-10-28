@@ -1,0 +1,939 @@
+<additional>
+  <busStop id="s100" lane="e30653_0" startPos="111.2" endPos="123.2" name="Ave. Munoz Rivera despues lado opuesto calle  Rodrigo de Triana"/>
+  <busStop id="s101" lane="e30652_0" startPos="3.3" endPos="15.3" name="Ave. Munoz Rivera esquina Ave. Eleonor Roosvelt"/>
+  <busStop id="s1017" lane="e956_0" startPos="1.0" endPos="13.0" name="Ave. Las Nereidas lado opuesto calle  Dr. Ease Ocean"/>
+  <busStop id="s1018" lane="e31180_0" startPos="102.1" endPos="114.1" name="Ave. Las Nereidas antes calle  Olivo"/>
+  <busStop id="s1019" lane="e730_0" startPos="18.5" endPos="30.5" name="Ave. Las Nereidas antes calle  Destino"/>
+  <busStop id="s102" lane="r24560_0" startPos="162.1" endPos="174.1" name="Ave. Chardon esquina calle  D"/>
+  <busStop id="s1021" lane="e554_0" startPos="148.8" endPos="160.8" name="Ave. Jose V. Caro frente Buget Car Rental"/>
+  <busStop id="s1022" lane="e25658_0" startPos="108.0" endPos="120.0" name="Ave. Jose V. Caro frente Terminal Jet Blue"/>
+  <busStop id="s1023" lane="e25658_0" startPos="343.2" endPos="355.2" name="Ave. Jose V. Caro frente Terminal American Airlines"/>
+  <busStop id="s1024" lane="e25658_0" startPos="618.1" endPos="630.1" name="Ave. Jose V. Caro 3ra. Parada Aeropuerto"/>
+  <busStop id="s1025" lane="e16637_0" startPos="41.8" endPos="53.8" name="Ave. Mayaguez despues Ave. Juan Ponce de Leon"/>
+  <busStop id="s1026" lane="e24626_0" startPos="51.1" endPos="63.1" name="Ave. Mayaguez despues calle  Francia"/>
+  <busStop id="s1027" lane="e24626_0" startPos="267.3" endPos="279.3" name="Ave. Mayaguez esquina calle  Ponce"/>
+  <busStop id="s1028" lane="e24628_0" startPos="90.5" endPos="102.5" name="Ave. Mayaguez antes calle  Nueva"/>
+  <busStop id="s1029" lane="r24395_0" startPos="58.2" endPos="70.2" name="Ave. Jose De Diego antes calle  Millan"/>
+  <busStop id="s103" lane="r24551_0" startPos="112.5" endPos="124.5" name="Ave. Chardon antes Ave. Arterial Hosto"/>
+  <busStop id="s1030" lane="r24391_0" startPos="17.4" endPos="29.4" name="Ave. Jose De Diego despues calle  Ferrera"/>
+  <busStop id="s1031" lane="r24388_0" startPos="166.1" endPos="178.1" name="Ave. Jose De Diego antes lado opuesto calle  Las Brisas"/>
+  <busStop id="s1032" lane="r25910_0" startPos="121.1" endPos="133.1" name="Ave. Simon Madera despues Ave. 65th Infanteria"/>
+  <busStop id="s1033" lane="r25909_0" startPos="159.7" endPos="171.7" name="Ave. Simon Madera esquina calle  16"/>
+  <busStop id="s1034" lane="r25904_0" startPos="99.0" endPos="111.0" name="Ave. Simon Madera antes calle  28"/>
+  <busStop id="s1035" lane="r13021_0" startPos="106.0" endPos="118.0" name="Ave. Julio Andino esquina calle  Luis R. Miranda"/>
+  <busStop id="s1036" lane="r13019_0" startPos="82.5" endPos="94.5" name="Ave. Julio Andino antes calle  Ana Otero"/>
+  <busStop id="s1037" lane="r13018_0" startPos="208.2" endPos="220.2" name="Ave. Julio Andino antes calle  Juan Pena Reyes"/>
+  <busStop id="s1038" lane="e25890_0" startPos="3.6" endPos="15.6" name="calle  Juan Pena Reyes despues despues calle  Julio calle  Artiaga"/>
+  <busStop id="s1039" lane="e10669_0" startPos="5.0" endPos="17.0" name="calle  Aristies Chavier antes calle  Arturo Pasarel"/>
+  <busStop id="s104" lane="e11520_0" startPos="74.5" endPos="86.5" name="Ave. Arterial Hosto despues Ave. Chardon"/>
+  <busStop id="s1040" lane="e10672_0" startPos="1.0" endPos="13.0" name="calle  Aristies Chavier antes calle  Ana Otero"/>
+  <busStop id="s1041" lane="e10673_0" startPos="116.4" endPos="128.4" name="calle  Aristies Chavier antes calle  JesusM. Muñoz"/>
+  <busStop id="s1042" lane="e10677_0" startPos="1.0" endPos="13.0" name="calle  Aristies Chavier antes Ave. Simon Madera"/>
+  <busStop id="s1043" lane="r12386_0" startPos="1.0" endPos="13.0" name="Ave. Simon Madera despues calle  36"/>
+  <busStop id="s1044" lane="r12386_0" startPos="222.8" endPos="234.8" name="Ave. Simon Madera lado opuesto calle  Confianza"/>
+  <busStop id="s1045" lane="r12381_0" startPos="28.9" endPos="40.9" name="Ave. Simon Madera esquina calle  Alegria"/>
+  <busStop id="s1047" lane="r13106_0" startPos="15.8" endPos="27.8" name="calle  Vinyater antes calle  Halcon"/>
+  <busStop id="s1048" lane="r13103_0" startPos="159.2" endPos="171.2" name="calle  Vinyater antes calle  Zurna"/>
+  <busStop id="s1049" lane="e25923_0" startPos="17.4" endPos="29.4" name="calle  Zurna esquina calle  Eider"/>
+  <busStop id="s105" lane="e28477_0" startPos="34.3" endPos="46.3" name="calle  Juan Calaf antes calle Oliver"/>
+  <busStop id="s1050" lane="e16316_0" startPos="181.5" endPos="193.5" name="calle  Eider antes calle  Torcaza"/>
+  <busStop id="s1051" lane="e16318_0" startPos="57.0" endPos="69.0" name="calle  Eider antes calle  Ave. Roberto S. Vilella"/>
+  <busStop id="s1052" lane="r20219_0" startPos="105.8" endPos="117.8" name="Ave. Manuel Fernandez Juncos después Blvd Román Baldorioty de Castro"/>
+  <busStop id="s106" lane="e28480_0" startPos="6.2" endPos="18.2" name="calle  Juan Calaf antes calle Cesar Gonzalez"/>
+  <busStop id="s1069" lane="e25882_0" startPos="14.6" endPos="26.6" name="Ave. Roberto S. Vilella antes calle  Eider"/>
+  <busStop id="s107" lane="e8990_0" startPos="149.9" endPos="161.9" name="calle  Juan Calaf antes calle Federico Acosta"/>
+  <busStop id="s1070" lane="r16318_0" startPos="71.9" endPos="83.9" name="calle  Eider antes calle  Raspinel"/>
+  <busStop id="s1071" lane="r10522_0" startPos="1.0" endPos="13.0" name="calle  Eider despues calle  Tocaza"/>
+  <busStop id="s1072" lane="r16315_0" startPos="5.4" endPos="17.4" name="calle  Eider antes calle  Zurna"/>
+  <busStop id="s1073" lane="r25921_0" startPos="25.0" endPos="37.0" name="calle  Zurna esquina calle  Vinyater"/>
+  <busStop id="s1074" lane="e13106_0" startPos="21.9" endPos="33.9" name="calle  Vinyater esquina calle  Hypolais"/>
+  <busStop id="s1075" lane="e16641_0" startPos="4.1" endPos="16.1" name="Ave. Mayaguez despues lado opuesto calle  Coamo"/>
+  <busStop id="s1076" lane="e12380_0" startPos="7.6" endPos="19.6" name="Ave. Simon Madera lado opuesto calle  Alegria"/>
+  <busStop id="s1077" lane="e12384_0" startPos="17.1" endPos="29.1" name="Avenida Simón Madera esquina Paseo 4"/>
+  <busStop id="s1078" lane="e12386_0" startPos="159.1" endPos="171.1" name="Ave. Simon Madera antes calle  Felipe Gutiérre"/>
+  <busStop id="s1079" lane="e12388_0" startPos="79.8" endPos="91.8" name="Ave. Simon Madera antes calle  Aristies Chavier"/>
+  <busStop id="s108" lane="e8997_0" startPos="65.6" endPos="77.6" name="calle  Juan Calaf antes calle Las America"/>
+  <busStop id="s1080" lane="r10676_0" startPos="4.0" endPos="16.0" name="calle  Aristies Chavier antes calle  Francisco P. Cortéz"/>
+  <busStop id="s1081" lane="r10673_0" startPos="9.4" endPos="21.4" name="calle  Aristies Chavier despues JesusM. Muñoz"/>
+  <busStop id="s1082" lane="r10671_0" startPos="4.3" endPos="16.3" name="calle  Aristies Chavier despues lado opuesto calle  Josefina Pares"/>
+  <busStop id="s1083" lane="r10669_0" startPos="17.2" endPos="29.2" name="calle  Aristies Chavier esquina calle  Juan Pena Reyes"/>
+  <busStop id="s1084" lane="r25890_0" startPos="129.5" endPos="141.5" name="calle  Juan Pena Reyes esqina calle  Julio calle  Artiaga"/>
+  <busStop id="s1085" lane="e13019_0" startPos="35.3" endPos="47.3" name="Ave. Julio Andino despues calle  Ana Otero"/>
+  <busStop id="s1086" lane="e13024_0" startPos="1.0" endPos="13.0" name="Ave. Julio Andino lado opuesto calle  Luis R. Miranda"/>
+  <busStop id="s1087" lane="e25904_0" startPos="215.7" endPos="227.7" name="Ave. Simon Madera antes calle  Granados"/>
+  <busStop id="s1088" lane="e25909_0" startPos="1.0" endPos="13.0" name="Ave. Simon Madera despues lado opuesto calle  16"/>
+  <busStop id="s1089" lane="e25911_0" startPos="84.3" endPos="96.3" name="Ave. Simon Madera antes Ave. 65th Infanteria"/>
+  <busStop id="s109" lane="e29227_0" startPos="39.8" endPos="51.8" name="calle  Las America despues calle Juan Calaf"/>
+  <busStop id="s1090" lane="e24390_0" startPos="58.4" endPos="70.4" name="Ave. Jose De Diego despues calle  Brisa"/>
+  <busStop id="s1091" lane="e24391_0" startPos="102.4" endPos="114.4" name="Ave. Jose De Diego lado opuesto calle  Ferrera"/>
+  <busStop id="s1092" lane="e24397_0" startPos="1.0" endPos="13.0" name="Ave. Jose De Diego antes calle  San Felipe"/>
+  <busStop id="s1093" lane="r24629_0" startPos="68.8" endPos="80.8" name="Ave. Barbosa lado opuesto calle  Nueva"/>
+  <busStop id="s1094" lane="r24627_0" startPos="52.0" endPos="64.0" name="Ave. Barbosa lado opuesto calle  Ponce"/>
+  <busStop id="s1095" lane="r24626_0" startPos="222.0" endPos="234.0" name="Ave. Barbosa antes calle  Francia"/>
+  <busStop id="s1096" lane="r16641_0" startPos="50.0" endPos="62.0" name="Ave. Barbosa esquina calle  Coamo"/>
+  <busStop id="s1097" lane="r16637_0" startPos="9.7" endPos="21.7" name="Ave. Barbosa anteas Ave. Juan Ponce de Leon"/>
+  <busStop id="s11" lane="e323_0" startPos="19.3" endPos="31.3" name="PR-2 esquina calle  Colectora Central"/>
+  <busStop id="s110" lane="e31333_0" startPos="30.5" endPos="42.5" name="calle  Las America antes Ave. Franklin D. Roosvelt"/>
+  <busStop id="s111" lane="e4315_0" startPos="98.8" endPos="110.8" name="Ave. Franklin D. Roosvelt lado opuesto Ave. San Patricio"/>
+  <busStop id="s112" lane="e24896_0" startPos="11.5" endPos="23.5" name="PR-165 despues Marginal John F. Kennedy (antiguo TC San Patricio)"/>
+  <busStop id="s113" lane="e30329_0" startPos="47.7" endPos="59.7" name="PR-165 Despues Calle 2"/>
+  <busStop id="s114" lane="e30331_0" startPos="102.8" endPos="114.8" name="PR-165 lado opuesto Imprenta El Nuevo Dia"/>
+  <busStop id="s1145" lane="e12549_0" startPos="1.0" endPos="13.0" name="Marginal Baldorioty de Castro antes calle Colton"/>
+  <busStop id="s115" lane="e30335_0" startPos="13.2" endPos="25.2" name="PR-165 lado opuesto Centro de Distribucion Amelia"/>
+  <busStop id="s116" lane="e19247_0" startPos="64.6" endPos="76.6" name="PR-165 antes calle  Francisco Goya"/>
+  <busStop id="s117" lane="e2844_0" startPos="1.0" endPos="13.0" name="PR-165 despues calle  Francisco Goya"/>
+  <busStop id="s119" lane="r3220_0" startPos="3.0" endPos="15.0" name="PR- 24 Ave. Ponce de Leon antes calle  Santa Rosa de Lima"/>
+  <busStop id="s12" lane="r26180_0" startPos="14.4" endPos="26.4" name="PR-2 antes calle  Wilson"/>
+  <busStop id="s120" lane="r3216_0" startPos="6.0" endPos="18.0" name="PR-24 Ave. Ponce de Leon despues calle  Ramos Antonini"/>
+  <busStop id="s121" lane="r3210_0" startPos="54.3" endPos="66.3" name="PR-24 Ave. Ponce de Leon antes Ave. Las Palmas"/>
+  <busStop id="s122" lane="r3207_0" startPos="13.9" endPos="25.9" name="PR-24 Ave. Ponce de Leon despues c.jon 154"/>
+  <busStop id="s123" lane="r24570_0" startPos="62.2" endPos="74.2" name="calle  Wilson lado opuesto calle  Caparra"/>
+  <busStop id="s124" lane="e737_0" startPos="3.1" endPos="15.1" name="calle  Wilson esquina Ave. Nereidas"/>
+  <busStop id="s1248" lane="e20106_0" startPos="82.6" endPos="94.6" name="Ave. Ashford antes calle  F. Krug"/>
+  <busStop id="s1249" lane="r20106_0" startPos="94.3" endPos="106.3" name="Ave. Ashford antes lado opuesto Ave. De Diego"/>
+  <busStop id="s125" lane="e26983_0" startPos="75.3" endPos="87.3" name="Ave. Nereidas lado opuesto calle  San Lorenzo"/>
+  <busStop id="s1251" lane="e21053_0" startPos="84.3" endPos="96.3" name="Parada Autobuses Estación Centro Médico"/>
+  <busStop id="s1259" lane="e24256_0" startPos="261.5" endPos="273.5" name="PR-187 lado opuesto Hotel Marriot"/>
+  <busStop id="s126" lane="e28463_0" startPos="8.7" endPos="20.7" name="calle  Destino antes calle  Barbosa"/>
+  <busStop id="s1260" lane="e24258_0" startPos="1.0" endPos="13.0" name="PR-187 Ave. Boca de Cangrejo lado opuesto 1ra Entrada Balneario Carolina"/>
+  <busStop id="s1261" lane="e24258_0" startPos="461.4" endPos="473.4" name="PR-187 Ave. Boca de Cangrejo lado opuesto Tropimar"/>
+  <busStop id="s1262" lane="e24258_0" startPos="697.8" endPos="709.8" name="PR-187 Ave. Boca de Cangrejo lado opuesto 2da Entrada Balneario Carolina"/>
+  <busStop id="s1263" lane="e24262_0" startPos="317.3" endPos="329.3" name="PR-187 Ave. Boca de Cangrejo antes CESCO"/>
+  <busStop id="s1264" lane="e24262_0" startPos="754.6" endPos="766.6" name="PR-187 Ave. Boca de Cangrejo despues CESCO"/>
+  <busStop id="s1266" lane="e27617_0" startPos="1.0" endPos="13.0" name="PR-187 frente Negocio El Farol"/>
+  <busStop id="s127" lane="e24578_0" startPos="1.0" endPos="13.0" name="Ave. Barbosa lado opuesto calle  Santa Teresa"/>
+  <busStop id="s128" lane="e28462_0" startPos="38.0" endPos="50.0" name="Ave. Barbosa esquina calle  Isidra Rodriguez"/>
+  <busStop id="s129" lane="e24570_0" startPos="62.3" endPos="74.3" name="calle  Wilson lado opuesto calle  Atalaya"/>
+  <busStop id="s13" lane="r26182_0" startPos="114.5" endPos="126.5" name="PR-2 antes lado opuesto calle  Robles"/>
+  <busStop id="s130" lane="e3208_0" startPos="1.0" endPos="13.0" name="PR-24 Ave. Ponce de Leon esquina calle  Diego Vega"/>
+  <busStop id="s1305" lane="r27617_0" startPos="7.7" endPos="19.7" name="PR-187 lado opuesto Negocio El Farol"/>
+  <busStop id="s1306" lane="e24244_0" startPos="275.4" endPos="287.4" name="PR-187 Antes Lado Opuesto CESCO"/>
+  <busStop id="s1307" lane="e24244_0" startPos="693.2" endPos="705.2" name="PR-187 frente Parque Acuatico"/>
+  <busStop id="s1308" lane="e24244_0" startPos="1084.4" endPos="1096.4" name="PR-187 1ra Entrada Balneario Carolina"/>
+  <busStop id="s1309" lane="e24246_0" startPos="330.5" endPos="342.5" name="PR-187 frente Tropimar"/>
+  <busStop id="s131" lane="e3212_0" startPos="1.0" endPos="13.0" name="PR-24 Ave. Ponce de Leon despues calle  Celso Barbosa"/>
+  <busStop id="s1310" lane="e24246_0" startPos="723.2" endPos="735.2" name="PR-187 2da Entrada Balneario Carolina"/>
+  <busStop id="s1311" lane="e24250_0" startPos="32.1" endPos="44.1" name="PR-187 frente Hotel Marriot"/>
+  <busStop id="s1312" lane="e24250_0" startPos="267.2" endPos="279.2" name="PR-187 antes calle  Horizonte"/>
+  <busStop id="s132" lane="e3215_0" startPos="3.3" endPos="15.3" name="PR-24 Ave. Ponce de Leon PR-24 antes calle  Munoz Rivera"/>
+  <busStop id="s133" lane="e3220_0" startPos="33.4" endPos="45.4" name="PR-24 Ave. Ponce de Leon antes calle  Rodrigo de Trina"/>
+  <busStop id="s134" lane="e24548_0" startPos="19.0" endPos="31.0" name="PR-165 despues de Buchanan PR-28"/>
+  <busStop id="s135" lane="e29350_0" startPos="14.3" endPos="26.3" name="PR-165 antes lado opuesto Expreso Jose de Diego"/>
+  <busStop id="s136" lane="e20276_0" startPos="242.4" endPos="254.4" name="PR-165 frente edificio El Nuevo Dia"/>
+  <busStop id="s137" lane="e20279_0" startPos="146.9" endPos="158.9" name="PR-165 lado opuesto Calle 2"/>
+  <busStop id="s138" lane="e30336_0" startPos="52.4" endPos="64.4" name="PR-165 antes lado opuesto Transicenter San Patricio"/>
+  <busStop id="s1382" lane="r24977_0" startPos="17.3" endPos="29.3" name="Ave. El Comandante despues calle  232"/>
+  <busStop id="s1383" lane="r24970_0" startPos="59.3" endPos="71.3" name="Ave. El Comandante antes Ave. Roberto S. Vilella"/>
+  <busStop id="s139" lane="e29200_0" startPos="81.7" endPos="93.7" name="calle  Las America frente a  JC Penny"/>
+  <busStop id="s1398" lane="e6969_0" startPos="71.4" endPos="83.4" name="Ave. 65th Infanteria antes calle  Carmen Hernandez"/>
+  <busStop id="s1399" lane="e1030_0" startPos="1.0" endPos="13.0" name="Ave. De Diego esquina PR-8"/>
+  <busStop id="s14" lane="r26201_0" startPos="126.8" endPos="138.8" name="PR-2 antes calle  Driver Ramón Mimoso"/>
+  <busStop id="s140" lane="e31326_0" startPos="97.9" endPos="109.9" name="calle  Las America lado opuesto Supermercado Econo"/>
+  <busStop id="s1400" lane="r24966_0" startPos="105.2" endPos="117.2" name="Ave. Sur despues PR-8"/>
+  <busStop id="s141" lane="r8997_0" startPos="29.1" endPos="41.1" name="calle  Juan Calaf frente Sears"/>
+  <busStop id="s142" lane="r8993_0" startPos="49.8" endPos="61.8" name="calle  Juan Calaf antes calle Federico Acosta"/>
+  <busStop id="s143" lane="r8989_0" startPos="132.5" endPos="144.5" name="calle  Juan Calaf esquina calle  Teniente Cesar Luis Acosta"/>
+  <busStop id="s144" lane="e9966_0" startPos="71.1" endPos="83.1" name="calle  Juan Calaf despues calle  Teniente Cesar Luis Acosta"/>
+  <busStop id="s145" lane="e9967_0" startPos="39.8" endPos="51.8" name="calle  Juan Calaf antes calle  Arterial Hosto"/>
+  <busStop id="s146" lane="e24538_0" startPos="272.9" endPos="284.9" name="Ave. Arterial Hosto antes Ave. Carlos F. Chardon"/>
+  <busStop id="s147" lane="e24559_0" startPos="134.8" endPos="146.8" name="Ave. Carlos F. Chardon despues calle  Arterial Hosto"/>
+  <busStop id="s1474" lane="e11312_0" startPos="90.4" endPos="102.4" name="Ave. MCleary lantes lado opuesto calle  Carrion Court"/>
+  <busStop id="s1475" lane="e12351_0" startPos="173.0" endPos="185.0" name="Ave. Ashford antes calle  Los Baños"/>
+  <busStop id="s1476" lane="e11321_0" startPos="37.0" endPos="49.0" name="Ave. MCleary antes calle  Maria Moczo"/>
+  <busStop id="s1477" lane="e11331_0" startPos="36.3" endPos="48.3" name="Ave. MCleary antes calle  Rampla del Admirantes"/>
+  <busStop id="s1478" lane="e10605_0" startPos="105.9" endPos="117.9" name="calle  Park Boulevard antes calle  Las America"/>
+  <busStop id="s1479" lane="e24317_0" startPos="1.0" endPos="13.0" name="calle  Las America lado opuesto calle  Teniente Lavergne"/>
+  <busStop id="s148" lane="e24559_0" startPos="295.6" endPos="307.6" name="Ave. Carlos F. Chardon antes lado opuesto calle  Arterial D"/>
+  <busStop id="s1480" lane="r24317_0" startPos="41.9" endPos="53.9" name="calle  Las America antes calle  Teniente Lavergne"/>
+  <busStop id="s1481" lane="r10603_0" startPos="117.7" endPos="129.7" name="calle  Park Boulevard antes calle  Soldado Serrano"/>
+  <busStop id="s1482" lane="r11332_0" startPos="62.6" endPos="74.6" name="Ave. Mcleary antes calle  Rampla del Admirantes"/>
+  <busStop id="s1483" lane="r11322_0" startPos="2.5" endPos="14.5" name="Ave. MCleary despues calle  Santa Cecilia"/>
+  <busStop id="s1484" lane="e16455_0" startPos="1.0" endPos="13.0" name="Ave. MCleary antes calle  Yardley Place"/>
+  <busStop id="s1485" lane="r11313_0" startPos="45.8" endPos="57.8" name="Ave. MCleary antes calle  Carrion Court"/>
+  <busStop id="s1486" lane="r11309_0" startPos="52.1" endPos="64.1" name="Ave. MCleary antes calle  Kings Court"/>
+  <busStop id="s149" lane="e20983_0" startPos="5.8" endPos="17.8" name="Ave. Ponce de Leon despues Ave. Franklin D. Roosvelt (Transit Center)"/>
+  <busStop id="s15" lane="r26197_0" startPos="8.8" endPos="20.8" name="PR-2 antes lado opuesto calle Victor Braegger"/>
+  <busStop id="s150" lane="e24642_0" startPos="1.3" endPos="13.3" name="Ave. Ponce de Leon antes lado opuesto calle  Duarte"/>
+  <busStop id="s151" lane="e24640_0" startPos="11.5" endPos="23.5" name="Ave. Ponce de Leon lado opuesto calle  Ruiz Belvis"/>
+  <busStop id="s1517" lane="e34273_0" startPos="105.4" endPos="117.4" name="Estacion Martinez Nadal (Abordaje/Descenso)"/>
+  <busStop id="s152" lane="e28835_0" startPos="38.8" endPos="50.8" name="Ave. Ponce de Leon antes calle  Guayama"/>
+  <busStop id="s153" lane="e25734_0" startPos="46.1" endPos="58.1" name="Ave. Ponce de Leon antes lado opuesto calle  Lares"/>
+  <busStop id="s154" lane="e25729_0" startPos="13.8" endPos="25.8" name="Ave. Ponce de Leon esquina calle  Coll Toste"/>
+  <busStop id="s155" lane="e19917_0" startPos="88.7" endPos="100.7" name="Ave. Ponce de Leon despues calle  Guarionex"/>
+  <busStop id="s156" lane="e33463_0" startPos="5.5" endPos="17.5" name="Ave. Ponce de Leon antes calle  Mariana Bracetti"/>
+  <busStop id="s157" lane="e33459_0" startPos="14.8" endPos="26.8" name="Ave. Ponce de Leon antes Ave. Universidad"/>
+  <busStop id="s158" lane="e19548_0" startPos="78.6" endPos="90.6" name="Ave. Ponce de Leon antes Ave. Gandara"/>
+  <busStop id="s159" lane="e10484_0" startPos="99.4" endPos="111.4" name="Ave. Gandara esquina calle  Brumbaugh"/>
+  <busStop id="s1592" lane="r13233_0" startPos="110.2" endPos="122.2" name="calle  del Tren esquina calle  Tadeo Rivera (Hacias San Juan)"/>
+  <busStop id="s1593" lane="e13235_0" startPos="62.4" endPos="74.4" name="calle  del Tren esquina calle  Tadeo Rivera (Saliendo de San Juan)"/>
+  <busStop id="s1594" lane="e29593_0" startPos="126.3" endPos="138.3" name="Ave. Jose de Diego esquina calle  N. Bulon"/>
+  <busStop id="s1595" lane="r25551_0" startPos="58.3" endPos="70.3" name="Ave. Jose de Diego lado opuesto calle  N. Bulon"/>
+  <busStop id="s16" lane="r26186_0" startPos="32.5" endPos="44.5" name="PR-2 Despues Calle B"/>
+  <busStop id="s160" lane="e10484_0" startPos="309.9" endPos="321.9" name="Ave. Gandara antes calle  Ferrocarril"/>
+  <busStop id="s1601" lane="r20377_0" startPos="30.3" endPos="42.3" name="Avenida San Patricio esquina Avenida Roosevelt"/>
+  <busStop id="s1602" lane="e20377_0" startPos="43.0" endPos="55.0" name="Ave. San Patricio después Ave. Roosevelt"/>
+  <busStop id="s1603" lane="e510_0" startPos="161.9" endPos="173.9" name="Marginal Baldorioty de Castro lado opuesto al Dealer Mercedes"/>
+  <busStop id="s1604" lane="e20096_0" startPos="104.7" endPos="116.7" name="calle  del Tren antes Ave. Juan Ponce de Leon"/>
+  <busStop id="s1612" lane="r24966_0" startPos="112.5" endPos="124.5" name="Ave. Sur lado frente a Ikea"/>
+  <busStop id="s1613" lane="r1029_0" startPos="31.0" endPos="43.0" name="Ave. De Diego despues Ramal 8"/>
+  <busStop id="s162" lane="e24806-AddedOnRampEdge_0" startPos="31.6" endPos="43.6" name="Ave. Munoz Luis Rivera despues lado opuesto calla Uno"/>
+  <busStop id="s1622" lane="e15462_0" startPos="10.1" endPos="22.1" name="Ave. Jesus T. Pinero frente a Villa España"/>
+  <busStop id="s1624" lane="e13397_0" startPos="351.9" endPos="363.9" name="calle  Montellano despues de la calle  Riaza"/>
+  <busStop id="s1625" lane="e10897_0" startPos="46.4" endPos="58.4" name="Calle Parana despues calle Guadalquivir"/>
+  <busStop id="s1626" lane="e35382_0" startPos="18.1" endPos="30.1" name="Ave. Juan Ponce de Leon despues Ave. Sagrado Corazon"/>
+  <busStop id="s1627" lane="e20154_0" startPos="11.2" endPos="23.2" name="Ave. Juan Ponce de Leon despues calle  Riera frente a la Inmaculada"/>
+  <busStop id="s1628" lane="e24773_0" startPos="74.1" endPos="86.1" name="Ave. Juan Ponce de Leon antes calle  San Jorge"/>
+  <busStop id="s1629" lane="e26648_0" startPos="43.0" endPos="55.0" name="Ave. Juan Ponce de Leon frente al Cobian Plaza"/>
+  <busStop id="s163" lane="e24806_0" startPos="183.5" endPos="195.5" name="Ave. Luis Munoz Rivera antes Ave. Universidad"/>
+  <busStop id="s1630" lane="e26651_0" startPos="24.7" endPos="36.7" name="Ave. Juan Ponce de Leon antes Ave. de Diego"/>
+  <busStop id="s164" lane="e24591_0" startPos="14.7" endPos="26.7" name="Ave. Luis Munoz Rivera antes calle  Apolo"/>
+  <busStop id="s1644" lane="e19044_0" startPos="26.3" endPos="38.3" name="PR-8 Ramal despues Ave. Iturregui"/>
+  <busStop id="s165" lane="e24595_0" startPos="121.2" endPos="133.2" name="Ave. Luis Munoz Rivera despues lado opuesto calle  Margarita"/>
+  <busStop id="s1651" lane="r13315_0" startPos="60.0" endPos="72.0" name="Ave. Sagrado Corazon esquina San Antonio"/>
+  <busStop id="s1652" lane="r13309_0" startPos="4.7" endPos="16.7" name="Ave. Sagrado Corazon despues calle  Violeta"/>
+  <busStop id="s1653" lane="r13308_0" startPos="131.0" endPos="143.0" name="Ave. Sagrado Corazon antes calle  Tapia"/>
+  <busStop id="s1654" lane="e35740_0" startPos="220.5" endPos="232.5" name="Marginal Baldorioty de Castro frente a placita de los salseros"/>
+  <busStop id="s1655" lane="e25823-AddedOnRampEdge_0" startPos="30.4" endPos="42.4" name="Marginal Baldorioty de Castro frente a Norte Shopping Center"/>
+  <busStop id="s1656" lane="e13308_0" startPos="51.2" endPos="63.2" name="Ave. Sagrado Corazon frente a Brisas de Monte Flores"/>
+  <busStop id="s1657" lane="e13310_0" startPos="1.0" endPos="13.0" name="Ave. Sagrado Corazon lado opuesto calle  Violeta"/>
+  <busStop id="s1658" lane="r11731_0" startPos="1.0" endPos="13.0" name="Ave. Sagrado Corazon Antes Calle San Antonio"/>
+  <busStop id="s1659" lane="e26278_0" startPos="55.5" endPos="67.5" name="Marginal 65th Infanteria frente a Charlie Boy"/>
+  <busStop id="s1660" lane="e24993_0" startPos="74.8" endPos="86.8" name="Marginal 65th Infanteria frente a Cenapulo de la FE"/>
+  <busStop id="s1661" lane="r20004_0" startPos="13.7" endPos="25.7" name="Paseo Isla Grande esquina calle  Paseo de las Fuentes"/>
+  <busStop id="s1662" lane="e20003_0" startPos="14.3" endPos="26.3" name="calle  Paseo Isla Grande antes calle  Paseo de las Fuentes"/>
+  <busStop id="s167" lane="r6997_0" startPos="830.2" endPos="842.2" name="PR-1 lado opuesto Ave. Ponce de Leon PR-8839"/>
+  <busStop id="s1687" lane="r24406_0" startPos="542.3" endPos="554.3" name="Ave. Isla Verde frente al Cementerio"/>
+  <busStop id="s1688" lane="e24374_0" startPos="17.9" endPos="29.9" name="calle Las Palmas esquina calle Condado"/>
+  <busStop id="s1689" lane="r20337_0" startPos="34.1" endPos="46.1" name="calle Las Palmas antes calle Ernesto Cerra"/>
+  <busStop id="s1690" lane="e20332_0" startPos="158.5" endPos="170.5" name="calle Cerra antes calle Roosevelt"/>
+  <busStop id="s1692" lane="r20078_0" startPos="150.5" endPos="162.5" name="Ave. Eduardo Conde antes lado opuesto calle  Haydee Rexach"/>
+  <busStop id="s1693" lane="e24500_0" startPos="17.5" endPos="29.5" name="PR-181 Rotonda Expreso de Trujillo"/>
+  <busStop id="s1694" lane="e21051_0" startPos="32.9" endPos="44.9" name="Ave. Centro Médico después PR 21"/>
+  <busStop id="s1696" lane="e13018_0" startPos="107.7" endPos="119.7" name="Avenida Julio Andino después calle Juan Peña Reyes"/>
+  <busStop id="s1698" lane="r24225_0" startPos="231.2" endPos="243.2" name="Mall of San Juan hacia TU Piñero"/>
+  <busStop id="s17" lane="e12_0" startPos="8.7" endPos="20.7" name="PR-2 antes lado opuesto calle Millan"/>
+  <busStop id="s1700" lane="e19345_0" startPos="1.0" endPos="13.0" name="PR-181 Expreso despues lado opuesto PR-846"/>
+  <busStop id="s1701" lane="e19347_0" startPos="569.5" endPos="581.5" name="PR-181 Expreso lado opuesto PR-848"/>
+  <busStop id="s1702" lane="r21728_0" startPos="3.3" endPos="15.3" name="Ave. Las Cumbre esquina calle  Guamani"/>
+  <busStop id="s1704" lane="r18718_0" startPos="166.9" endPos="178.9" name="PR-846 Lado Opuesto Calle 21"/>
+  <busStop id="s1705" lane="r26062_0" startPos="14.5" endPos="26.5" name="PR-846 despues calle  Alí"/>
+  <busStop id="s1706" lane="r26059_0" startPos="64.5" endPos="76.5" name="PR-846 despues Residencia Covadonga"/>
+  <busStop id="s1709" lane="e29572_0" startPos="30.9" endPos="42.9" name="Calle Santa Elena esquina calle Constitución"/>
+  <busStop id="s171" lane="e21053_0" startPos="49.7" endPos="61.7" name="Estación Centro Medico después Tte. Cesar Gonzaléz"/>
+  <busStop id="s1710" lane="r29573_0" startPos="1.0" endPos="13.0" name="Ave. Eduardo Conde despues calle Norte."/>
+  <busStop id="s1711" lane="e29574_0" startPos="110.8" endPos="122.8" name="Ave. Eduardo Conde antes calle Norte"/>
+  <busStop id="s1712" lane="e24790_0" startPos="1.0" endPos="13.0" name="Calle Santa Elena lado opuesto calle A"/>
+  <busStop id="s1713" lane="e6912_0" startPos="59.6" endPos="71.6" name="Paseo Alborada Cruz Roja antes calle P. Dr. Jose C. Barbosa"/>
+  <busStop id="s1714" lane="e27706_0" startPos="45.5" endPos="57.5" name="Paseo Alborada Cruz Roja antes calle 9 SE "/>
+  <busStop id="s1715" lane="e21121_0" startPos="79.4" endPos="91.4" name="Ave. Centro Médico antes PR 21"/>
+  <busStop id="s1716" lane="e15463_0" startPos="211.8" endPos="223.8" name="Ave. Jesús T. Piñero antes Ave. San Patricio"/>
+  <busStop id="s1719" lane="r23702_0" startPos="160.8" endPos="172.8" name="PR-8838 Ave. Ponce de Leon antes calle  Parana"/>
+  <busStop id="s172" lane="r25010_0" startPos="14.2" endPos="26.2" name="Calle 9 después Calle 62 SE"/>
+  <busStop id="s1720" lane="e23702_0" startPos="27.4" endPos="39.4" name="PR-8838 Ave. Ponce de Leon despues lado opuesto calle  Parana"/>
+  <busStop id="s173" lane="r25010_0" startPos="294.0" endPos="306.0" name="Calle 9 Lado Opuesto Antes Calle 54 SE"/>
+  <busStop id="s174" lane="r16033_0" startPos="59.6" endPos="71.6" name="Calle 54 SE Antes Calle 3 SE"/>
+  <busStop id="s175" lane="r16032_0" startPos="62.2" endPos="74.2" name="calle 54 SE antes Ave. Jose de Diego"/>
+  <busStop id="s176" lane="r24892_0" startPos="143.7" endPos="155.7" name="Ave. San Patricio antes calle 3  SO"/>
+  <busStop id="s1764" lane="e24568_0" startPos="12.6" endPos="24.6" name="Calle Wilson esquina calle Amparo"/>
+  <busStop id="s1765" lane="e3207_0" startPos="1.0" endPos="13.0" name="PR-24 Ave. Ponce de León esquina José de Diego"/>
+  <busStop id="s1766" lane="e3217_0" startPos="31.9" endPos="43.9" name=" PR-24 Ave. Ponce de León después calle Ernesto Ramos Antonini"/>
+  <busStop id="s1768" lane="e19981_0" startPos="43.5" endPos="55.5" name="Blev. St. Thomas despues Ave. Fernandez Juncos (hacia aeropuerto LMM)"/>
+  <busStop id="s177" lane="r24891_0" startPos="127.9" endPos="139.9" name="Ave. San Patricio esquina calle 48 S"/>
+  <busStop id="s1770" lane="e926_0" startPos="23.1" endPos="35.1" name="Carretera Pastor Rafael Torres antes marginal PR-165 (antiguo Terminal Cataño)"/>
+  <busStop id="s1772" lane="e18722_0" startPos="100.3" endPos="112.3" name="Ave. Las Cumbres antes PR-846"/>
+  <busStop id="s1773" lane="e10059_0" startPos="79.2" endPos="91.2" name="Calle Federico Costas antes de Best Buy"/>
+  <busStop id="s1774" lane="e10062_0" startPos="78.5" endPos="90.5" name="Calle Federico Costas esquina Ave. Chardon"/>
+  <busStop id="s178" lane="r24890_0" startPos="162.2" endPos="174.2" name="Ave. San Patricio antes calle 48 S"/>
+  <busStop id="s1780" lane="r8249_0" startPos="53.1" endPos="65.1" name="Calle Maria Isabel despúes Calle Jupiter"/>
+  <busStop id="s1781" lane="r24749_0" startPos="73.4" endPos="85.4" name="Calle Maria Isabel esquina Calle Flor Antillana"/>
+  <busStop id="s1782" lane="e25807_0" startPos="4.8" endPos="16.8" name="Ave. Juan Ponce De León antes Ave. Borinquen"/>
+  <busStop id="s179" lane="r24888_0" startPos="126.5" endPos="138.5" name="Ave. San Patricio antes Ave. Americo Miranda"/>
+  <busStop id="s1790" lane="e28979_0" startPos="281.2" endPos="293.2" name="PR-21 antes salida Expreso PR-18"/>
+  <busStop id="s1791" lane="r20164_0" startPos="150.7" endPos="162.7" name="Ave. Fernández Juncos frente Hyatt"/>
+  <busStop id="s18" lane="e12_0" startPos="196.0" endPos="208.0" name="PR-2 despues lado opuesto calle Millan"/>
+  <busStop id="s180" lane="r24885_0" startPos="71.5" endPos="83.5" name="Ave. San Patricio antes calle 21 SO"/>
+  <busStop id="s181" lane="r24883_0" startPos="150.0" endPos="162.0" name="Ave. San Patricio antes calle 16 SO"/>
+  <busStop id="s182" lane="r24879_0" startPos="80.5" endPos="92.5" name="Ave. San Patricio antes Ave. JesusT. Pinero"/>
+  <busStop id="s183" lane="r24601_0" startPos="20.8" endPos="32.8" name="Ave. San Patricio antes calle Adams"/>
+  <busStop id="s1836" lane="e24348_0" startPos="21.3" endPos="33.3" name="Ave. Juan P. De León después calle Elisa Golberg"/>
+  <busStop id="s1837" lane="e24842_0" startPos="1.0" endPos="13.0" name="Avenida Jesus T. Piñero lado opuesto Residencial Villa España"/>
+  <busStop id="s184" lane="r24875_0" startPos="2.6" endPos="14.6" name="Ave. San Patricio antes calle Amarilis"/>
+  <busStop id="s185" lane="r24869_0" startPos="194.5" endPos="206.5" name="Ave. San Patricio antes calle Palm Cir"/>
+  <busStop id="s186" lane="r24865_0" startPos="113.5" endPos="125.5" name="Ave. San Patricio esquina calle Parkside 6"/>
+  <busStop id="s19" lane="e28583_0" startPos="26.3" endPos="38.3" name="Marginal Ave. Franklin D. Roosvelt antes Ave. San Patricio"/>
+  <busStop id="s191" lane="e10713_0" startPos="40.5" endPos="52.5" name="PR-176 Ana  G. Méndez después PR-8838 Calle Ponce de León"/>
+  <busStop id="s196" lane="e24864_0" startPos="50.0" endPos="62.0" name="Ave. San Patricio antes calle Ebano"/>
+  <busStop id="s197" lane="e24870_0" startPos="131.4" endPos="143.4" name="Ave. San Patricio antes calle Jacinto Galib"/>
+  <busStop id="s198" lane="e13359_0" startPos="1.0" endPos="13.0" name="Ave. San Patricio despues calle Belfast"/>
+  <busStop id="s199" lane="e24602_0" startPos="1.0" endPos="13.0" name="Ave. San Patricio despues calle Adams"/>
+  <busStop id="s20" lane="e20376_0" startPos="20.5" endPos="32.5" name="Ave. Franklin D. Roosvelt despues Ave. San Patricio"/>
+  <busStop id="s200" lane="e24881_0" startPos="12.5" endPos="24.5" name="Ave. San Patricio despues Ave. JesusT. Pinero"/>
+  <busStop id="s201" lane="e24882_0" startPos="171.8" endPos="183.8" name="Ave. San Patricio antes calle 31 SO"/>
+  <busStop id="s202" lane="e24884_0" startPos="67.9" endPos="79.9" name="Ave. San Patricio antes calle 24 SO"/>
+  <busStop id="s203" lane="e24889_0" startPos="42.0" endPos="54.0" name="Ave. San Patricio despues lado opuesto calle 3650"/>
+  <busStop id="s204" lane="e24890_0" startPos="92.6" endPos="104.6" name="Ave. San Patricio despues calle 48 S"/>
+  <busStop id="s205" lane="e24890_0" startPos="198.4" endPos="210.4" name="Ave. San Patricio antes calle 48 S"/>
+  <busStop id="s206" lane="e24894_0" startPos="104.1" endPos="116.1" name="Ave. San Patricio antes Ave. Jose de Diego"/>
+  <busStop id="s207" lane="e16032_0" startPos="50.3" endPos="62.3" name="calle  54 SE despues Ave. Jose de Diego"/>
+  <busStop id="s208" lane="e25006_0" startPos="1.0" endPos="13.0" name="Calle 54 SE Antes Calle 7 SE"/>
+  <busStop id="s209" lane="e25010_0" startPos="23.3" endPos="35.3" name="Calle 9 después Calle 54 SE"/>
+  <busStop id="s21" lane="e20023_0" startPos="99.3" endPos="111.3" name="Ave. Franklin D. Roosvelt antes Ave. Escorial"/>
+  <busStop id="s210" lane="e25011_0" startPos="1.0" endPos="13.0" name="Calle 9 Despues Lado Opuesto Calle 62 SE"/>
+  <busStop id="s211" lane="e21119_0" startPos="14.7" endPos="26.7" name="Estación Centro Médico después calle 9"/>
+  <busStop id="s212" lane="e25031_0" startPos="120.3" endPos="132.3" name="PR-21 antes lado opuesto Calle 2"/>
+  <busStop id="s215" lane="e9065_0" startPos="65.1" endPos="77.1" name="PR-1 esquina calle  Juan Ponde de Leon"/>
+  <busStop id="s216" lane="e26804_0" startPos="140.1" endPos="152.1" name="Ave. Luis Munoz Rivera antes calle Margarita"/>
+  <busStop id="s217" lane="e26806_0" startPos="38.1" endPos="50.1" name="Ave. Luis Munoz Rivera despues calle Borinquen"/>
+  <busStop id="s218" lane="e26809_0" startPos="41.2" endPos="53.2" name="Ave. Luis Munoz Rivera antes Ave. Universidad"/>
+  <busStop id="s219" lane="e26812_0" startPos="202.3" endPos="214.3" name="Ave. Luis Munoz Rivera antes calle Numero Uno"/>
+  <busStop id="s22" lane="e23638_0" startPos="192.7" endPos="204.7" name="Ave. Franklin D. Roosvelt lado opuesto calle  Matadero"/>
+  <busStop id="s220" lane="e5424_0" startPos="129.8" endPos="141.8" name="calle  Tanamá esquina calle Añasco"/>
+  <busStop id="s224" lane="r511_0" startPos="294.0" endPos="306.0" name="Marginal Baldorioty de Castro lado opuesto Condominio Intersuite"/>
+  <busStop id="s225" lane="r510_0" startPos="169.7" endPos="181.7" name="Marginal Baldorioty de Castro lado opuesto calle  Joaquina"/>
+  <busStop id="s226" lane="e950_0" startPos="1.0" endPos="13.0" name="calle  Sol antes calle  Picis"/>
+  <busStop id="s227" lane="r24379_0" startPos="35.3" endPos="47.3" name="calle  Luna despues calle Sol"/>
+  <busStop id="s228" lane="r24378_0" startPos="34.2" endPos="46.2" name="calle  Luna esquina calle Pegaso"/>
+  <busStop id="s229" lane="r1518_0" startPos="39.6" endPos="51.6" name="calle  Luna antes calle Aries"/>
+  <busStop id="s23" lane="e23641_0" startPos="4.3" endPos="16.3" name="Ave. Franklin D. Roosvelt antes Ave. Jose de Diego"/>
+  <busStop id="s230" lane="r1515_0" startPos="31.7" endPos="43.7" name="calle  Luna esquina calle Astral"/>
+  <busStop id="s231" lane="r1511_0" startPos="20.6" endPos="32.6" name="calle  Luna esquina calle Cosmo"/>
+  <busStop id="s232" lane="r20408_0" startPos="120.6" endPos="132.6" name="Ave. Laguna antes calle Acuario"/>
+  <busStop id="s233" lane="e20412_0" startPos="126.7" endPos="138.7" name="calle  Cosmo antes calle Luna"/>
+  <busStop id="s234" lane="e818_0" startPos="25.6" endPos="37.6" name="calle  Estrella del Norte esquina calle Andromeda"/>
+  <busStop id="s235" lane="e353_0" startPos="16.3" endPos="28.3" name="calle  Cruz del Sur antes calle Astral"/>
+  <busStop id="s236" lane="e1151_0" startPos="9.4" endPos="21.4" name="calle  Cruz del Sur esquina Ave. Los Angeles"/>
+  <busStop id="s238" lane="e25723_0" startPos="74.2" endPos="86.2" name="PR-37 despues PR-187 (Transit Center Isla Verde)"/>
+  <busStop id="s239" lane="r24431_0" startPos="118.8" endPos="130.8" name="Ave. Isla Verde despues calle  Diaz Way"/>
+  <busStop id="s24" lane="e23659_0" startPos="150.8" endPos="162.8" name="Ave. Franklin D. Roosvelt antes  calle Constitución"/>
+  <busStop id="s240" lane="r24431_0" startPos="360.9" endPos="372.9" name="Ave. Isla Verde antes calle Josee M. Tartak"/>
+  <busStop id="s241" lane="r24424_0" startPos="298.9" endPos="310.9" name="Ave. Isla Verde antes lado opuesto calle Rodriguez Ema"/>
+  <busStop id="s242" lane="r24406_0" startPos="41.0" endPos="53.0" name="Ave. Isla Verde lado opuesto calle 6"/>
+  <busStop id="s243" lane="r24406_0" startPos="389.7" endPos="401.7" name="Ave. Isla Verde frente a Condominio Beach Tower"/>
+  <busStop id="s244" lane="r24405_0" startPos="1.0" endPos="13.0" name="Ave. Isla verde lado opuesto Salida Exprexo Baldorioty de Castro"/>
+  <busStop id="s245" lane="r24328_0" startPos="180.0" endPos="192.0" name="Ave. Isla Verde antes lado opuesto calle  Jupiter"/>
+  <busStop id="s246" lane="e14945_0" startPos="83.3" endPos="95.3" name="Ave. Isla Verde antes calle  International"/>
+  <busStop id="s247" lane="e14953_0" startPos="27.0" endPos="39.0" name="calle  Loiza esquina calle Caoba"/>
+  <busStop id="s248" lane="e14957_0" startPos="7.2" endPos="19.2" name="calle  Loiza despues calle Cacique"/>
+  <busStop id="s249" lane="e24381_0" startPos="48.6" endPos="60.6" name="calle  Loiza esquina calle Soldado Cruz"/>
+  <busStop id="s25" lane="e23661_0" startPos="113.6" endPos="125.6" name="Ave. Franklin D. Roosvelt antes calle  Baleares"/>
+  <busStop id="s250" lane="e24320_0" startPos="38.5" endPos="50.5" name="calle  Loiza despues Ave. Las Americas"/>
+  <busStop id="s251" lane="e24323_0" startPos="1.0" endPos="13.0" name="calle  Loiza despues calle Rampa del Almirante"/>
+  <busStop id="s252" lane="e24105_0" startPos="18.1" endPos="30.1" name="calle  Loiza antes lado opuesto calle Manuel Corchado"/>
+  <busStop id="s253" lane="e24114_0" startPos="16.9" endPos="28.9" name="calle  Loiza antes esquina calle Cordero"/>
+  <busStop id="s254" lane="e28586_0" startPos="33.9" endPos="45.9" name="calle  Loiza esquina calle Family Court"/>
+  <busStop id="s255" lane="e24731_0" startPos="6.8" endPos="18.8" name="calle  Loiza antes calle F. King Krug"/>
+  <busStop id="s256" lane="e24733_0" startPos="55.1" endPos="67.1" name="calle  Loiza antes Ave. De Diego"/>
+  <busStop id="s257" lane="r19230_0" startPos="154.6" endPos="166.6" name="Ave. De Diego esquina calle  Estrella"/>
+  <busStop id="s258" lane="r24304_0" startPos="1.0" endPos="13.0" name="Ave. De Diego esquina calle  Rios Rey"/>
+  <busStop id="s259" lane="r26851_0" startPos="44.7" endPos="56.7" name="Ave. De Diego antes Ave. Juan P. De Leon"/>
+  <busStop id="s26" lane="e20298_0" startPos="29.4" endPos="41.4" name="Ave. Franklin D. Roosvelt despues calle  Andalucia"/>
+  <busStop id="s260" lane="e28945_0" startPos="66.7" endPos="78.7" name="Ave. Juan P. De Leon antes lado opuesto calle  Llovera"/>
+  <busStop id="s261" lane="e19932_0" startPos="107.1" endPos="119.1" name="Ave. Juan P. De Leon antes lado opuesto calle  Hipodromo"/>
+  <busStop id="s262" lane="e24709_0" startPos="6.3" endPos="18.3" name="Ave. Juan P. De Leon antes calle Deffaut"/>
+  <busStop id="s263" lane="e24714_0" startPos="75.4" endPos="87.4" name="Ave. Juan P. De Leon antes calle Labra"/>
+  <busStop id="s264" lane="e19938_0" startPos="30.3" endPos="42.3" name="Ave. Juan P. De Leon antes calle Jesus Tizol"/>
+  <busStop id="s265" lane="e19943_0" startPos="3.1" endPos="15.1" name="Ave. Juan P. De Leon esquina calle Runcabado"/>
+  <busStop id="s266" lane="e19947_0" startPos="27.0" endPos="39.0" name="Ave. Juan P. De Leon antes calle Monserrate"/>
+  <busStop id="s267" lane="e24352_0" startPos="29.3" endPos="41.3" name="Ave. Juan P. De Leon antes calle Trigo"/>
+  <busStop id="s268" lane="e24359_0" startPos="25.6" endPos="37.6" name="Ave. Juan P. De Leon antes calle Ensenada"/>
+  <busStop id="s269" lane="e20454-AddedOffRampEdge_0" startPos="46.4" endPos="58.4" name="Ave. Juan P. De Leon lado opuesto calle Olimpo"/>
+  <busStop id="s27" lane="e23664_0" startPos="3.2" endPos="15.2" name="Ave. Franklin D. Roosvelt despues lado opuesto calle  Nemecio Canales"/>
+  <busStop id="s270" lane="e20096_0" startPos="35.1" endPos="47.1" name="calle  del Tren despues Ave. Fernandez Juncos"/>
+  <busStop id="s271" lane="r20215_0" startPos="20.4" endPos="32.4" name="calle  del Tren esquina calle 5"/>
+  <busStop id="s272" lane="r10781_0" startPos="76.8" endPos="88.8" name="calle  del Tren despues calle Ramon Power"/>
+  <busStop id="s273" lane="r24183_0" startPos="83.8" endPos="95.8" name="calle  del Tren esquina calle San Juan Bautista"/>
+  <busStop id="s274" lane="r13350_0" startPos="97.0" endPos="109.0" name="calle  del Tren despues calle Matias Ledesma"/>
+  <busStop id="s275" lane="r23398_0" startPos="85.9" endPos="97.9" name="calle  del Tren antes calle Pelayo"/>
+  <busStop id="s276" lane="e11920_0" startPos="85.7" endPos="97.7" name="calle del Tren después calle San Andrea"/>
+  <busStop id="s277" lane="r14643_0" startPos="1.0" endPos="13.0" name="calle  del Tren esquina calle Valdez"/>
+  <busStop id="s278" lane="e26497_0" startPos="233.8" endPos="245.8" name="calle  del Tren frente Estacionamiento Veterano Puertorriqueno"/>
+  <busStop id="s279" lane="r19445_0" startPos="165.3" endPos="177.3" name="calle  La Marina frente Departamento de Hacienda"/>
+  <busStop id="s28" lane="e24518_0" startPos="9.3" endPos="21.3" name="Ave. Franklin D. Roosvelt lado opuesto calle  Las America"/>
+  <busStop id="s280" lane="e26497_0" startPos="1.0" endPos="13.0" name="calle  del Tren lado opuesto calle Valdez"/>
+  <busStop id="s282" lane="r23398_0" startPos="69.4" endPos="81.4" name="calle  del Tren despues lado opuesto calle Pelayo"/>
+  <busStop id="s283" lane="e13351_0" startPos="49.5" endPos="61.5" name="calle  del Tren esquina calle Matias Ledesma"/>
+  <busStop id="s284" lane="e24183_0" startPos="37.8" endPos="49.8" name="calle  del Tren esquina calle San Juan Bautista"/>
+  <busStop id="s285" lane="e10782_0" startPos="75.9" endPos="87.9" name="calle  del Tren esquina calle Ramon Power"/>
+  <busStop id="s286" lane="e20215_0" startPos="78.1" endPos="90.1" name="calle  del Tren despues calle  5"/>
+  <busStop id="s287" lane="e35364_0" startPos="1.0" endPos="13.0" name="Carril Exclusivo Avenida Juan Ponce de León después calle Olimpo"/>
+  <busStop id="s288" lane="e24359_0" startPos="1.0" endPos="13.0" name="Ave. Juan P. De Leon lado opuesto calle Madrid"/>
+  <busStop id="s289" lane="e24352_0" startPos="34.8" endPos="46.8" name="Ave. Juan P. De Leon antes lado opuesto calle Waymouth"/>
+  <busStop id="s29" lane="e23492-AddedOnRampEdge_0" startPos="67.6" endPos="79.6" name="Ave. Franklin D. Roosvelt antes calle Soldado Rafael Lamar Guerra"/>
+  <busStop id="s290" lane="e24348_0" startPos="8.4" endPos="20.4" name="Ave. Juan Ponce de Leon antes calle Cerra"/>
+  <busStop id="s291" lane="e10000_0" startPos="1.0" endPos="13.0" name="Ave. Juan Ponce de Leon lado opuesto calle Roncabado"/>
+  <busStop id="s292" lane="e19938_0" startPos="7.6" endPos="19.6" name="Ave. Juan Ponce de Leon antes calle  Condado"/>
+  <busStop id="s293" lane="e26852_0" startPos="62.9" endPos="74.9" name="Ave. De Diego antes calle Antosanti"/>
+  <busStop id="s294" lane="e24306_0" startPos="16.8" endPos="28.8" name="Ave. De Diego antes Expreso Ramón Baldorioty de Castro"/>
+  <busStop id="s295" lane="e19232_0" startPos="22.5" endPos="34.5" name="Ave. De Diego Despues Lado Opuesto Calle Estrella"/>
+  <busStop id="s296" lane="r24733_0" startPos="83.3" endPos="95.3" name="calle  Loiza esquina calle Del Parque"/>
+  <busStop id="s297" lane="r28589_0" startPos="44.7" endPos="56.7" name="calle  Loiza esquina calle Taft"/>
+  <busStop id="s298" lane="r28584_0" startPos="15.7" endPos="27.7" name="calle  Loiza antes calle Jefferson"/>
+  <busStop id="s299" lane="r24113_0" startPos="20.8" endPos="32.8" name="calle  Loiza antes calle Aponte"/>
+  <busStop id="s30" lane="e23499_0" startPos="20.4" endPos="32.4" name="Ave. Franklin D. Roosvelt esquina Ave. Hosto"/>
+  <busStop id="s300" lane="r24108_0" startPos="5.1" endPos="17.1" name="calle  Loiza antes calle María Moczo"/>
+  <busStop id="s301" lane="r24104_0" startPos="26.6" endPos="38.6" name="calle  Loiza esquina calle Santa Cecilia"/>
+  <busStop id="s302" lane="r24321_0" startPos="1.0" endPos="13.0" name="calle  Loiza despues lado opuesto calle Rampla del Admirante"/>
+  <busStop id="s303" lane="r24320_0" startPos="203.1" endPos="215.1" name="calle  Loiza antes calle Providencia"/>
+  <busStop id="s304" lane="r25955_0" startPos="45.7" endPos="57.7" name="calle  Loiza antes lado opuesto calle Soldado Cruz"/>
+  <busStop id="s305" lane="r14956_0" startPos="1.0" endPos="13.0" name="calle  Loizalado opuesto calle  Cacique"/>
+  <busStop id="s306" lane="r14951_0" startPos="21.6" endPos="33.6" name="calle  Loiza esquina calle  Doncella"/>
+  <busStop id="s307" lane="r14946_0" startPos="1.2" endPos="13.2" name="Ave. Isla Verde despues lado opuesto calle Inga"/>
+  <busStop id="s308" lane="r35890_0" startPos="17.6" endPos="29.6" name="Ave. Isla Verde esquina calle  Jupiter"/>
+  <busStop id="s309" lane="e24331_0" startPos="242.0" endPos="254.0" name="Ave. Isla Verde esquina calle  Nepturno"/>
+  <busStop id="s31" lane="e23574_0" startPos="23.9" endPos="35.9" name="Ave. Franklin D. Roosvelt despues calle  Fernando 1ro."/>
+  <busStop id="s310" lane="e24405_0" startPos="18.0" endPos="30.0" name="Ave. Isla Verde despues salida Expreso Ramón Baldorioty de Castro"/>
+  <busStop id="s311" lane="e24416_0" startPos="332.4" endPos="344.4" name="Ave. Isla Verde despues lado opuesto Condado Beach Tower"/>
+  <busStop id="s312" lane="e24423_0" startPos="56.1" endPos="68.1" name="Ave. Isla Verde despues calle  6"/>
+  <busStop id="s313" lane="e24423_0" startPos="229.9" endPos="241.9" name="Ave. Isla Verde antes calle  Rodriguez Emma"/>
+  <busStop id="s314" lane="e24430_0" startPos="324.1" endPos="336.1" name="Ave. Isla Verde antes calle  Tratak"/>
+  <busStop id="s315" lane="e24439_0" startPos="256.5" endPos="268.5" name="Ave. Isla Verde antes calle  Diaz Way"/>
+  <busStop id="s316" lane="e24815_0" startPos="26.0" endPos="38.0" name="PR-37 antes PR-187 (Transit Center Isla Verde)"/>
+  <busStop id="s317" lane="e24268_0" startPos="381.4" endPos="393.4" name="Avenida Los Gobernadores antes calle Diazway"/>
+  <busStop id="s318" lane="e24034_0" startPos="163.6" endPos="175.6" name="Ave. Laguna antes calle  Acuario"/>
+  <busStop id="s319" lane="e20410_0" startPos="174.8" endPos="186.8" name="Ave. Laguna antes lado opuesto calle  Luna"/>
+  <busStop id="s32" lane="e35484_0" startPos="75.0" endPos="87.0" name="Ave. Munoz Rivera esquina Ave. Franklin D. Roosvelt (Transit Center)"/>
+  <busStop id="s320" lane="e1511_0" startPos="15.1" endPos="27.1" name="calle  Luna esquina calle  Andromeda"/>
+  <busStop id="s321" lane="e1515_0" startPos="11.4" endPos="23.4" name="calle  Luna esquina calle  Astro"/>
+  <busStop id="s322" lane="e1518_0" startPos="35.6" endPos="47.6" name="calle  Luna antes calle  Tauro"/>
+  <busStop id="s323" lane="e24379_0" startPos="195.0" endPos="207.0" name="calle  Luna antes calle  Sol"/>
+  <busStop id="s324" lane="r948_0" startPos="1.0" endPos="13.0" name="calle  Sol lado opuesto calle  Sagitario"/>
+  <busStop id="s325" lane="e509_0" startPos="191.4" endPos="203.4" name="Marginal Baldorioty de Castro frente Iglesia Metodista"/>
+  <busStop id="s326" lane="e509_0" startPos="340.2" endPos="352.2" name="Marginal Baldorioty de Castro esquina calle  Joaquina"/>
+  <busStop id="s327" lane="e510_0" startPos="155.0" endPos="167.0" name="Marginal Baldorioty de Castro frente Enterprice"/>
+  <busStop id="s328" lane="r511_0" startPos="304.8" endPos="316.8" name="Marginal Baldorioty de Castro frente Condominio Intersuite"/>
+  <busStop id="s33" lane="e24544_0" startPos="178.4" endPos="190.4" name="Ave. Munoz Rivera despues calle  Bolivia"/>
+  <busStop id="s332" lane="e831_0" startPos="25.2" endPos="37.2" name="Ave. El Comandante  despues lado opuesto calle  528"/>
+  <busStop id="s333" lane="e834_0" startPos="7.8" endPos="19.8" name="Ave. El Comandante  despues lado opuesto calle  538"/>
+  <busStop id="s334" lane="e30343_0" startPos="198.7" endPos="210.7" name="Ave. Roberto S. Vilella despues Ave. El Comandate"/>
+  <busStop id="s35" lane="e23568_0" startPos="9.4" endPos="21.4" name="Ave. Munoz Rivera despues calle  Nemecio Canales"/>
+  <busStop id="s36" lane="e14258_0" startPos="12.7" endPos="24.7" name="Ave. Luis Munoz Rivera antes calle  Haydee Rexach"/>
+  <busStop id="s37" lane="e24763_0" startPos="38.5" endPos="50.5" name="Ave. Manuel Fernandez Juncos despues calle  Jordan"/>
+  <busStop id="s38" lane="e20082_0" startPos="50.1" endPos="62.1" name="Ave. Manuel Fernandez Juncos despues calle  San Jorge"/>
+  <busStop id="s381" lane="e30343_0" startPos="172.9" endPos="184.9" name="Ave. Roberto S. Vilella antes Ave. El Comandante"/>
+  <busStop id="s382" lane="r830_0" startPos="23.9" endPos="35.9" name="Ave. El Comandante despues calle  538"/>
+  <busStop id="s383" lane="r828_0" startPos="1.0" endPos="13.0" name="Ave. El Comandante antes Ave. Iturregui"/>
+  <busStop id="s384" lane="e24942_0" startPos="106.3" endPos="118.3" name="Ave. Roberto S. Vilella antes calle  258"/>
+  <busStop id="s385" lane="e24944_0" startPos="46.3" endPos="58.3" name="Ave. Roberto S. Vilella antes lado opuesto calle  259"/>
+  <busStop id="s386" lane="e24945_0" startPos="238.4" endPos="250.4" name="Ave. Roberto S. Vilella esquina calle  263"/>
+  <busStop id="s387" lane="e15453_0" startPos="130.1" endPos="142.1" name="Ave. Roberto S. Vilella antes lado opuesto calle  Felix de Azara"/>
+  <busStop id="s388" lane="e15458_0" startPos="36.6" endPos="48.6" name="Ave. Roberto S. Vilella antes calle  Linacero"/>
+  <busStop id="s39" lane="e24093_0" startPos="25.3" endPos="37.3" name="Ave. Manuel Fernandez Juncos antes calle Victor Lopez"/>
+  <busStop id="s391" lane="e25855_0" startPos="161.6" endPos="173.6" name="Ave. 65th Infanteria antes calle  Pablo Saez"/>
+  <busStop id="s392" lane="e25863_0" startPos="73.9" endPos="85.9" name="Ave. 65th Infanteria antes calle  Ruiseñor"/>
+  <busStop id="s393" lane="e25867_0" startPos="117.7" endPos="129.7" name="Ave. 65th Infanteria antes calle  Zurna"/>
+  <busStop id="s394" lane="e25868_0" startPos="110.4" endPos="122.4" name="Ave. 65th Infanteria antes calle  49"/>
+  <busStop id="s395" lane="e25869_0" startPos="39.9" endPos="51.9" name="Ave. 65th Infanteria antes calle  47"/>
+  <busStop id="s396" lane="e26075_0" startPos="29.0" endPos="41.0" name="Ave. 65th Infanteria despues Ave. Simon Madera"/>
+  <busStop id="s397" lane="e26080_0" startPos="33.1" endPos="45.1" name="Ave. 65th Infanteria antes calle  7A"/>
+  <busStop id="s398" lane="e26083_0" startPos="81.0" endPos="93.0" name="Ave. 65th Infanteria antes calle  Jose de Diego"/>
+  <busStop id="s399" lane="e29001_0" startPos="205.0" endPos="217.0" name="Ave. 65th Infanteria antes calle  Juan P. Reyes"/>
+  <busStop id="s40" lane="e35372_0" startPos="15.5" endPos="27.5" name="Ave. Manuel Fernandez Juncos antes calle Lloveras"/>
+  <busStop id="s400" lane="e26821_0" startPos="35.2" endPos="47.2" name="Ave. 65th Infanteria despues calle  Milan"/>
+  <busStop id="s401" lane="e24933_0" startPos="80.1" endPos="92.1" name="Ave. 65th Infanteria antes calle  Soldado Alcides Reyes"/>
+  <busStop id="s402" lane="e24935_0" startPos="98.2" endPos="110.2" name="Ave. 65th Infanteria antes calle  Lopéz Sicardo"/>
+  <busStop id="s403" lane="e24937_0" startPos="242.3" endPos="254.3" name="Ave. 65th Infanteria antes calle  Máximo Alomar"/>
+  <busStop id="s405" lane="e24639_0" startPos="66.6" endPos="78.6" name="Ave. Gandara antes Ave. Barbosa"/>
+  <busStop id="s406" lane="e24333_0" startPos="5.7" endPos="17.7" name="Ave. Barbosa antes calle  Parque"/>
+  <busStop id="s407" lane="e24917_0" startPos="61.2" endPos="73.2" name="Ave. Barbosa antes Ave. 65th Infanteria"/>
+  <busStop id="s408" lane="e24910_0" startPos="117.1" endPos="129.1" name="Ave. 65th Infanteria esquina calle  3"/>
+  <busStop id="s409" lane="e24911_0" startPos="290.2" endPos="302.2" name="Ave. 65th Infanteria esquina calle  7"/>
+  <busStop id="s41" lane="e35378_0" startPos="1.0" endPos="13.0" name="Ave. Manuel Fernandez Juncos antes calle Hipodromo"/>
+  <busStop id="s410" lane="e24912_0" startPos="202.4" endPos="214.4" name="Ave. 65th Infanteria antes calle  13"/>
+  <busStop id="s411" lane="e24915_0" startPos="23.0" endPos="35.0" name="Ave. 65th Infanteria despues calle  Ayacucho"/>
+  <busStop id="s412" lane="e28913_0" startPos="181.4" endPos="193.4" name="Ave. 65th Infanteria antes calle  Ferrera"/>
+  <busStop id="s413" lane="r16472_0" startPos="4.5" endPos="16.5" name="Ave. 65th Infanteria esquina calle  2"/>
+  <busStop id="s414" lane="e26070_0" startPos="82.6" endPos="94.6" name="Ave. 65th Infanteria antes calle  7A"/>
+  <busStop id="s415" lane="e26073_0" startPos="29.4" endPos="41.4" name="Ave. 65th Infanteria antes calle  31"/>
+  <busStop id="s416" lane="e25837_0" startPos="1.0" endPos="13.0" name="Ave. 65th Infanteria antes Ave. Monte Carlos"/>
+  <busStop id="s417" lane="r5858_0" startPos="150.9" endPos="162.9" name="Ave. 65th Infanteria despues Ave. Monte Carlos"/>
+  <busStop id="s418" lane="e25842_0" startPos="21.1" endPos="33.1" name="Ave. 65th Infanteria lado opuesto calle  Yaboa Real"/>
+  <busStop id="s419" lane="e25845_0" startPos="189.4" endPos="201.4" name="Ave. 65th Infanteria esquina PR-849"/>
+  <busStop id="s42" lane="e35377_0" startPos="105.1" endPos="117.1" name="Ave. Manuel Fernandez Juncos frente Autoridad de los Puertos"/>
+  <busStop id="s420" lane="e25849_0" startPos="1.0" endPos="13.0" name="Ave. 65th Infanteria esquina calle  Modesta"/>
+  <busStop id="s421" lane="e1214_0" startPos="104.6" endPos="116.6" name="Bulevard de la Media Luna despues Ave. 65th"/>
+  <busStop id="s422" lane="e1220_0" startPos="111.0" endPos="123.0" name="Bulevard de la Media Luna frente a Banco Popular"/>
+  <busStop id="s423" lane="e1028_0" startPos="30.4" endPos="42.4" name="Ave. De Diego despues Bulevard de la Media Luna"/>
+  <busStop id="s424" lane="e31088_0" startPos="45.6" endPos="57.6" name="Ave. Roberto S. Vilella despues calle  Felix de Azar"/>
+  <busStop id="s425" lane="e31072_0" startPos="156.8" endPos="168.8" name="Ave. Roberto S. Vilella esquina calle  263"/>
+  <busStop id="s426" lane="e1080_0" startPos="1.0" endPos="13.0" name="Ave. Roberto S. Vilella esquina calle  259"/>
+  <busStop id="s427" lane="e31078_0" startPos="10.1" endPos="22.1" name="Ave. Roberto S. Vilella despues lado opuesto calle  258"/>
+  <busStop id="s43" lane="e19955_0" startPos="5.5" endPos="17.5" name="Ave. Manuel Fernandez Juncos esquina Ave. Roberto H Tood"/>
+  <busStop id="s436" lane="e20785_0" startPos="59.3" endPos="71.3" name="Ave. Manuel Fernandez Juncos antes calle  Monserrate"/>
+  <busStop id="s437" lane="e12352_0" startPos="254.5" endPos="266.5" name="Ave. Manuel Fernandez Juncos esquina calle  Cerra"/>
+  <busStop id="s438" lane="e24067_0" startPos="160.6" endPos="172.6" name="Ave. Manuel Fernandez Juncos esquina calle  La Paz"/>
+  <busStop id="s439" lane="r19951_0" startPos="5.5" endPos="17.5" name="Ave. Manuel Fernandez Juncos despues calle  Miramar"/>
+  <busStop id="s44" lane="e24714_0" startPos="93.4" endPos="105.4" name="Ave. Juan Ponce de Leon lado opuesto calle  Villamil"/>
+  <busStop id="s440" lane="e19981_0" startPos="59.8" endPos="71.8" name="Blev. St. Thomas despues calle  Limbergh"/>
+  <busStop id="s442" lane="e24373_0" startPos="51.6" endPos="63.6" name="calle  Labra antes calle  Corchado"/>
+  <busStop id="s446" lane="r1027_0" startPos="424.1" endPos="436.1" name="Ave. De Diego antes Bulevard de la Media Luna"/>
+  <busStop id="s447" lane="e24448_0" startPos="58.7" endPos="70.7" name="Ave. Barbosa despues lado opuesto Ave. Gandara"/>
+  <busStop id="s448" lane="e24450_0" startPos="112.1" endPos="124.1" name="Ave. Barbosa lado opuesto calle  2"/>
+  <busStop id="s449" lane="e20635_0" startPos="17.1" endPos="29.1" name="Ave. Barbosa antes calle  Creuz"/>
+  <busStop id="s45" lane="e24709_0" startPos="8.1" endPos="20.1" name="Ave. Juan Ponce de Leon despues lado opuesto calle  Duffaut"/>
+  <busStop id="s450" lane="e20639_0" startPos="42.7" endPos="54.7" name="Ave. Barbosa esquina calle  Gerona"/>
+  <busStop id="s451" lane="e15162_0" startPos="102.8" endPos="114.8" name="Ave. Barbosa antes lado opuesto calle  Carolina"/>
+  <busStop id="s452" lane="e25777_0" startPos="41.6" endPos="53.6" name="Ave. Barbosa despues calle  Sicilia"/>
+  <busStop id="s453" lane="r21918_0" startPos="22.5" endPos="34.5" name="Ave. Barbosa esquina calle  Texidor"/>
+  <busStop id="s454" lane="r21912_0" startPos="16.9" endPos="28.9" name="Ave. Barbosa antes calle  Juan Pablo Duarte"/>
+  <busStop id="s455" lane="e32475_0" startPos="39.2" endPos="51.2" name="Ave. Barbosa despues Ave. Franklin D. Roosvelt"/>
+  <busStop id="s459" lane="e7601_0" startPos="71.0" endPos="83.0" name="Ave. Borinquen esquina calle  Haydee Rexach"/>
+  <busStop id="s46" lane="e19932_0" startPos="74.1" endPos="86.1" name="Ave. Juan Ponce de Leon antes calle  Lloveras"/>
+  <busStop id="s460" lane="e35749_0" startPos="18.8" endPos="30.8" name="Ave. Borinquen antes calle  Morell Campo"/>
+  <busStop id="s461" lane="e36373_0" startPos="11.9" endPos="23.9" name="Ave. Borinquen esquina calle  Williams"/>
+  <busStop id="s462" lane="e20054_0" startPos="76.7" endPos="88.7" name="Ave. Borinquen antes calle  Cortijo"/>
+  <busStop id="s463" lane="e20063_0" startPos="1.0" endPos="13.0" name="Ave. Borinquen lado opuesto calle  13"/>
+  <busStop id="s464" lane="e20068_0" startPos="11.0" endPos="23.0" name="Ave. Borinquen antes calle  Hector Urdaneta"/>
+  <busStop id="s465" lane="e20073_0" startPos="34.7" endPos="46.7" name="Ave. Borinquen esquina calle  Quinones"/>
+  <busStop id="s466" lane="e23395_0" startPos="36.1" endPos="48.1" name="Blev. St. Thomas antes calle  Limbergh (hacia aeropuerto LLM)"/>
+  <busStop id="s467" lane="e19951_0" startPos="24.6" endPos="36.6" name="Ave. Manuel Fernandez Juncos antes calle  Miramar"/>
+  <busStop id="s468" lane="e26789_0" startPos="49.0" endPos="61.0" name="Ave. Manuel Fernandez Juncos esquina calle  Estado"/>
+  <busStop id="s469" lane="e20324_0" startPos="9.0" endPos="21.0" name="Ave. Manuel Fernandez Juncos antes calle  Suau"/>
+  <busStop id="s47" lane="e28945_0" startPos="21.5" endPos="33.5" name="Ave. Juan Ponce de Leon antes lado opuesto Ave. De Diego"/>
+  <busStop id="s470" lane="e20785_0" startPos="121.9" endPos="133.9" name="Ave. Manuel Fernandez Juncos antes calle  San Juan"/>
+  <busStop id="s471" lane="e24346_0" startPos="31.8" endPos="43.8" name="Ave. Manuel Fernandez Juncos antes Ave. Roberto H. Tood"/>
+  <busStop id="s472" lane="e35377_0" startPos="53.6" endPos="65.6" name="Ave. Manuel Fernandez Juncos frente Departamento de Salud"/>
+  <busStop id="s473" lane="e35378_0" startPos="28.3" endPos="40.3" name="Ave. Manuel Fernandez Juncos despues Hipodromo"/>
+  <busStop id="s474" lane="e35372_0" startPos="30.3" endPos="42.3" name="Ave. Manuel Fernandez Juncos antes calle  Europa"/>
+  <busStop id="s475" lane="e24090_0" startPos="5.0" endPos="17.0" name="Ave. Manuel Fernandez Juncos antes calle  Victor Lopez"/>
+  <busStop id="s476" lane="e20082_0" startPos="48.1" endPos="60.1" name="Ave. Manuel Fernandez Juncos esquina calle  San Jorge"/>
+  <busStop id="s477" lane="e20086_0" startPos="1.0" endPos="13.0" name="Ave. Manuel Fernandez Juncos antes calle  Mayol"/>
+  <busStop id="s478" lane="e7986_0" startPos="1.0" endPos="13.0" name="Ave. Manuel Fernandez Juncos despues calle  Jordan"/>
+  <busStop id="s479" lane="e27341_0" startPos="12.3" endPos="24.3" name="Ave. Haydee Rexach antes Ave. Juan Ponce de Leon"/>
+  <busStop id="s48" lane="e14650_0" startPos="1.0" endPos="13.0" name="Ave. Juan Ponce de Leon  Antes calle  Reverendo Orengo"/>
+  <busStop id="s480" lane="r20076_0" startPos="1.0" endPos="13.0" name="Ave. Borinquen esquina calle  San Antonio"/>
+  <busStop id="s481" lane="r20068_0" startPos="17.7" endPos="29.7" name="Ave. Borinquen esquina calle  8"/>
+  <busStop id="s482" lane="r20061_0" startPos="11.8" endPos="23.8" name="Ave. Borinquen antes calle   Felipe R. Goyco (calle   15)"/>
+  <busStop id="s483" lane="r20054_0" startPos="14.8" endPos="26.8" name="Ave. Borinquen despues calle  Cortijo"/>
+  <busStop id="s484" lane="r20051_0" startPos="10.0" endPos="22.0" name="Ave. Borinquen antes calle  Williams"/>
+  <busStop id="s485" lane="r35749_0" startPos="13.9" endPos="25.9" name="Ave. Borinquen antes calle  Lutz"/>
+  <busStop id="s486" lane="r7601_0" startPos="49.6" endPos="61.6" name="Ave. Borinquen esquina Ave. Barbosa"/>
+  <busStop id="s488" lane="e32482_0" startPos="32.6" endPos="44.6" name="Ave. Barbosa lado opuesto calle  Villa Real"/>
+  <busStop id="s489" lane="e26532_0" startPos="1.0" endPos="13.0" name="Ave. Barbosa esquina calle  C"/>
+  <busStop id="s49" lane="e26648_0" startPos="56.1" endPos="68.1" name="Ave. Juan Ponce de Leon  despues calle  Del Parque"/>
+  <busStop id="s490" lane="e20050_0" startPos="30.7" endPos="42.7" name="Ave. Barbosa antes Ave. Franklin D. Roosvelt"/>
+  <busStop id="s491" lane="e21913_0" startPos="9.1" endPos="21.1" name="Ave. Barbosa antes lado opuesto calle  Palestina"/>
+  <busStop id="s492" lane="e25773_0" startPos="20.0" endPos="32.0" name="Ave. Barbosa despues calle  Francia"/>
+  <busStop id="s493" lane="e25776_0" startPos="141.0" endPos="153.0" name="Ave. Barbosa antes calle  America"/>
+  <busStop id="s494" lane="e19092_0" startPos="1.0" endPos="13.0" name="Ave. Barbosa despues calle  Carolina"/>
+  <busStop id="s495" lane="e19097_0" startPos="215.5" endPos="227.5" name="Ave. Barbosa lado opuesto calle  Gerona"/>
+  <busStop id="s496" lane="e19097_0" startPos="437.1" endPos="449.1" name="Ave. Barbosa esquina calle  Mayaguez"/>
+  <busStop id="s497" lane="e20649-AddedOffRampEdge_0" startPos="34.7" endPos="46.7" name="Ave. Barbosa despues lado opuesto calle  Cruz"/>
+  <busStop id="s498" lane="e30351_0" startPos="19.9" endPos="31.9" name="Ave. Barbosa despues entrada UPR"/>
+  <busStop id="s499" lane="e30353_0" startPos="27.9" endPos="39.9" name="Ave. Gandara lado opuesto calle  7"/>
+  <busStop id="s50" lane="e20090_0" startPos="6.4" endPos="18.4" name="Ave. Juan Ponce de Leon  esquina Ave. Fidalgo Diaz"/>
+  <busStop id="s500" lane="e14258_0" startPos="32.3" endPos="44.3" name="Terminal Sagrado Corazon (abordaje)"/>
+  <busStop id="s5004" lane="e10022_0" startPos="6.5" endPos="18.5" name="Terminal de Piñero"/>
+  <busStop id="s5005" lane="e28112_0" startPos="82.8" endPos="94.8" name="Terminal de Cataño"/>
+  <busStop id="s501" lane="e7244_0" startPos="68.6" endPos="80.6" name="Calle Haydee Rexach esquina Ave. Eduardo Conde"/>
+  <busStop id="s502" lane="r20145_0" startPos="15.1" endPos="27.1" name="Ave. Eduardo Conde esquina calle  Ferrer"/>
+  <busStop id="s503" lane="r20138_0" startPos="5.3" endPos="17.3" name="Ave. Eduardo Conde antes lado opuesto calle  Martino"/>
+  <busStop id="s504" lane="r20134_0" startPos="8.9" endPos="20.9" name="Ave. Eduardo Conde antes calle  Buena Ventura"/>
+  <busStop id="s505" lane="r20124_0" startPos="30.3" endPos="42.3" name="Ave. Eduardo Conde esquina calle  Ruiz Belviz"/>
+  <busStop id="s506" lane="e20301_0" startPos="96.0" endPos="108.0" name="calle  Degetau esquina calle  Barbosa"/>
+  <busStop id="s507" lane="e20304_0" startPos="27.7" endPos="39.7" name="calle  Degetau despues Ave. Gilberto Monroig"/>
+  <busStop id="s508" lane="e20306_0" startPos="5.2" endPos="17.2" name="calle  Degetau despues calle  Esquilin"/>
+  <busStop id="s51" lane="e24770_0" startPos="45.4" endPos="57.4" name="Ave. Juan Ponce de Leon antes calle  Mayor"/>
+  <busStop id="s510" lane="r10274_0" startPos="20.2" endPos="32.2" name="calle  Parque antes calle  Las Maria"/>
+  <busStop id="s511" lane="r10270_0" startPos="18.8" endPos="30.8" name="calle  Parque antes Ave. Ashford"/>
+  <busStop id="s512" lane="e20099_0" startPos="2.8" endPos="14.8" name="Ave. Ashford esquina calle  Washington"/>
+  <busStop id="s513" lane="e20103_0" startPos="28.4" endPos="40.4" name="Ave. Ashford antes calle  Cervante"/>
+  <busStop id="s514" lane="e20105_0" startPos="84.8" endPos="96.8" name="Ave. Ashford antes calle  Condado"/>
+  <busStop id="s515" lane="e24702_0" startPos="1.0" endPos="13.0" name="Ave. Ashford lado opuesto Ave. Magdalena"/>
+  <busStop id="s516" lane="r14596_0" startPos="1.0" endPos="13.0" name="Ave. Ashford lado opuesto calle  Barranquitas"/>
+  <busStop id="s517" lane="r14596_0" startPos="362.7" endPos="374.7" name="Ave. Ashford frente estacionamiento"/>
+  <busStop id="s518" lane="r14596_0" startPos="636.3" endPos="648.3" name="Ave. Ashford antes puente Los Hermanos"/>
+  <busStop id="s519" lane="e23395_0" startPos="1.0" endPos="13.0" name="Blev. St. Thomas antes calle  Limbergh (hacia VSJ)"/>
+  <busStop id="s52" lane="e20152_0" startPos="12.6" endPos="24.6" name="Ave. Juan Ponce de Leon antes lado opuesto calle  Bouret"/>
+  <busStop id="s523" lane="e20334_0" startPos="174.3" endPos="186.3" name="calle  Hoare esqina calle  Aurora"/>
+  <busStop id="s525" lane="e6939_0" startPos="125.2" endPos="137.2" name="calle  Roosvelt despues calle  Cerra"/>
+  <busStop id="s527" lane="e14603_0" startPos="23.5" endPos="35.5" name="Ave. Ashford despues puente Los Hermanos"/>
+  <busStop id="s528" lane="e14603_0" startPos="432.0" endPos="444.0" name="Ave. Ashford frente Rest. Chilis bar &amp; Grill"/>
+  <busStop id="s529" lane="e14603_0" startPos="628.7" endPos="640.7" name="Ave. Ashford antes calle  Barranquitas"/>
+  <busStop id="s53" lane="e19886_0" startPos="30.2" endPos="42.2" name="Ave. Juan Ponce de Leon despues lado opuesto Ave. Haydee Rexach"/>
+  <busStop id="s530" lane="e14605_0" startPos="34.8" endPos="46.8" name="Ave. Ashford antes calle  Mariano Ramirez Bages"/>
+  <busStop id="s531" lane="e24736_0" startPos="28.5" endPos="40.5" name="Ave. Magdalena antes calle  Luisa"/>
+  <busStop id="s532" lane="e24735_0" startPos="130.7" endPos="142.7" name="Ave. Magdalena esquina calle  Condado"/>
+  <busStop id="s533" lane="e24739_0" startPos="93.5" endPos="105.5" name="Ave. Magdalena esquina calle  Cervante"/>
+  <busStop id="s534" lane="e20442_0" startPos="138.5" endPos="150.5" name="Ave. Magdalena antes calle  Manual Rodriguez Serra"/>
+  <busStop id="s535" lane="e20108_0" startPos="28.7" endPos="40.7" name="Ave. Ashford antes lado opuesto calle  Nain"/>
+  <busStop id="s536" lane="e10270_0" startPos="28.3" endPos="40.3" name="calle  Parque lado opuesto calle  Maribel"/>
+  <busStop id="s537" lane="e10274_0" startPos="5.9" endPos="17.9" name="calle  Parque despues lado opuesto calle  Las Maria"/>
+  <busStop id="s538" lane="e20308_0" startPos="33.9" endPos="45.9" name="calle  Tapia despues calle  Loiza"/>
+  <busStop id="s539" lane="e20310_0" startPos="121.0" endPos="133.0" name="calle  Tapia antes Marginal Baldorioty de Castro"/>
+  <busStop id="s54" lane="e35685_0" startPos="13.0" endPos="25.0" name="Ave. Juan Ponce de Leon antes lado opuesto Sagarra"/>
+  <busStop id="s540" lane="e20311_0" startPos="48.5" endPos="60.5" name="calle  Tapia esquina calle  Esquilin"/>
+  <busStop id="s541" lane="e20312_0" startPos="117.4" endPos="129.4" name="calle  Tapia esquina Ave. Gilberto Monroig"/>
+  <busStop id="s542" lane="e20316_0" startPos="26.1" endPos="38.1" name="calle  Tapia antes Ave. Eduardo Conde"/>
+  <busStop id="s548" lane="r11890_0" startPos="85.1" endPos="97.1" name="calle  Blanca Rexach esquina Eduardo Conde"/>
+  <busStop id="s549" lane="r11891_0" startPos="59.3" endPos="71.3" name="calle  Blanca Rexach despues Ave. Barbosa"/>
+  <busStop id="s55" lane="e24539_0" startPos="18.9" endPos="30.9" name="Ave. Juan Ponce de Leon despues lado opuesto calle  Santiago Iglesia"/>
+  <busStop id="s550" lane="r1221_0" startPos="174.6" endPos="186.6" name="Bulevard de la Media Luna frente Home Depot"/>
+  <busStop id="s553" lane="e9554_0" startPos="114.5" endPos="126.5" name="Ave. De Diego antes calle  Cabo Maximo Alomar"/>
+  <busStop id="s554" lane="e9560_0" startPos="81.2" endPos="93.2" name="Ave. De Diego antes lado opuesto calle  Los Angeles"/>
+  <busStop id="s555" lane="e9564_0" startPos="100.5" endPos="112.5" name="Calle De Diego antes lado opuesto calle Pedro Diaz Correa"/>
+  <busStop id="s556" lane="e9572_0" startPos="50.7" endPos="62.7" name="Calle De Diego antes lado opuesto calle Alcazar"/>
+  <busStop id="s557" lane="e26420_0" startPos="120.0" endPos="132.0" name="PR-181 Expreso esquina calle  Almonte"/>
+  <busStop id="s558" lane="e24400_0" startPos="2.6" endPos="14.6" name="PR- 181Expreso despues calle  Julio Andino"/>
+  <busStop id="s559" lane="r15699_0" startPos="90.5" endPos="102.5" name="Ave. Lopéz Sicardo  antes lado opuesto calle  Q"/>
+  <busStop id="s56" lane="e20028_0" startPos="118.3" endPos="130.3" name="Ave. Ponce de Leon despues lado opuesto calle  Bolivia"/>
+  <busStop id="s560" lane="r25577_0" startPos="78.9" endPos="90.9" name="Ave. Lopéz Sicardo antes calle Riaza "/>
+  <busStop id="s561" lane="r25786_0" startPos="88.6" endPos="100.6" name="Ave. Lopéz Sicardo antes calle Riaza "/>
+  <busStop id="s562" lane="r9721_0" startPos="49.5" endPos="61.5" name="calle  Flanders despues calle  40"/>
+  <busStop id="s563" lane="r12795_0" startPos="20.3" endPos="32.3" name="calle  Flanders antes calle  Turia"/>
+  <busStop id="s564" lane="r9725_0" startPos="1.0" endPos="13.0" name="calle  Flanders lado opuesto calle  Belmonte"/>
+  <busStop id="s565" lane="r9724_0" startPos="5.3" endPos="17.3" name="calle  Flanders lado opuesto calle  Urdiales"/>
+  <busStop id="s566" lane="r11582_0" startPos="21.1" endPos="33.1" name="calle  Urdiales esquina calle  Borgoña"/>
+  <busStop id="s567" lane="r25377_0" startPos="20.8" endPos="32.8" name="calle  Urdiales antes calle  Alcañiz"/>
+  <busStop id="s568" lane="r25376_0" startPos="167.0" endPos="179.0" name="calle  Urdiales antes calle  Sicilia"/>
+  <busStop id="s569" lane="r25796_0" startPos="54.2" endPos="66.2" name="calle  Secilia  antes calle  Villa Castín"/>
+  <busStop id="s57" lane="e24029_0" startPos="13.0" endPos="25.0" name="Ave. Franklin D. Roosvelt antes Ave. Luis Munoz Rivera (Transit Center)"/>
+  <busStop id="s570" lane="r24632_0" startPos="2.5" endPos="14.5" name="calle  Quisquella antes lado opuesto calle  America"/>
+  <busStop id="s571" lane="r20487_0" startPos="16.8" endPos="28.8" name="calle  Quisquella despues calle  Pachín Maín"/>
+  <busStop id="s572" lane="e15057_0" startPos="10.4" endPos="22.4" name="calle  Bolivia antes calle  Chile"/>
+  <busStop id="s573" lane="e15055_0" startPos="18.8" endPos="30.8" name="calle  Bolivia antes calle  Haiti"/>
+  <busStop id="s574" lane="e29447_0" startPos="15.2" endPos="27.2" name="calle  Bolivia antes Carril Exclusivo Ave. Luis Munoz Rivera"/>
+  <busStop id="s575" lane="e15054_0" startPos="42.0" endPos="54.0" name="calle  Bolivia antes calle  Uruguay"/>
+  <busStop id="s576" lane="e15057_0" startPos="22.5" endPos="34.5" name="calle  Bolivia despues calle  Chile"/>
+  <busStop id="s577" lane="e20489_0" startPos="44.7" endPos="56.7" name="calle  Quisquella antes calle  America"/>
+  <busStop id="s578" lane="e24635_0" startPos="10.5" endPos="22.5" name="calle  Quisquella antes Ave. Barbosa"/>
+  <busStop id="s579" lane="e25799_0" startPos="48.1" endPos="60.1" name="calle  Secilia antes calle  Valverde"/>
+  <busStop id="s58" lane="e23576_0" startPos="37.8" endPos="49.8" name="Ave. Franklin D. Roosvelt despues Ave. Luis Munoz Rivera"/>
+  <busStop id="s580" lane="r25376_0" startPos="140.5" endPos="152.5" name="calle  Urdiales despues calle  Secilia"/>
+  <busStop id="s581" lane="e25377_0" startPos="10.7" endPos="22.7" name="calle  Uriales antes lado opuesto calle  Algalvez"/>
+  <busStop id="s582" lane="e11582_0" startPos="9.5" endPos="21.5" name="calle  Urdiales antes lado opuesto calle  Bravante"/>
+  <busStop id="s583" lane="e25788_0" startPos="1.5" endPos="13.5" name="calle  Urdiales antes calle  Flandes"/>
+  <busStop id="s584" lane="e9725_0" startPos="105.1" endPos="117.1" name="calle  Flanders esquina calle  Belmonte"/>
+  <busStop id="s585" lane="e9726_0" startPos="172.9" endPos="184.9" name="calle  Flanders antes lado opuesto calle  Turia"/>
+  <busStop id="s586" lane="e9723_0" startPos="103.7" endPos="115.7" name="calle  Flanders antes lado opuesto calle  40"/>
+  <busStop id="s587" lane="e25786_0" startPos="10.4" endPos="22.4" name="Ave. Lopéz Sicardo despues calle  49"/>
+  <busStop id="s588" lane="e14723_0" startPos="144.3" endPos="156.3" name="calle  Riaza antes calle  Jerusalem"/>
+  <busStop id="s589" lane="e25792_0" startPos="66.9" endPos="78.9" name="calle  Riaza antes calle  Montellano"/>
+  <busStop id="s59" lane="e23579_0" startPos="12.1" endPos="24.1" name="Ave. Franklin D. Roosvelt despues calle Fernando 1ro."/>
+  <busStop id="s591" lane="e24479_0" startPos="92.0" endPos="104.0" name="PR-181 Expreso Trujillo Alto esquina calle  Luis Munoz Souffront"/>
+  <busStop id="s592" lane="e5470_0" startPos="252.2" endPos="264.2" name="PR-181 Expreso Trujillo Alto esquina calle  Almonte"/>
+  <busStop id="s593" lane="r9572_0" startPos="22.9" endPos="34.9" name="Ave. De Diego despues calle  Alcazar"/>
+  <busStop id="s594" lane="r9565_0" startPos="149.5" endPos="161.5" name="Ave. Jose De Diego antes calle  Pedro Diaz Correa"/>
+  <busStop id="s595" lane="r9557_0" startPos="76.4" endPos="88.4" name="Ave. Jose De Diego antes calle  Lealtad"/>
+  <busStop id="s596" lane="r9554_0" startPos="37.7" endPos="49.7" name="Ave. Jose De Diego lado opuesto despues calle  Maximo Alomar"/>
+  <busStop id="s597" lane="r9552_0" startPos="36.3" endPos="48.3" name="Calle Jose De Diego antes Avenida Barbosa"/>
+  <busStop id="s598" lane="e24332_0" startPos="20.8" endPos="32.8" name="Ave. Barbosa esquina calle  Robles"/>
+  <busStop id="s599" lane="r15707_0" startPos="47.2" endPos="59.2" name="Ave. Eduardo Conde esquina calle  Flanboyan del Rio"/>
+  <busStop id="s60" lane="e23579_0" startPos="351.5" endPos="363.5" name="Ave. Franklin D. Roosvelt antes Ave. Hosto"/>
+  <busStop id="s600" lane="r14893_0" startPos="1.0" endPos="13.0" name="Ave. Eduardo Conde despues calle  Salgado"/>
+  <busStop id="s601" lane="r14135_0" startPos="1.0" endPos="13.0" name="Ave. Eduardo Conde esquina calle  Isabela"/>
+  <busStop id="s602" lane="r14880_0" startPos="73.2" endPos="85.2" name="Ave. Eduardo Conde despues calle  Del Carmen"/>
+  <busStop id="s603" lane="e20095_0" startPos="112.7" endPos="124.7" name="Ave. Eduardo Conde antes Ave. Juan Ponce de Leon"/>
+  <busStop id="s608" lane="r13747_0" startPos="91.1" endPos="103.1" name="calle  Ing. Manuel Domenech lado opuesto calle  Abolicion"/>
+  <busStop id="s609" lane="r13744_0" startPos="22.9" endPos="34.9" name="calle  Ing. Manuel Domenech despues calle  Independencia"/>
+  <busStop id="s61" lane="e23583_0" startPos="47.0" endPos="59.0" name="Ave. Franklin D. Roosvelt despues calle  Soldado Rafael Llamar Guerra"/>
+  <busStop id="s610" lane="r13741_0" startPos="17.4" endPos="29.4" name="calle  Ing. Manuel Domenech despues calle  Arq. Jose G. Barbosa"/>
+  <busStop id="s611" lane="r13734_0" startPos="17.3" endPos="29.3" name="calle  Ing. Manuel Domenech antes lado opuesto calle  Arq. Pedro Bigay"/>
+  <busStop id="s612" lane="r36020_0" startPos="20.6" endPos="32.6" name="calle  Ing. Manuel Domenech antes calle  Cabo Hermogenes Alverio"/>
+  <busStop id="s613" lane="r36017_0" startPos="77.3" endPos="89.3" name="calle  Ing. Manuel Domenech antes Juan J. Jimenez"/>
+  <busStop id="s614" lane="e13825_0" startPos="39.2" endPos="51.2" name="calle  Andalucia esquina calle  Alesia"/>
+  <busStop id="s615" lane="e36581_0" startPos="3.7" endPos="15.7" name="calle  Andalucia antes calle  Alpes"/>
+  <busStop id="s616" lane="e36586_0" startPos="20.8" endPos="32.8" name="calle  Andalucia antes Ave. Jesus de Pinero"/>
+  <busStop id="s617" lane="e23942_0" startPos="92.1" endPos="104.1" name="Ave. Jesus T. Pinero antes calle  Argel"/>
+  <busStop id="s618" lane="e23944_0" startPos="231.9" endPos="243.9" name="Ave. Jesus de Pinero antes calle  Bulgaria"/>
+  <busStop id="s619" lane="e23945_0" startPos="209.4" endPos="221.4" name="Ave. Jesus T. Pinero antes calle  Constitucion"/>
+  <busStop id="s62" lane="e30409_0" startPos="56.2" endPos="68.2" name="Ave. Franklin D. Roosvelt antes calle  Las America"/>
+  <busStop id="s620" lane="e23948_0" startPos="141.6" endPos="153.6" name="Ave. Jesus T. Pinero antes Ave. Jose de Diego"/>
+  <busStop id="s621" lane="e23952_0" startPos="141.1" endPos="153.1" name="Ave. Jesus T. Pinero antes calle  Escorial"/>
+  <busStop id="s622" lane="e23953_0" startPos="166.0" endPos="178.0" name="Ave. Jesus T. Pinero esquina calle  Estonia"/>
+  <busStop id="s623" lane="e23954_0" startPos="149.1" endPos="161.1" name="Ave. Jesus T. Pinero antes calle  Eucalipto"/>
+  <busStop id="s624" lane="e23956_0" startPos="138.3" endPos="150.3" name="Ave. Jesus T. Pinero Avenina San Patricio"/>
+  <busStop id="s625" lane="e24852_0" startPos="88.9" endPos="100.9" name="Ave. Jesus T. Pinero despues Ave. San Patricio"/>
+  <busStop id="s626" lane="e24854_0" startPos="33.4" endPos="45.4" name="Ave. Jesus T. Pinero despues calle  13 S.O."/>
+  <busStop id="s627" lane="e24855_0" startPos="48.5" endPos="60.5" name="Ave. Jesus T. Pinero despues calle  Caparra Heights"/>
+  <busStop id="s628" lane="e24857_0" startPos="145.1" endPos="157.1" name="Ave. Jesus de Pinero esquiona Ave. Jose de Diego"/>
+  <busStop id="s629" lane="e24860_0" startPos="137.0" endPos="149.0" name="Ave. Jesus T. Pinero antes calle  15 S.E."/>
+  <busStop id="s63" lane="e25766_0" startPos="238.7" endPos="250.7" name="Ave. Franklin D. Roosvelt esquina calle Nemesio Canales"/>
+  <busStop id="s630" lane="e24861_0" startPos="220.4" endPos="232.4" name="Ave. Jesus T. Pinero esquina calle  25 S.E."/>
+  <busStop id="s631" lane="e30671_0" startPos="134.7" endPos="146.7" name="Ave. Jesus T. Pinero esquina calle  41 S.E."/>
+  <busStop id="s632" lane="r36585_0" startPos="89.7" endPos="101.7" name="calle  Andalucia antes calle  Andora"/>
+  <busStop id="s633" lane="r36582_0" startPos="15.3" endPos="27.3" name="calle  Andalucia antes lado opuesto Alpes"/>
+  <busStop id="s634" lane="r36578_0" startPos="76.5" endPos="88.5" name="calle  Andalucia antes calle  Alesia"/>
+  <busStop id="s635" lane="e36018_0" startPos="54.7" endPos="66.7" name="calle  Ing. Manuel Domenech antes calle  Sergio Cuevas Bustamante"/>
+  <busStop id="s636" lane="e36022_0" startPos="15.9" endPos="27.9" name="calle  Ing. Manuel Domenech antes calle  Soldado Rafael Lamar Guerra"/>
+  <busStop id="s637" lane="e13741_0" startPos="22.0" endPos="34.0" name="calle  Ing. Manuel Domenech antes Ave. Hosto"/>
+  <busStop id="s638" lane="e13746_0" startPos="40.7" endPos="52.7" name="calle  Ing. Manuel Domenech antes calle  Abolicion"/>
+  <busStop id="s639" lane="e23591_0" startPos="22.0" endPos="34.0" name="calle  Betance despues Ave. Munoz Rivera"/>
+  <busStop id="s64" lane="e23644_0" startPos="249.4" endPos="261.4" name="Ave. Franklin D. Roosvelt esquina calle 25 N.E."/>
+  <busStop id="s640" lane="e26246_0" startPos="101.2" endPos="113.2" name="PR-176 Ave. Ana G. Mendez despues lado opuesto calle  Isidro Colon"/>
+  <busStop id="s641" lane="e26255_0" startPos="223.4" endPos="235.4" name="PR-176 Ave. Ana G. Mendez esquina calle  Rhin"/>
+  <busStop id="s642" lane="e25517_0" startPos="337.8" endPos="349.8" name="PR-176 Ave. Ana G. Mendez antes calle  Atlanta"/>
+  <busStop id="s643" lane="e25330_0" startPos="21.7" endPos="33.7" name="PR-176 Ana G. Mendez antes calle  Ohio"/>
+  <busStop id="s644" lane="e26016_0" startPos="295.5" endPos="307.5" name="PR-176 Ave. Victor M. Labiosa antes calle  Tejas"/>
+  <busStop id="s645" lane="e26607_0" startPos="20.9" endPos="32.9" name="PR-177 Ave. Lomas Verdes antes calle  Santa Agueda"/>
+  <busStop id="s646" lane="e25149_0" startPos="1.0" endPos="13.0" name="PR-177 Ave. Lomas Verdes despues lado opuesto Ave. La Sierra"/>
+  <busStop id="s647" lane="e25155_0" startPos="18.1" endPos="30.1" name="PR-177 Ave. Lomas Verdes despues calle  Ter"/>
+  <busStop id="s648" lane="e30367_0" startPos="32.9" endPos="44.9" name="calle  Parana antes Ave. Winston Churchill"/>
+  <busStop id="s649" lane="e16335_0" startPos="56.7" endPos="68.7" name="Ave. Winston Churchill despues de calle  Parana"/>
+  <busStop id="s65" lane="e36588_0" startPos="156.7" endPos="168.7" name="Ave. Franklin D. Roosvelt esquina calle 19 N.E."/>
+  <busStop id="s650" lane="e16335_0" startPos="371.6" endPos="383.6" name="Ave. Winston Churchill antes calle  Apolo"/>
+  <busStop id="s651" lane="e25125_0" startPos="35.4" endPos="47.4" name="Ave. Winston Churchill despues calle  Jose Zorrilla"/>
+  <busStop id="s652" lane="e25127_0" startPos="52.0" endPos="64.0" name="Ave. Winston Churchill despues calle  Benito Feijo"/>
+  <busStop id="s653" lane="e25128_0" startPos="157.0" endPos="169.0" name="Ave. Winston Churchill antes calle  Gustavo Becquer"/>
+  <busStop id="s654" lane="e25130_0" startPos="219.6" endPos="231.6" name="Ave. Winston Churchill antes Ave. Victor M. Labiosa PR-176"/>
+  <busStop id="s655" lane="e25998_0" startPos="170.4" endPos="182.4" name="PR-176 Ave. Victor M. Labiosa esquina calle  PIo Baroja"/>
+  <busStop id="s656" lane="e30582_0" startPos="15.4" endPos="27.4" name="PR-199 Ave. Felisa R. Gautier despues PR-176 Ave. Victor M. Labiosa"/>
+  <busStop id="s657" lane="e30582_0" startPos="419.1" endPos="431.1" name="PR-199 Ave. Felisa R. Gautier esquina calle  Juan D. Lefebre"/>
+  <busStop id="s658" lane="r26005_0" startPos="61.8" endPos="73.8" name="calle  Ceciliana despues PR-199 Ave. Felisa R. Gautier"/>
+  <busStop id="s659" lane="r7948_0" startPos="3.5" endPos="15.5" name="calle  Ceciliana antes calle  Azucena"/>
+  <busStop id="s66" lane="e36590_0" startPos="332.7" endPos="344.7" name="Ave. Franklin D. Roosvelt antes esquina calle 7 N.E."/>
+  <busStop id="s660" lane="r7944_0" startPos="1.0" endPos="13.0" name="calle  Ceciliana lado opuesto despues calle  11"/>
+  <busStop id="s661" lane="r7942_0" startPos="18.4" endPos="30.4" name="calle  Ceciliana esquina calle  Monte Britton"/>
+  <busStop id="s662" lane="e16108_0" startPos="39.3" endPos="51.3" name="calle  Monte Britton esquina calle  Clavel"/>
+  <busStop id="s663" lane="e16111_0" startPos="6.8" endPos="18.8" name="calle  Monte Britton antes calle  Gallegos"/>
+  <busStop id="s664" lane="e15738_0" startPos="4.2" endPos="16.2" name="calle  Campanilla esquina calle  Gallego"/>
+  <busStop id="s665" lane="e15742_0" startPos="155.6" endPos="167.6" name="calle  Campanilla esquina calle  Hotencia"/>
+  <busStop id="s666" lane="e15743_0" startPos="125.5" endPos="137.5" name="calle  Campanilla antes calle  Ceciliana"/>
+  <busStop id="s667" lane="e26006_0" startPos="136.9" endPos="148.9" name="calle  Ceciliana antes PR-199 Ave. Felisa R. de Gautier"/>
+  <busStop id="s668" lane="e25992_0" startPos="173.8" endPos="185.8" name="PR-199  Ave. Felisa R. Gautier antes calle  Princesa"/>
+  <busStop id="s669" lane="e25996_0" startPos="1.0" endPos="13.0" name="PR-199 Ave. Felisa R. Gautier antes PR-176 Ave. Victor M. Labiosa"/>
+  <busStop id="s67" lane="e36591_0" startPos="275.0" endPos="287.0" name="Ave. Franklin D. Roosvelt antes Ave. Jose de Diego"/>
+  <busStop id="s670" lane="e30586_0" startPos="8.0" endPos="20.0" name="PR-176 Ave. Victor M. Labiosa despues  lado opuesto calle  Pio Baroja"/>
+  <busStop id="s671" lane="r25129_0" startPos="1.0" endPos="13.0" name="Ave. Winston Churchill despues Ave. Victor M. Labiosa PR-176"/>
+  <busStop id="s672" lane="r25129_0" startPos="248.1" endPos="260.1" name="Ave. Winston Churchill antes lado opuesto calle  Gustavo Becquer"/>
+  <busStop id="s673" lane="r25128_0" startPos="183.5" endPos="195.5" name="Ave. Winston Churchill antes lado opuesto calle  Eduardo D'ors"/>
+  <busStop id="s674" lane="r25127_0" startPos="155.3" endPos="167.3" name="Ave. Winston Churchill antes lado opuesto calle  Benito Feijo"/>
+  <busStop id="s675" lane="r25124_0" startPos="128.2" endPos="140.2" name="Ave. Winston Churchill antes lado opuesto calle  Jose Zorrilla"/>
+  <busStop id="s676" lane="r16335_0" startPos="39.2" endPos="51.2" name="Ave. Winston Churchill despues calle  Jajome"/>
+  <busStop id="s677" lane="r16335_0" startPos="387.9" endPos="399.9" name="Ave. Winston Churchill antes calle  Parana"/>
+  <busStop id="s678" lane="r30364_0" startPos="1.0" endPos="13.0" name="calle  Parana despues calle  Carite"/>
+  <busStop id="s679" lane="r25155_0" startPos="96.9" endPos="108.9" name="PR-177 Ave. Lomas Verdes lado opuesto calle  Ter"/>
+  <busStop id="s68" lane="e23646_0" startPos="68.4" endPos="80.4" name="Ave. Franklin D. Roosvelt despues Ave. Jose de Diego"/>
+  <busStop id="s680" lane="r9421_0" startPos="127.9" endPos="139.9" name="PR- 177 Ave. Lomas Verdes antes Ave. La Sierra"/>
+  <busStop id="s681" lane="r9417_0" startPos="38.3" endPos="50.3" name="PR- 177 Ave. Lomas Verdes antes PR-8176"/>
+  <busStop id="s682" lane="e25337_0" startPos="36.9" endPos="48.9" name="PR-176 Ave. Victor M. Labiosa despues calle  San Javier"/>
+  <busStop id="s684" lane="e25329_0" startPos="96.1" endPos="108.1" name="PR-176 Ave. Ana G. Mendez despues calle  San Claudio PR- 845"/>
+  <busStop id="s685" lane="r26257_0" startPos="181.7" endPos="193.7" name="PR-176 Ave. Ana G. Mendez lado opuesto AAA Concordia"/>
+  <busStop id="s686" lane="r26248_0" startPos="80.0" endPos="92.0" name="PR-176 Ave. Ana G. Mendez lado opuesto calle  Rhin"/>
+  <busStop id="s687" lane="r26246_0" startPos="86.8" endPos="98.8" name="PR-176 Ave. Ana G. Mendez antes calle  Isidro Colon"/>
+  <busStop id="s688" lane="e34009_0" startPos="8.4" endPos="20.4" name="Avenida Ponce de León después PR-176"/>
+  <busStop id="s69" lane="e23649_0" startPos="5.0" endPos="17.0" name="Ave. Franklin D. Roosvelt despues calle  Matadero"/>
+  <busStop id="s692" lane="e21028_0" startPos="407.6" endPos="419.6" name="Ave. Luis Vigoreaux esquina Ave. Jesus T. Pinero"/>
+  <busStop id="s693" lane="e26385_0" startPos="126.6" endPos="138.6" name="Ave. Jesus T. Pinero despues Ave. Luis Vigoreuaux"/>
+  <busStop id="s697" lane="e7874_0" startPos="59.0" endPos="71.0" name="Ave. Jose de Diego esquina calle  Dresde"/>
+  <busStop id="s698" lane="e7877_0" startPos="22.4" endPos="34.4" name="Ave. Jose de Diego antes calle Dunas"/>
+  <busStop id="s699" lane="e7880_0" startPos="81.5" endPos="93.5" name="Ave. Jose de Diego antes calle Dorado"/>
+  <busStop id="s70" lane="e23649_0" startPos="177.5" endPos="189.5" name="Ave. Franklin D. Roosvelt Frente Edificio Triple S"/>
+  <busStop id="s700" lane="e7850_0" startPos="128.3" endPos="140.3" name="Ave. Jose de Diego esquina calle 4 S.O."/>
+  <busStop id="s701" lane="e7852_0" startPos="92.2" endPos="104.2" name="Ave. Jose de Diego esquina calle 30 S.O."/>
+  <busStop id="s702" lane="e10129_0" startPos="31.9" endPos="43.9" name="Ave. Americo Miranda esquina calle 1 S.E."/>
+  <busStop id="s703" lane="e10132_0" startPos="22.6" endPos="34.6" name="Ave. Americo Miranda antes calle 21 S.E."/>
+  <busStop id="s704" lane="e10135_0" startPos="1.0" endPos="13.0" name="Ave. Americo Miranda despues calle  29 S.E."/>
+  <busStop id="s705" lane="e25497_0" startPos="9.4" endPos="21.4" name="Ave. Americo Miranda antes calle 52 S.E."/>
+  <busStop id="s706" lane="e25501_0" startPos="104.5" endPos="116.5" name="Ave. Americo Miranda antes lado opuesto 49 S.E."/>
+  <busStop id="s707" lane="e20753_0" startPos="32.2" endPos="44.2" name="Ave. Americo Miranda antes Paseo Arbona"/>
+  <busStop id="s708" lane="e29674_0" startPos="9.1" endPos="21.1" name="Paseo Arbona despues Ave. Americo Miranda"/>
+  <busStop id="s709" lane="e6535_0" startPos="27.9" endPos="39.9" name="Paseo Arbona frente a Cardiovascular"/>
+  <busStop id="s71" lane="e23656_0" startPos="174.1" endPos="186.1" name="Ave. Franklin D. Roosvelt lado opuesto calle  Parkside 1"/>
+  <busStop id="s710" lane="e6535_0" startPos="205.5" endPos="217.5" name="Paseo Arbona frente Recinto Ciencias Medica"/>
+  <busStop id="s711" lane="e6543_0" startPos="197.9" endPos="209.9" name="Paseo Arbona lado opuesto Hospital Municipal"/>
+  <busStop id="s712" lane="e6544_0" startPos="1.0" endPos="13.0" name="Paseo Arbona esquina Paseo Barbosa"/>
+  <busStop id="s714" lane="e6522_0" startPos="136.2" endPos="148.2" name="Paseo Arbona esquina calle  Dr. Diaz Bonet"/>
+  <busStop id="s715" lane="e6524_0" startPos="132.5" endPos="144.5" name="Paseo Arbona despues calle  Dr. Diaz Bonet"/>
+  <busStop id="s716" lane="e6531_0" startPos="62.2" endPos="74.2" name="Paseo Arbona lado opuesto I.N.V. Clinica"/>
+  <busStop id="s718" lane="e28673_0" startPos="1.0" endPos="13.0" name="Paseo Arbona esquina Ave. Americo Miranda"/>
+  <busStop id="s719" lane="e20751_0" startPos="90.1" endPos="102.1" name="Ave. Americo Miranda despues Paseo Arbona"/>
+  <busStop id="s72" lane="e23030_0" startPos="6.9" endPos="18.9" name="Ave. Franklin D. Roosvelt salida PR-2"/>
+  <busStop id="s720" lane="r25499_0" startPos="109.8" endPos="121.8" name="Ave. Americo Miranda lado opuesto calle  56 S.E."/>
+  <busStop id="s721" lane="r10136_0" startPos="50.1" endPos="62.1" name="Ave. Americo Miranda despues calle 52 S.E."/>
+  <busStop id="s722" lane="r10135_0" startPos="61.3" endPos="73.3" name="Ave. Americo Miranda esquina calle 29 S.E"/>
+  <busStop id="s723" lane="r10133_0" startPos="1.0" endPos="13.0" name="Ave. Americo Miranda despues calle 23 S.E"/>
+  <busStop id="s724" lane="r10131_0" startPos="35.0" endPos="47.0" name="Ave. Americo Miranda esquina calle 13 S.E."/>
+  <busStop id="s725" lane="r10130_0" startPos="188.1" endPos="200.1" name="Ave. Americo Miranda antes calle 1 S.E."/>
+  <busStop id="s726" lane="r7852_0" startPos="97.5" endPos="109.5" name="Ave. Jose de Diego esquina calle 16 S.E."/>
+  <busStop id="s727" lane="r7848_0" startPos="94.0" endPos="106.0" name="Ave. Jose de Diego antes Ave. Jesus T. Pinero"/>
+  <busStop id="s728" lane="r7881_0" startPos="96.0" endPos="108.0" name="Ave. Jose de Diego esquina calle Cataluña"/>
+  <busStop id="s729" lane="r7878_0" startPos="1.0" endPos="13.0" name="Ave. Jose de Diego esquina calle Cañada"/>
+  <busStop id="s73" lane="r2930_0" startPos="51.6" endPos="63.6" name="PR-2 antes calle  Millan"/>
+  <busStop id="s730" lane="r7874_0" startPos="66.3" endPos="78.3" name="Ave. Jose de Diego esquina calle Campeche"/>
+  <busStop id="s731" lane="r7873_0" startPos="250.1" endPos="262.1" name="Ave. Jose de Diego antes lado opuesto calle Dalmacia"/>
+  <busStop id="s733" lane="e27533_0" startPos="35.1" endPos="47.1" name="Ave. Jesus T. Pinero despues salida Ave. Martinez Nadal"/>
+  <busStop id="s734" lane="r21027_0" startPos="26.4" endPos="38.4" name="Ave. Luis Vigoreaux despues Ave. Jesus T. Pinero"/>
+  <busStop id="s74" lane="e26188_0" startPos="125.1" endPos="137.1" name="PR-2 antes calle  Buchanan"/>
+  <busStop id="s746" lane="e21069_0" startPos="59.7" endPos="71.7" name="Estacion Martinez Nadal (Abordaje/Descenso)"/>
+  <busStop id="s75" lane="e26194_0" startPos="1.0" endPos="13.0" name="PR-2 antes calle  Sevilla"/>
+  <busStop id="s759" lane="e19083_0" startPos="161.4" endPos="173.4" name="Ave. Barbosa antes Ave. Jose De Diego"/>
+  <busStop id="s76" lane="e26205_0" startPos="26.9" endPos="38.9" name="PR-2 despues lado opuesto calle  Driver Ramón Mimosa"/>
+  <busStop id="s760" lane="e24811_0" startPos="22.7" endPos="34.7" name="PR-181 Expreso antes calle  Antonio Valcarcel"/>
+  <busStop id="s761" lane="e26038_0" startPos="386.9" endPos="398.9" name="PR-181 Expreso antes Ave. Park Garden"/>
+  <busStop id="s762" lane="e15215_0" startPos="28.7" endPos="40.7" name="Ave. Park Gardens antes calle Circeo calle  25"/>
+  <busStop id="s763" lane="e15218_0" startPos="33.9" endPos="45.9" name="Ave. Park Gardens esquina calle Morro"/>
+  <busStop id="s764" lane="e15223_0" startPos="27.2" endPos="39.2" name="Ave. Park Gardens esquina calle King's Canyon calle  9"/>
+  <busStop id="s765" lane="e15225_0" startPos="4.0" endPos="16.0" name="Ave. Park Gardens despues calle Maracaibo calle  8"/>
+  <busStop id="s766" lane="e12446_0" startPos="53.4" endPos="65.4" name="Ave. Frontera despues Ave. Park Gardens"/>
+  <busStop id="s767" lane="e12449_0" startPos="39.6" endPos="51.6" name="Ave. Frontera antes calle  Toloy"/>
+  <busStop id="s768" lane="e12454_0" startPos="216.9" endPos="228.9" name="Ave. Frontera antes lado opuesto calle Jijona"/>
+  <busStop id="s769" lane="e12456_0" startPos="59.7" endPos="71.7" name="Ave. Frontera antes calle  Cantizales"/>
+  <busStop id="s77" lane="e26179_0" startPos="47.1" endPos="59.1" name="PR-2 despues calle  Robles"/>
+  <busStop id="s770" lane="e26057_0" startPos="47.9" endPos="59.9" name="PR-846 Despues Expreso PR-181"/>
+  <busStop id="s771" lane="e26057_0" startPos="305.1" endPos="317.1" name="PR-846 antes Ave. Periferal"/>
+  <busStop id="s772" lane="e26061_0" startPos="269.8" endPos="281.8" name="PR-846 lado opuesto Residencial Covadonga"/>
+  <busStop id="s773" lane="e26066_0" startPos="144.2" endPos="156.2" name="PR-846 Antes Calle AA"/>
+  <busStop id="s774" lane="e17947_0" startPos="52.9" endPos="64.9" name="Ave. AA esquina calle  5"/>
+  <busStop id="s775" lane="e17948_0" startPos="315.9" endPos="327.9" name="Ave. AA antes Ave. Periferal"/>
+  <busStop id="s776" lane="r26051_0" startPos="1.0" endPos="13.0" name="Ave. Acuario despues calle  Anguises"/>
+  <busStop id="s777" lane="r26051_0" startPos="374.8" endPos="386.8" name="Ave. Acuario esquina calle Onide"/>
+  <busStop id="s778" lane="r15414_0" startPos="16.9" endPos="28.9" name="Ave. Acuario esquina calle Lesbos"/>
+  <busStop id="s779" lane="r15412_0" startPos="118.0" endPos="130.0" name="Ave. Acuario esquina calle Gemenis"/>
+  <busStop id="s78" lane="e26180_0" startPos="7.3" endPos="19.3" name="PR-2 antes calle  Tintillo"/>
+  <busStop id="s780" lane="e8107_0" startPos="52.2" endPos="64.2" name="Ave. Venus despues Ave. Acuario"/>
+  <busStop id="s782" lane="e8108_0" startPos="11.5" endPos="23.5" name="Ave. Venus despues calle Biblos"/>
+  <busStop id="s783" lane="e8108_0" startPos="269.8" endPos="281.8" name="Ave. Venus antes calle  Aster"/>
+  <busStop id="s784" lane="e8109_0" startPos="188.7" endPos="200.7" name="Ave. Venus antes calle Libra"/>
+  <busStop id="s785" lane="e8110_0" startPos="178.0" endPos="190.0" name="Ave. Venus antes calle Picis"/>
+  <busStop id="s786" lane="r7888_0" startPos="27.5" endPos="39.5" name="Ave. Periferal despues Ave. Venus"/>
+  <busStop id="s787" lane="r17938_0" startPos="55.2" endPos="67.2" name="Ave. Periferal antes lado opuesto calle 31"/>
+  <busStop id="s788" lane="r26057_0" startPos="79.9" endPos="91.9" name="PR-846 despues lado opuesto Ave. Periferal"/>
+  <busStop id="s789" lane="e19036_0" startPos="26.5" endPos="38.5" name="Expreso Trujillo Alto (PR-181) despues Carretera 846 (PR-846)"/>
+  <busStop id="s79" lane="r26160_0" startPos="196.2" endPos="208.2" name="PR-2 despues lado opuesto calle  Colectora Central Main"/>
+  <busStop id="s790" lane="r12458_0" startPos="34.3" endPos="46.3" name="Ave. Frontera despues Expreso PR-181"/>
+  <busStop id="s791" lane="r12455_0" startPos="147.4" endPos="159.4" name="Ave. Frontera esquina calle Jijona"/>
+  <busStop id="s792" lane="r12450_0" startPos="51.0" endPos="63.0" name="Ave. Frontera esquina calle  Alora"/>
+  <busStop id="s793" lane="r12446_0" startPos="88.4" endPos="100.4" name="Ave. Frontera antes Ave. Park Gardens"/>
+  <busStop id="s794" lane="r15224_0" startPos="1.9" endPos="13.9" name="Ave. Park Gardens despues lado opuesto calle  Maracaibo calle  8"/>
+  <busStop id="s795" lane="r15224_0" startPos="175.0" endPos="187.0" name="Ave. Park Gardens antes lado opuesto calle  King's Canyon calle  9"/>
+  <busStop id="s796" lane="r15219_0" startPos="39.3" endPos="51.3" name="Ave. Park Gardens lado opuesto calle  Morro"/>
+  <busStop id="s797" lane="r15213_0" startPos="37.8" endPos="49.8" name="Ave. Park Gardens antes lado opuesto calle  27"/>
+  <busStop id="s798" lane="e26039_0" startPos="437.3" endPos="449.3" name="PR-181 Expreso Trujillo Alto antes Ave. 65th Infanteria"/>
+  <busStop id="s800" lane="r1212_0" startPos="30.4" endPos="42.4" name="Bulevard de la Media Luna lado opuesto Instituto de Banca y Comercio"/>
+  <busStop id="s802" lane="e26128_0" startPos="14.5" endPos="26.5" name="PR-21 frente Condominio Alameda"/>
+  <busStop id="s803" lane="e26129_0" startPos="10.4" endPos="22.4" name="PR-21 despues calle  Sandalio Enrique Leon"/>
+  <busStop id="s804" lane="e26132_0" startPos="1.0" endPos="13.0" name="PR-21 antes calle  San Alfonso"/>
+  <busStop id="s805" lane="e26109_0" startPos="30.5" endPos="42.5" name="calle  San Alfonso esquina calle Fernando Goméz Acosta"/>
+  <busStop id="s806" lane="e26115_0" startPos="1.0" endPos="13.0" name="calle  San Alfonso antes lado opuesto calle Santa Barbara"/>
+  <busStop id="s807" lane="e8082_0" startPos="90.3" endPos="102.3" name="Ave. Paz Granela esquina calle  Sandalio Enrique Leon"/>
+  <busStop id="s808" lane="e8083_0" startPos="162.2" endPos="174.2" name="Ave. Paz Granela antes calle  Estevan Ortíz"/>
+  <busStop id="s809" lane="e8085_0" startPos="1.0" endPos="13.0" name="Ave. Paz Granela despues lado opuesto calle Estevan Padilla"/>
+  <busStop id="s810" lane="e8087_0" startPos="86.6" endPos="98.6" name="Ave. Paz Granela antes calle  Torres Cintrón"/>
+  <busStop id="s811" lane="r3050_0" startPos="147.5" endPos="159.5" name="PR-8177 calle  Santiago Iglesia lado opuesto Sector Yambele"/>
+  <busStop id="s812" lane="e9414_0" startPos="64.2" endPos="76.2" name="PR-8177 calle  Santiago Iglesia lado opuesto calle  5"/>
+  <busStop id="s813" lane="e12357_0" startPos="267.1" endPos="279.1" name="PR-8177 calle  Santiago Iglesia antes lado opuesto calle San Ignacio"/>
+  <busStop id="s814" lane="e26099_0" startPos="13.6" endPos="25.6" name="PR- 177 Ave. Lomas Verdes esquina calle  Mejico"/>
+  <busStop id="s815" lane="e9423_0" startPos="273.6" endPos="285.6" name="PR- 177 Ave. Lomas Verdes antes calle Sauco"/>
+  <busStop id="s816" lane="e12858_0" startPos="1.0" endPos="13.0" name="PR-838 Camino Alejandrino antes calle Nogal"/>
+  <busStop id="s817" lane="e26118_0" startPos="49.7" endPos="61.7" name="PR-838 Camino Alejandrino antes calle Maria Teresa"/>
+  <busStop id="s818" lane="e26119_0" startPos="208.3" endPos="220.3" name="PR-838 Camino Alejandrino esquina calle San Jose"/>
+  <busStop id="s819" lane="r22967_0" startPos="83.3" endPos="95.3" name="Ave. Washingtown  lado opuesto calle Bilbao"/>
+  <busStop id="s820" lane="r4109_0" startPos="19.8" endPos="31.8" name="Ave. Washingtown  despues calle Lincoln"/>
+  <busStop id="s821" lane="r4109_0" startPos="238.4" endPos="250.4" name="Ave. Washingtown antes calle Harding"/>
+  <busStop id="s822" lane="r3827_0" startPos="8.8" endPos="20.8" name="Ave. Esmeralda despues calle 26"/>
+  <busStop id="s823" lane="r3825_0" startPos="38.2" endPos="50.2" name="Ave. Esmeralda despues calle 22"/>
+  <busStop id="s824" lane="r3823_0" startPos="56.8" endPos="68.8" name="Ave. Esmeralda antes calle Los Prados"/>
+  <busStop id="s825" lane="e22971_0" startPos="44.8" endPos="56.8" name="calle A frente Los Jardines Shopping Center"/>
+  <busStop id="s826" lane="e30317_0" startPos="172.4" endPos="184.4" name="calle A antes calle Bolivia"/>
+  <busStop id="s827" lane="e22956_0" startPos="32.5" endPos="44.5" name="Calle B Despues Calle A"/>
+  <busStop id="s828" lane="e22953_0" startPos="12.6" endPos="24.6" name="Calle B Despues Calle 11"/>
+  <busStop id="s829" lane="r4506_0" startPos="260.3" endPos="272.3" name="Calle E Antes Calle D"/>
+  <busStop id="s830" lane="r4475_0" startPos="178.8" endPos="190.8" name="Calle D Antes PR-169"/>
+  <busStop id="s831" lane="e23794_0" startPos="4.8" endPos="16.8" name="PR-169 después Calle D"/>
+  <busStop id="s832" lane="e23798_0" startPos="27.3" endPos="39.3" name="PR-169 antes Puesto Total"/>
+  <busStop id="s833" lane="e23800_0" startPos="18.5" endPos="30.5" name="PR-169 despues calle Parque de los Niños"/>
+  <busStop id="s834" lane="e26089_0" startPos="263.9" endPos="275.9" name="PR-199 Las Cumbres Despues PR-169"/>
+  <busStop id="s835" lane="e22624_0" startPos="21.3" endPos="33.3" name="calle  Cecilia Urbina despues Ave. Las Cumbres PR-199"/>
+  <busStop id="s836" lane="e22624_0" startPos="245.9" endPos="257.9" name="calle  cecilia Urbina antes Ave. Santa Rosa PR-837"/>
+  <busStop id="s837" lane="r3279_0" startPos="112.0" endPos="124.0" name="calle Cecilia Urbina frente al Correo"/>
+  <busStop id="s838" lane="e3594_0" startPos="40.3" endPos="52.3" name="PR-886 Ave. Santa Rosa antes Ave. Las Cumbres"/>
+  <busStop id="s839" lane="r23799_0" startPos="1.0" endPos="13.0" name="PR-169 calle  Jose R. Carazo lado opuesto calle  Parque de los Niños"/>
+  <busStop id="s840" lane="r23796_0" startPos="126.9" endPos="138.9" name="PR-169 calle  Jose R. Carazo lado opuesto puesto Total"/>
+  <busStop id="s841" lane="e4475_0" startPos="35.7" endPos="47.7" name="calle  D despues calle  Jose R. Carazo PR-169"/>
+  <busStop id="s842" lane="e4475_0" startPos="228.0" endPos="240.0" name="Calle D Esquina Calle E"/>
+  <busStop id="s843" lane="e2230_0" startPos="277.4" endPos="289.4" name="Calle E Antes Calle B"/>
+  <busStop id="s844" lane="r22953_0" startPos="27.1" endPos="39.1" name="Calle B Lado Opuesto Calle 11"/>
+  <busStop id="s846" lane="e4407_0" startPos="14.6" endPos="26.6" name="Calle A Despues Calle B"/>
+  <busStop id="s847" lane="e4408_0" startPos="182.0" endPos="194.0" name="Calle A Esquina Calle D"/>
+  <busStop id="s848" lane="e3823_0" startPos="8.9" endPos="20.9" name="Ave. Esmeralda despues calle Los Prados"/>
+  <busStop id="s849" lane="e3825_0" startPos="165.0" endPos="177.0" name="Ave. Esmeralda esquina calle 22"/>
+  <busStop id="s850" lane="e3829_0" startPos="1.0" endPos="13.0" name="Ave. Esmeralda despues lado opuesto calle Tropical"/>
+  <busStop id="s851" lane="e4109_0" startPos="112.5" endPos="124.5" name="Ave. Washington despues calle Harding"/>
+  <busStop id="s852" lane="e31084_0" startPos="40.7" endPos="52.7" name="Ave. Roberto S. Vilella esquina calle Costanera"/>
+  <busStop id="s853" lane="e22967_0" startPos="2.8" endPos="14.8" name="Ave. Washington despues calle Bilbao"/>
+  <busStop id="s854" lane="r26120_0" startPos="177.1" endPos="189.1" name="PR-838 Camino Alejandrino esquina calle Lcdo R. Rodriguez Apolo"/>
+  <busStop id="s855" lane="r12865_0" startPos="44.3" endPos="56.3" name="PR-838 Camino Alejandrino antes calle A"/>
+  <busStop id="s856" lane="r12859_0" startPos="91.1" endPos="103.1" name="PR-838 Camino Alejandrino lado Opuesto calle Nogal"/>
+  <busStop id="s857" lane="e26146_0" startPos="14.3" endPos="26.3" name="PR- 177 Ave. Lomas Verdes despues calle Sauco"/>
+  <busStop id="s858" lane="e26149_0" startPos="97.2" endPos="109.2" name="PR- 177 Ave. Lomas Verdes esquina calle Petiouita Solis"/>
+  <busStop id="s859" lane="r9415_0" startPos="132.2" endPos="144.2" name="PR-8177 calle  Santiago Iglesia despues calle San Ignacio"/>
+  <busStop id="s860" lane="r9414_0" startPos="46.6" endPos="58.6" name="PR-8177 calle  Santiago Iglesia despues calle 5"/>
+  <busStop id="s861" lane="e6165_0" startPos="98.2" endPos="110.2" name="PR-8177 calle  Santiago Iglesia frente Sector Yambele"/>
+  <busStop id="s862" lane="r8087_0" startPos="7.2" endPos="19.2" name="Ave. Paz Granela despues lado opuesto calle Torres Cintrón"/>
+  <busStop id="s863" lane="r8085_0" startPos="59.8" endPos="71.8" name="Ave. Paz Granela antes calle Esteban Padilla"/>
+  <busStop id="s864" lane="r8083_0" startPos="167.1" endPos="179.1" name="Ave. Paz Granela antes lado opuesto calle Sandalio Enrique Leon"/>
+  <busStop id="s865" lane="r26115_0" startPos="1.9" endPos="13.9" name="calle  San Alfonso antes despues calle Santa Barbara"/>
+  <busStop id="s866" lane="r26110_0" startPos="44.1" endPos="56.1" name="calle  San Alfonso lado opuesto calle Fernando Goméz Acosta"/>
+  <busStop id="s867" lane="r11249_0" startPos="19.2" endPos="31.2" name="PR-21 despues calle  San Alfonso"/>
+  <busStop id="s868" lane="r26129_0" startPos="163.6" endPos="175.6" name="PR-21 antes lado opuesto calle Sandalio Enrique Leon"/>
+  <busStop id="s869" lane="r26126_0" startPos="131.3" endPos="143.3" name="PR-21 frente Condominio Alameda"/>
+  <busStop id="s871" lane="e28926_0" startPos="1.0" endPos="13.0" name="Ave. Jesus de Pinero antes calle Isabel la Católica"/>
+  <busStop id="s872" lane="e30304_0" startPos="41.9" endPos="53.9" name="Ave. Jesus T. Pinero antes calle Teniente Cesar Luis González"/>
+  <busStop id="s873" lane="e23939-AddedOnRampEdge_0" startPos="15.6" endPos="27.6" name="Ave. Jesus T. Pinero despues salida Expreso Las América"/>
+  <busStop id="s874" lane="e23939_0" startPos="250.2" endPos="262.2" name="Ave. Jesus de Pinero antes calle Andalucia"/>
+  <busStop id="s875" lane="e20653_0" startPos="57.6" endPos="69.6" name="Ave. Jesus de Pinero despues calle Andalucia"/>
+  <busStop id="s876" lane="e20653_0" startPos="226.0" endPos="238.0" name="Ave. Jesus de Pinero frente Condominio Las América"/>
+  <busStop id="s877" lane="e26396-AddedOnRampEdge_0" startPos="43.2" endPos="55.2" name="Ave. Jesus de Pinero antes calle Nostre Dane"/>
+  <busStop id="s878" lane="e21908_0" startPos="289.1" endPos="301.1" name="Ave. Jesus T. Pinero antes calle Las Marias"/>
+  <busStop id="s879" lane="e4_0" startPos="120.3" endPos="132.3" name="Ave. Jesus T. Pinero antes Ave. Hostos"/>
+  <busStop id="s881" lane="e23703_0" startPos="122.3" endPos="134.3" name="PR-8838 Ave. Ponce de Leon lado opuesto Ordit kitchen"/>
+  <busStop id="s882" lane="e23709_0" startPos="47.7" endPos="59.7" name="PR-8838 Ave. Ponce de Leon esquina Ave. Jose de Diego"/>
+  <busStop id="s883" lane="e31170_0" startPos="35.2" endPos="47.2" name="Ave. Jose de Diego esquina calle  Cavalieri"/>
+  <busStop id="s885" lane="r25559_0" startPos="152.4" endPos="164.4" name="Ave. Jose de Diego antes lado opuesto calle  2"/>
+  <busStop id="s886" lane="r25558_0" startPos="213.2" endPos="225.2" name="Ave. Jose de Diego antes lado opuesto calle  Geranio"/>
+  <busStop id="s887" lane="r25555_0" startPos="92.1" endPos="104.1" name="Ave. Jose de Diego antes lado opuesto calle  Tulipan"/>
+  <busStop id="s902" lane="e25556_0" startPos="36.0" endPos="48.0" name="Ave. Jose de Diego despues calle  Tulipan"/>
+  <busStop id="s903" lane="e25558_0" startPos="3.3" endPos="15.3" name="Ave. Jose de Diego despues calle  Geranio"/>
+  <busStop id="s904" lane="e25565_0" startPos="127.4" endPos="139.4" name="Avenida José de Diego esquina calle 2"/>
+  <busStop id="s905" lane="e25565_0" startPos="312.4" endPos="324.4" name="Ave. Jose de Diego antes calle  San Guilermo"/>
+  <busStop id="s907" lane="e25543_0" startPos="17.6" endPos="29.6" name="Ave. Jose de Diego antes PR-1"/>
+  <busStop id="s908" lane="r23709_0" startPos="7.3" endPos="19.3" name="PR-8838 Ave. Ponce de Leon despues Ave. Jose de Diego"/>
+  <busStop id="s909" lane="r23703_0" startPos="105.8" endPos="117.8" name="PR-8838 Ave. Ponce de Leon frente Ordit kitchen"/>
+  <busStop id="s91" lane="r24639_0" startPos="61.9" endPos="73.9" name="Ave. Gandara lado opuesto calle  7"/>
+  <busStop id="s92" lane="r10485_0" startPos="1.0" endPos="13.0" name="Ave. Gandara lado opuesto calle  2"/>
+  <busStop id="s922" lane="e24840_0" startPos="32.0" endPos="44.0" name="Ave. Jesus T. Pinero despues calle  Sherman"/>
+  <busStop id="s924" lane="e10891_0" startPos="59.3" endPos="71.3" name="calle  Parana despues calle  Amazona"/>
+  <busStop id="s925" lane="e10894_0" startPos="16.7" endPos="28.7" name="calle  Parana antes calle  Ganges"/>
+  <busStop id="s926" lane="e10895_0" startPos="128.0" endPos="140.0" name="calle  Parana esquina calle  Gerona"/>
+  <busStop id="s927" lane="e10898_0" startPos="52.1" endPos="64.1" name="calle  Parana antes calle  Sena"/>
+  <busStop id="s928" lane="e10903_0" startPos="11.8" endPos="23.8" name="calle  Parana despues calle  Wesser"/>
+  <busStop id="s929" lane="e10903_0" startPos="196.4" endPos="208.4" name="calle  Parana antes calle  Saluen"/>
+  <busStop id="s93" lane="r10484_0" startPos="309.6" endPos="321.6" name="Ave. Gandara antes Ave. Ponce de Leon"/>
+  <busStop id="s930" lane="e19390_0" startPos="54.0" endPos="66.0" name="PR-177 Ave. Lomas Verdes antes calle  Amarillo"/>
+  <busStop id="s931" lane="e19395_0" startPos="33.9" endPos="45.9" name="PR-177 Ave. Lomas Verdes antes PR-8838"/>
+  <busStop id="s932" lane="e19396_0" startPos="200.4" endPos="212.4" name="PR-177 Ave. Lomas Verdes antes calle  Francisco Sein"/>
+  <busStop id="s933" lane="e19402_0" startPos="52.8" endPos="64.8" name="PR-177 Ave. Lomas Verdes antes calle  Chalets de Santa Maria"/>
+  <busStop id="s934" lane="e5943_0" startPos="67.2" endPos="79.2" name="PR-177 Marginal Ave. Lomas Verdes despues Camino Alejandrino PR-838"/>
+  <busStop id="s935" lane="e5944_0" startPos="144.1" endPos="156.1" name="PR-177 Marginal Ave. Lomas Verdes antes Residencial Alejandrino"/>
+  <busStop id="s936" lane="e26032-AddedOnRampEdge_0" startPos="75.0" endPos="87.0" name="calle  Turquesa antes PR-1"/>
+  <busStop id="s937" lane="e14717_0" startPos="177.9" endPos="189.9" name="PR-1 frente calle  OniX"/>
+  <busStop id="s938" lane="e5767_0" startPos="104.8" endPos="116.8" name="PR-1 antes salida Ave. Felisa R. Gautier PR-199"/>
+  <busStop id="s939" lane="e28552_0" startPos="63.7" endPos="75.7" name="PR-199 Ave. Felisa R. Gautier esquina Ave. Caimito"/>
+  <busStop id="s94" lane="e33455_0" startPos="9.8" endPos="21.8" name="Ave. Ponce de Leon despues lado opuesto Ave. Universidad"/>
+  <busStop id="s940" lane="e28554_0" startPos="130.4" endPos="142.4" name="PR-199 Ave. Felisa R. Gautier esquina PR-842"/>
+  <busStop id="s941" lane="e28557_0" startPos="43.6" endPos="55.6" name="PR-199 Ave. Felisa R. Gautier antes calle  A"/>
+  <busStop id="s942" lane="r14555_0" startPos="28.3" endPos="40.3" name="Ave. Emiliano Pol despues Ave. Felisa R. Gautier"/>
+  <busStop id="s943" lane="r14554_0" startPos="59.1" endPos="71.1" name="Ave. Emiliano Pol despues despues lado opuesto calle  Pradera"/>
+  <busStop id="s944" lane="r14552_0" startPos="13.0" endPos="25.0" name="Ave. Emiliano Pol despues antes lado opuesto calle  Los Andes"/>
+  <busStop id="s945" lane="r15589_0" startPos="71.8" endPos="83.8" name="calle  Santa Rosa despues Ave. Emiliano Pol"/>
+  <busStop id="s946" lane="r15588_0" startPos="71.7" endPos="83.7" name="calle  Santa Rosa esquina calle  Los Robles"/>
+  <busStop id="s947" lane="r15585_0" startPos="40.3" endPos="52.3" name="calle  Santa Rosa esquina calle San Bernardino"/>
+  <busStop id="s948" lane="e19514_0" startPos="39.2" endPos="51.2" name="PR- 177 Ave. Lomas Verdes antes calle  Francisco Sein"/>
+  <busStop id="s949" lane="e19515_0" startPos="26.2" endPos="38.2" name="PR- 177 Ave. Lomas Verdes despues lado opuesto PR-8838"/>
+  <busStop id="s95" lane="e33459_0" startPos="180.9" endPos="192.9" name="Ave. Ponce de Leon antes lado opuesto calle  Mariana Bracetti"/>
+  <busStop id="s950" lane="r10904_0" startPos="80.8" endPos="92.8" name="calle  Parana esquina calle  Saluen"/>
+  <busStop id="s951" lane="r10900_0" startPos="181.1" endPos="193.1" name="calle  Parana antes calle  Wesser"/>
+  <busStop id="s952" lane="r10897_0" startPos="2.8" endPos="14.8" name="calle  Parana despues calle  Apolo"/>
+  <busStop id="s953" lane="r10897_0" startPos="161.0" endPos="173.0" name="calle  Parana antes calle  Guadalquivir"/>
+  <busStop id="s954" lane="r10892_0" startPos="39.0" endPos="51.0" name="calle  Parana despues calle  Eufrates"/>
+  <busStop id="s955" lane="r10891_0" startPos="169.6" endPos="181.6" name="calle  Parana esquina calle  Amazona"/>
+  <busStop id="s956" lane="e34074_0" startPos="211.8" endPos="223.8" name="Ave. Barbosa antes Ave. Nereidas"/>
+  <busStop id="s957" lane="e28112_0" startPos="159.3" endPos="171.3" name="Ave. Las Nereidas antes lado opuesto calle Santa Rosa"/>
+  <busStop id="s958" lane="e33670_0" startPos="45.2" endPos="57.2" name="Ave. Las Nereidas antes lado opuesto calle  Wilson"/>
+  <busStop id="s96" lane="e6784_0" startPos="50.9" endPos="62.9" name="Marginal Ave. Jesus T. Pinero antes calle  Baldorioty de Castro"/>
+  <busStop id="s960" lane="e31145_0" startPos="1.0" endPos="13.0" name="Ave. Las Nereidas lado opuesto calle  Olivio"/>
+  <busStop id="s961" lane="r955_0" startPos="143.1" endPos="155.1" name="Ave. Las Nereidas antes lado opuesto calle  Este"/>
+  <busStop id="s97" lane="e25880_0" startPos="1.0" endPos="13.0" name="Ave. Munoz Rivera antes calle  Coll Taste"/>
+  <busStop id="s98" lane="e23566_0" startPos="192.3" endPos="204.3" name="Ave. Munoz Rivera lado opuesto calle Presidente Ramirez"/>
+  <busStop id="s99" lane="e23564_0" startPos="202.8" endPos="214.8" name="Ave. Munoz Rivera despues calle  Guayama"/>
+</additional>

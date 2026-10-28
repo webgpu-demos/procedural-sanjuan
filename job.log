@@ -1,0 +1,23 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
+++ T=public/tiles/sanjuan/sim
+++ PY=.venv-sim/bin/python
+++ mkdir -p /mnt/res/sim
+++ case ${MODE:-all} in
+++ code=0
+++ cp /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/stats.xml /mnt/res/stats-morning.xml
+++ cp -r public/tiles/sanjuan/sim/morning public/tiles/sanjuan/sim/buses.json public/tiles/sanjuan/sim/ferries.json /mnt/res/sim/
+++ mkdir -p /mnt/res/carry
+++ cp /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/state_20700.xml.gz /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml /mnt/res/carry/
+++ gzip -c /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml
+++ gzip -c /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/trips.json
+++ tr '\r' '\n'
+++ grep -v '^Warning'
+++ grep -v '^Step #'
+++ du -sh /mnt/res/sim/buses.json /mnt/res/sim/ferries.json /mnt/res/sim/morning /mnt/res/carry
+52K	/mnt/res/sim/buses.json
+4.0K	/mnt/res/sim/ferries.json
+441M	/mnt/res/sim/morning
+27M	/mnt/res/carry
+++ exit 0
+exit 0 after 291 min
