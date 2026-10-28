@@ -670,6 +670,16 @@ for (const e of JSON.parse(fs.readFileSync(path.join(area.rawDir, 'osm_poi.json'
   lighthouse(lmTris(x, z), x, z, on > -Infinity ? on : ground(x, z));
   lmCount.lighthouses++;
 }
+// The walks OSM maps as bridges inside a fort (its ramps and the bridges between its levels) are its masonry, which
+// the model has: no steel footbridge over them
+const inFort = (x, z) => fortPieces.some((p) => inRings(x, z, [p.ring]));
+const footbridges0 = extras.structures.footbridges.length;
+extras.structures.footbridges = extras.structures.footbridges.filter((f) => {
+  let inside = 0, n = 0;
+  for (let i = 0; i < f.pts.length; i += 3, n++) if (inFort(f.pts[i], f.pts[i + 2])) inside++;
+  return inside * 2 < n;
+});
+if (footbridges0 > extras.structures.footbridges.length) log(`  ${footbridges0 - extras.structures.footbridges.length} footbridges inside the forts left to their masonry`);
 const enclosing = (b) => { // the buildings round the middle of b
   const [tx, tz] = tileOf(b.cx, b.cz), out = [];
   for (let i = tx - 1; i <= tx + 1; i++) for (let j = tz - 1; j <= tz + 1; j++)

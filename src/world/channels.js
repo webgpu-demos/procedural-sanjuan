@@ -13,12 +13,12 @@ const srgb = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 const lin = (rgb) => rgb.map(srgb);
 // river, canal, stream, ditch: the banks (grown over along rivers and streams, concrete for canals and ditches)
 const BANK = [
-  { color: lin([0.37, 0.41, 0.25]), layer: GROUND.GRASS },
+  { color: lin([0.33, 0.35, 0.22]), layer: GROUND.GRASS },
   { color: lin([0.6, 0.59, 0.55]), layer: GROUND.CONCRETE },
-  { color: lin([0.37, 0.43, 0.25]), layer: GROUND.GRASS },
+  { color: lin([0.33, 0.36, 0.22]), layer: GROUND.GRASS },
   { color: lin([0.6, 0.59, 0.55]), layer: GROUND.CONCRETE },
 ];
-const WATER = { color: lin([0.15, 0.24, 0.2]), layer: GROUND.WATER }; // (a river in the city: greener and browner than the sea)
+const WATER = { color: lin([0.16, 0.29, 0.27]), layer: GROUND.WATER }; // (a river in the city: greener and browner than the sea)
 const UNDER = 0.25; // the banks reach this far under the water
 const LIP = 0.05;   // and stand this far over the ground (no crack along their top)
 

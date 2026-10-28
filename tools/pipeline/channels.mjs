@@ -34,15 +34,18 @@ const r2 = (v) => Math.round(v * 100) / 100;
 // stands in it to be cleared).
 export function buildChannels(ways, { ground, inBounds, wet, blocked }) {
   const channels = [], stats = { ways: 0, km: 0, runs: 0, cut: 0, blocked: 0, wet: 0, deep: 0, out: 0, byKind: {} };
+  // where a culvert or a tunnel takes a waterway under (the line's nodes there): its ends are a wall, not a source
+  const under = new Set();
+  for (const w of ways) if (CHANNEL[w.tags.waterway] !== undefined && hidden(w.tags)) { under.add(w.ids[0]); under.add(w.ids.at(-1)); }
   for (const w of chain(ways.filter((w) => CHANNEL[w.tags.waterway] !== undefined && !hidden(w.tags) && !w.closed))) {
     const t = w.tags, k = CHANNEL[t.waterway];
     const width = Math.min(40, Math.max(0.8, num(t.width) ?? WIDTH[k]));
-    // the line, every STEP metres at most (its own points kept)
-    const S = [];
-    for (let i = 0; i < w.pts.length; i++) {
-      const [x, z] = w.pts[i];
+    // the line, its corners rounded (OSM draws a stream in straight pieces), every STEP metres at most
+    const pts = round(w.pts), S = [];
+    for (let i = 0; i < pts.length; i++) {
+      const [x, z] = pts[i];
       if (i) {
-        const [px, pz] = w.pts[i - 1], n = Math.ceil(Math.hypot(x - px, z - pz) / STEP);
+        const [px, pz] = pts[i - 1], n = Math.ceil(Math.hypot(x - px, z - pz) / STEP);
         for (let s = 1; s < n; s++) S.push({ x: px + (x - px) * s / n, z: pz + (z - pz) * s / n });
       }
       if (!S.length || Math.hypot(x - S.at(-1).x, z - S.at(-1).z) > 0.2) S.push({ x, z });
@@ -101,8 +104,8 @@ export function buildChannels(ways, { ground, inBounds, wet, blocked }) {
         for (let i = 1; i < run.length; i++) len += Math.hypot(S[run[i]].x - S[run[i - 1]].x, S[run[i]].z - S[run[i - 1]].z);
         if (len >= 6) {
           const first = run[0], last = run.at(-1);
-          const e = (S[first].state === 'wet' ? END.OPEN_START : first === 0 ? END.SOURCE_START : 0)
-            | (S[last].state === 'wet' ? END.OPEN_END : last === S.length - 1 ? END.SOURCE_END : 0);
+          const e = (S[first].state === 'wet' ? END.OPEN_START : first === 0 && !under.has(w.first) ? END.SOURCE_START : 0)
+            | (S[last].state === 'wet' ? END.OPEN_END : last === S.length - 1 && !under.has(w.last) ? END.SOURCE_END : 0);
           const p = [];
           for (const i of run) p.push(r2(S[i].x), r2(S[i].z), r2(L[i]));
           channels.push({ k, w: width, e, p });
@@ -171,8 +174,30 @@ export function buildChannels(ways, { ground, inBounds, wet, blocked }) {
   return { channels, rings, stats };
 }
 
+// A line's corners rounded: each cut back along both its pieces by a quarter of the shorter, at most 6 m, twice
+// (Chaikin's corner cutting, its ends kept)
+function round(pts) {
+  let p = pts;
+  for (let pass = 0; pass < 2; pass++) {
+    const out = [p[0]];
+    for (let i = 1; i + 1 < p.length; i++) {
+      const [ax, az] = p[i - 1], [bx, bz] = p[i], [cx, cz] = p[i + 1];
+      const l1 = Math.hypot(bx - ax, bz - az), l2 = Math.hypot(cx - bx, cz - bz);
+      if (l1 < 1e-6 || l2 < 1e-6) continue;
+      const turn = Math.abs(Math.atan2((bx - ax) * (cz - bz) - (bz - az) * (cx - bx), (bx - ax) * (cx - bx) + (bz - az) * (cz - bz)));
+      if (turn < 0.08) { out.push(p[i]); continue; }
+      const d = Math.min(6, Math.min(l1, l2) / 4);
+      out.push([bx - (bx - ax) / l1 * d, bz - (bz - az) / l1 * d], [bx + (cx - bx) / l2 * d, bz + (cz - bz) / l2 * d]);
+    }
+    out.push(p.at(-1));
+    p = out;
+  }
+  return p;
+}
+
 // The ways of one waterway joined end to end: a way whose last node is where exactly one other way of the same kind
-// begins (and nothing else of that kind begins or ends) runs on into it. -> [{ tags, pts }]
+// begins (and nothing else of that kind begins or ends) runs on into it. -> [{ tags, pts, first, last }] (first,
+// last: the end nodes)
 function chain(ways) {
   const starts = new Map(), ends = new Map(), key = (w, id) => `${w.tags.waterway}:${id}`;
   for (const w of ways) {
@@ -188,12 +213,14 @@ function chain(ways) {
     let head = w0;
     for (let guard = 0; prev(head) && !used.has(prev(head)) && prev(head) !== w0 && guard < 10000; guard++) head = prev(head);
     const pts = [], width = [];
+    let ids = null;
     for (let w = head; w && !used.has(w); w = next(w)) {
       used.add(w);
+      ids = w.ids.at(-1);
       pts.push(...(pts.length ? w.pts.slice(1) : w.pts));
       if (num(w.tags.width) != null) width.push(num(w.tags.width));
     }
-    out.push({ tags: { ...head.tags, width: width.length ? String(Math.max(...width)) : undefined }, pts });
+    out.push({ tags: { ...head.tags, width: width.length ? String(Math.max(...width)) : undefined }, pts, first: head.ids[0], last: ids });
   }
   return out;
 }
