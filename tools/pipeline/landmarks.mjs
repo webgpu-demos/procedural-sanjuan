@@ -393,3 +393,159 @@ export function convention(t, ring, y, toward, base = y - 15) {
     });
   }
 }
+
+// ---------------------------------------------------------------- El Morro
+// Castillo San Felipe del Morro: not a stepped cake but a fort that falls in terraces from its landward front
+// (the Austria and Ochoa bastions over the esplanade) to the batteries at its point over the harbour mouth (Santa
+// Bárbara, lower still), the upper level hollowed by its plaza of arms, rooms opening on it. ring: the outline;
+// land: [dx, dz], the way to the landward front; ground(x, z). Returns { tris, top, pieces } as fort() does.
+export function morro(ring, ground, t = new Tris(), spots = [], land = [1, 0.25]) {
+  const outline = simplify(ring, 0.8);
+  const l = Math.hypot(...land), ux = land[0] / l, uz = land[1] / l, s = ([x, z]) => x * ux + z * uz;
+  let s0 = Infinity, s1 = -Infinity;
+  for (const p of outline) { s0 = Math.min(s0, s(p)); s1 = Math.max(s1, s(p)); }
+  // the esplanade's level at the landward front, the levels from it
+  const front = outline.filter((p) => s(p) > s1 - (s1 - s0) * 0.15).map(([x, z]) => ground(x, z));
+  const esplanade = Math.max(...front);
+  const levels = [ // [from, to] as fractions along the axis, top above the esplanade
+    { f0: 0.52, f1: 1.01, rise: 7.5, name: 'upper' },
+    { f0: 0.27, f1: 0.52, rise: 0.5, name: 'plaza' },
+    { f0: -0.01, f1: 0.27, rise: -6.5, name: 'battery' },
+  ];
+  const band = (f0, f1) => {
+    const a = s0 + (s1 - s0) * f0, b = s0 + (s1 - s0) * f1, W = 2000, vx = -uz, vz = ux;
+    const c = (sv, w) => [ux * sv + vx * w, uz * sv + vz * w];
+    return [[c(a, -W), c(b, -W), c(b, W), c(a, W), c(a, -W)]];
+  };
+  let pieces = [], top = 0;
+  for (const lv of levels) {
+    let parts;
+    try { parts = polygonClipping.intersection([close(outline)], band(lv.f0, lv.f1)); } catch { parts = []; }
+    for (const poly of parts) {
+      let piece = poly[0].slice(0, -1);
+      if (Math.abs(ringArea(piece)) < 40) continue;
+      if (ringArea(piece) < 0) piece = [...piece].reverse();
+      const g = piece.map(([x, z]) => ground(x, z)), gmin = Math.min(...g);
+      const y = Math.max(esplanade + lv.rise, Math.max(...g) + 3);
+      top = Math.max(top, y);
+      pieces.push({ ring: piece, y, level: lv.name, gmin });
+    }
+  }
+  // walls: battered, a weathered foot; an upper level's wall stands on whatever is below it
+  for (const { ring: piece, y, level } of pieces) {
+    const g = piece.map(([x, z]) => ground(x, z));
+    const dirs = inward(piece), batter = Math.min(4, Math.max(0.8, 0.12 * (y - Math.min(...g))));
+    const upper = piece.map(([x, z], i) => { const d = dirs[i], m = Math.min(batter * d.k, d.room); return [x + d.dx * m, z + d.dz * m]; });
+    for (let i = 0; i < piece.length; i++) {
+      const j = (i + 1) % piece.length, [ax, az] = piece[i], [bx, bz] = piece[j], [cx2, cz2] = upper[j], [dx2, dz2] = upper[i];
+      const yb = Math.min(g[i], g[j]) - 2.5, mid = Math.min(y - 1, yb + Math.max(4.5, (y - yb) * 0.35));
+      t.quad([ax, yb, az], [bx, yb, bz], [bx + (cx2 - bx) * 0.3, mid, bz + (cz2 - bz) * 0.3], [ax + (dx2 - ax) * 0.3, mid, az + (dz2 - az) * 0.3], SANDSTONE_DARK);
+      t.quad([ax + (dx2 - ax) * 0.3, mid, az + (dz2 - az) * 0.3], [bx + (cx2 - bx) * 0.3, mid, bz + (cz2 - bz) * 0.3], [cx2, y, cz2], [dx2, y, dz2], level === 'upper' ? SANDSTONE_LIGHT : SANDSTONE);
+      // a cordon (the round moulding a Spanish fort's wall carries below its parapet)
+      const cy = y - 1.1;
+      t.quad([ax + (dx2 - ax) * 0.95 - (dirs[i].dx) * 0.25, cy, az + (dz2 - az) * 0.95 - dirs[i].dz * 0.25], [bx + (cx2 - bx) * 0.95 - dirs[j].dx * 0.25, cy, bz + (cz2 - bz) * 0.95 - dirs[j].dz * 0.25],
+        [bx + (cx2 - bx) * 0.95 - dirs[j].dx * 0.25, cy + 0.45, bz + (cz2 - bz) * 0.95 - dirs[j].dz * 0.25], [ax + (dx2 - ax) * 0.95 - dirs[i].dx * 0.25, cy + 0.45, az + (dz2 - az) * 0.95 - dirs[i].dz * 0.25], SANDSTONE_LIGHT);
+    }
+    // the terreplein; on the upper level, the plaza of arms sunk into it, rooms round it
+    const court = level === 'upper' ? inset(upper, 15).filter((r) => Math.abs(ringArea(r)) > 400).sort((a, b) => Math.abs(ringArea(b)) - Math.abs(ringArea(a)))[0] : null;
+    const flat = upper.flat(), holes = [];
+    if (court) { holes.push(flat.length / 2); for (const [x, z] of [...court].reverse()) flat.push(x, z); }
+    const idx = earcut(flat, holes);
+    for (let i = 0; i < idx.length; i += 3) t.flat(...[idx[i], idx[i + 1], idx[i + 2]].map((v) => [flat[v * 2], y, flat[v * 2 + 1]]), level === 'battery' ? SANDSTONE : TERREPLEIN);
+    if (court) {
+      const floor = y - 6, cdirs = inward(court);
+      const cflat = court.flat(), cidx = earcut(cflat);
+      for (let i = 0; i < cidx.length; i += 3) t.flat(...[cidx[i], cidx[i + 1], cidx[i + 2]].map((v) => [cflat[v * 2], floor, cflat[v * 2 + 1]]), SANDSTONE_LIGHT);
+      for (let i = 0; i < court.length; i++) {
+        const j = (i + 1) % court.length, [ax, az] = court[i], [bx, bz] = court[j], len = Math.hypot(bx - ax, bz - az);
+        // (the court's walls face into it: wound the other way round)
+        t.quad([bx, floor, bz], [ax, floor, az], [ax, y, az], [bx, y, bz], CREAM);
+        // the rooms' doors, arched, every 5 m
+        const ex = (bx - ax) / len, ez = (bz - az) / len, nx = cdirs[i].dx, nz = cdirs[i].dz;
+        for (let d = 2.5; d < len - 1.5; d += 5) box(t, ax + ex * d + nx * 0.05, az + ez * d + nz * 0.05, ex, ez, 0.9, 0.03, floor, floor + 3.2, DARK);
+      }
+    }
+    parapet(t, upper, y);
+    // garitas on the salient corners, as the forts have them
+    const corners = inward(upper).map((d, i) => ({ d, i })).filter((c) => c.d.convex && c.d.k > 1.12).sort((a, b) => b.d.k - a.d.k);
+    let room = level === 'battery' ? 3 : 4;
+    for (const { d, i } of corners) {
+      const x = upper[i][0] - d.dx * 0.7, z = upper[i][1] - d.dz * 0.7;
+      if (room <= 0 || !free(spots, x, z)) continue;
+      garita(t, x, z, y + 1.1, 1);
+      spots.push([x, z]); room--;
+    }
+  }
+  return { tris: t, top, pieces };
+}
+
+// ---------------------------------------------------------------- the UPR tower
+// The Roosevelt Tower over the Universidad de Puerto Rico's quadrangle in Río Piedras (Spanish Revival, 1937; 52.9 m): a
+// plain square shaft, a clock on each face, an open belfry of paired arches with pinnacles at its corners, and a
+// small dome of glazed tile on an octagonal drum. ring: its outline (four corners); y: the ground; h: its height.
+const TILE_BLUE = [0.16, 0.36, 0.56], TILE_GOLD = [0.88, 0.7, 0.24], CLOCK = [0.95, 0.94, 0.9];
+export function uprTower(t, ring, y, h = 52.9) {
+  const r = simplify(ring, 0.3).slice(0, 4);
+  const cx = r.reduce((s, p) => s + p[0], 0) / r.length, cz = r.reduce((s, p) => s + p[1], 0) / r.length;
+  const [ax, az] = r[0], [bx, bz] = r[1], el = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / el, uz = (bz - az) / el;
+  const half = Math.min(el, Math.hypot(r[2][0] - bx, r[2][1] - bz)) / 2;
+  const k = h / 52.9, Y = (v) => y + v * k;
+  const sq = (hs, y0, y1, rgb, top = true) => box(t, cx, cz, ux, uz, hs, hs, y0, y1, rgb, top);
+  // the shaft, its string courses, a column of narrow windows on each face
+  sq(half, Y(-1), Y(31), CREAM, false);
+  for (const v of [12, 22]) sq(half + 0.12, Y(v), Y(v + 0.5), TRIM);
+  const faces = [[1, 0], [0, 1], [-1, 0], [0, -1]].map(([a, b]) => [ux * a - uz * b, uz * a + ux * b]); // outward, in plan
+  for (const [nx, nz] of faces) {
+    const tx = -nz, tz = nx;
+    for (const v of [5, 9, 16, 20, 26]) box(t, cx + nx * (half + 0.03), cz + nz * (half + 0.03), tx, tz, 0.45, 0.03, Y(v), Y(v + 2.2), DARK);
+  }
+  // the clock stage, a cornice under it and over it, a clock on each face
+  sq(half + 0.35, Y(31), Y(31.8), TRIM);
+  sq(half + 0.1, Y(31.8), Y(37.5), CREAM, false);
+  sq(half + 0.45, Y(37.5), Y(38.4), TRIM);
+  for (const [nx, nz] of faces) {
+    const px = cx + nx * (half + 0.13), pz = cz + nz * (half + 0.13), tx = -nz, tz = nx, cyc = Y(34.6), rr = Math.min(1.7, half * 0.42);
+    const pt = (a, rad, out = 0) => [px + tx * Math.cos(a) * rad + nx * out, cyc + Math.sin(a) * rad, pz + tz * Math.cos(a) * rad + nz * out];
+    for (let s = 0; s < 16; s++) { const a0 = (s / 16) * Math.PI * 2, a1 = ((s + 1) / 16) * Math.PI * 2; t.tri(pt(0, 0, 0.02), pt(a1, rr, 0.02), pt(a0, rr, 0.02), CLOCK); t.quad(pt(a0, rr, 0.04), pt(a1, rr, 0.04), pt(a1, rr + 0.22, 0.04), pt(a0, rr + 0.22, 0.04), TRIM); }
+    box(t, px + nx * 0.06, pz + nz * 0.06, tx, tz, 0.06, 0.02, cyc - 0.1, cyc + rr * 0.85, DARK);            // the minute hand
+    box(t, px + nx * 0.06 + tx * rr * 0.25, pz + nz * 0.06 + tz * rr * 0.25, tx, tz, rr * 0.3, 0.02, cyc - 0.06, cyc + 0.06, DARK); // the hour hand
+  }
+  // the belfry: set in, two tall arches on each face, pinnacles at the corners of the stage below it
+  const bh = half * 0.82;
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, -1], [-1, 1]]) {
+    const px = cx + (ux * sx - uz * sz) * (half * 0.92), pz = cz + (uz * sx + ux * sz) * (half * 0.92);
+    cylinder(t, px, pz, Y(38.4), Y(40.6), 0.35, 0.3, CREAM, 6, false);
+    cylinder(t, px, pz, Y(40.6), Y(42.4), 0.32, 0.03, TRIM, 6, false);
+    // the belfry's corner piers
+    const qx = cx + (ux * sx - uz * sz) * (bh - 0.45), qz = cz + (uz * sx + ux * sz) * (bh - 0.45);
+    box(t, qx, qz, ux, uz, 0.45, 0.45, Y(38.4), Y(45.2), CREAM);
+  }
+  for (const [nx, nz] of faces) {
+    const tx = -nz, tz = nx, fx = cx + nx * (bh - 0.25), fz = cz + nz * (bh - 0.25);
+    // the face between the piers: a spandrel over the arches and a pier between them
+    box(t, fx, fz, tx, tz, bh - 0.9, 0.25, Y(43.4), Y(45.2), CREAM);
+    box(t, fx, fz, tx, tz, 0.3, 0.25, Y(38.4), Y(43.4), CREAM);
+    box(t, fx, fz, tx, tz, bh - 0.9, 0.25, Y(38.4), Y(39.1), CREAM); // the sill
+    for (const off of [-(bh - 0.9) / 2 - 0.15, (bh - 0.9) / 2 + 0.15]) box(t, fx + tx * off * 0.95 - nx * 0.05, fz + tz * off * 0.95 - nz * 0.05, tx, tz, (bh - 1.3) / 2 - 0.1, 0.02, Y(39.1), Y(43.4), DARK); // the open arches
+  }
+  box(t, cx, cz, ux, uz, bh - 0.3, bh - 0.3, Y(38.4), Y(43.2), DARK, false); // (the dark inside the belfry)
+  sq(bh + 0.2, Y(45.2), Y(46), TRIM);
+  // the octagonal drum, the tiled dome, the lantern and the cross
+  const dr = bh * 0.78;
+  cylinder(t, cx, cz, Y(46), Y(48.2), dr, dr, CREAM, 8, false);
+  for (let s = 0; s < 8; s++) { const a = (s + 0.5) / 8 * Math.PI * 2; box(t, cx + Math.cos(a) * dr * 0.93, cz + Math.sin(a) * dr * 0.93, -Math.sin(a), Math.cos(a), 0.28, 0.03, Y(46.6), Y(47.8), DARK); }
+  cylinder(t, cx, cz, Y(48.2), Y(48.6), dr + 0.25, dr + 0.25, TRIM, 8, true);
+  // the dome in gores of blue and gold tile
+  const seg = 16, rings = 6, rise = dr * 1.05;
+  let prev = circle(cx, cz, Y(48.6), dr, seg);
+  for (let i = 1; i <= rings; i++) {
+    const a = (i / rings) * (Math.PI / 2), cur = circle(cx, cz, Y(48.6) + Math.sin(a) * rise, Math.cos(a) * dr, seg);
+    for (let s = 0; s < seg; s++) { const j = (s + 1) % seg; t.quad(prev[s], cur[s], cur[j], prev[j], s % 2 ? TILE_GOLD : TILE_BLUE); }
+    prev = cur;
+  }
+  const ly = Y(48.6) + rise;
+  cylinder(t, cx, cz, ly - 0.1, ly + 0.9, 0.3, 0.3, CREAM, 8, true);
+  cylinder(t, cx, cz, ly + 0.9, ly + 2.2, 0.06, 0.06, DARK, 4, false);
+  box(t, cx, cz, ux, uz, 0.35, 0.05, ly + 1.7, ly + 1.82, DARK);
+  return ly + 2.2;
+}

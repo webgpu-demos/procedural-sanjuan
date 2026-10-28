@@ -49,6 +49,8 @@ export class Streamer {
     const data = new Float32Array(await (await fetch(`${this.base}/${t.file}`)).arrayBuffer());
     this.grid = { x0: t.x0, z0: t.z0, step: t.step, w: t.w, h: t.h, data };
     const decks = this.manifest.decks ?? [];
+    // the rivers and streams in their channels (src/world/channels.js), for the workers to cut into the ground
+    const channels = this.manifest.channels ? await fetch(`${this.base}/${this.manifest.channels}`).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
     this.surface = makeSurface(this.grid, decks);
     this.cover = makeCover(this.grid, decks);
     this.available = new Map(this.manifest.tiles.map((tl) => [tileKey(tl.x, tl.z), tl]));
@@ -62,7 +64,7 @@ export class Streamer {
     shared.uLoadedRect.value.set(this.mask.x0 * size, this.mask.z0 * size, this.mask.w * size, this.mask.h * size);
     this.workers = Array.from({ length: WORKERS }, () => {
       const w = new Worker(new URL('./tileWorker.js', import.meta.url), { type: 'module' });
-      w.postMessage({ type: 'init', decks, grid: { ...this.grid, data: data.slice().buffer } });
+      w.postMessage({ type: 'init', decks, channels, tileSize: this.manifest.tileSize, grid: { ...this.grid, data: data.slice().buffer } });
       w.onmessage = (e) => this.onResult(e.data);
       return w;
     });

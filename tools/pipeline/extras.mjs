@@ -1,5 +1,5 @@
 // The rest of what OpenStreetMap maps here (osm_extra.json): the pedestrian network, platforms, canopies,
-// car parks, barriers, waterways, pools, gates and small objects.
+// car parks, barriers, pools, gates and small objects (the waterways: channels.mjs).
 //
 // Returns
 //   areas       [{ kind, code, ring }]            ground surfaces (clipped to tiles by the caller)
@@ -61,7 +61,6 @@ function ribbon(pts, w, emit) {
 
 const WALK_WIDTH = { pedestrian: 5, footway: 2.2, path: 1.6, cycleway: 2, steps: 2.2 };
 const BARRIER_OF = { fence: BARRIER.FENCE, wall: BARRIER.WALL, retaining_wall: BARRIER.RETAINING, hedge: BARRIER.HEDGE, guard_rail: BARRIER.GUARD_RAIL, city_wall: BARRIER.CITY_WALL };
-const WATER_WIDTH = { river: 9, canal: 6, stream: 2.5, ditch: 1 };
 
 // idx: PolyIndex { building, road, carriageway, sidewalk, water }; ground(x, z); rails: profiled railway lines
 // ({ pts: [x, y, z, ...] }); roadAt: Map of OSM node id -> { dx, dz } direction of the road through it.
@@ -170,7 +169,7 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
     }
   }
 
-  // ---- barriers, waterways, pools
+  // ---- barriers, pools
   for (const w of ways) {
     const t = w.tags;
     if ((BARRIER_OF[t.barrier] || t.historic === 'citywalls') && !hidden(t)) {
@@ -180,8 +179,6 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
         if (inBounds((ax + bx) / 2, (az + bz) / 2) && Math.hypot(bx - ax, bz - az) > 0.3) out.barriers.push([r2(ax), r2(az), r2(bx), r2(bz), -type]);
       }
       tally(type === BARRIER.CITY_WALL ? 'city wall' : t.barrier);
-    } else if (WATER_WIDTH[t.waterway] && !hidden(t)) {
-      ribbon(w.pts, num(t.width) ?? WATER_WIDTH[t.waterway], quadArea(AREA.WATER, 0)); tally(t.waterway);
     } else if (t.leisure === 'swimming_pool' && w.closed && !hidden(t)) {
       out.areas.push({ kind: AREA.POOL, code: 0, ring: openRing(w.pts) }); tally('pool');
     } else if (t.man_made === 'ceremonial_gate') {
