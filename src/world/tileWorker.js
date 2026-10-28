@@ -3,8 +3,9 @@ import { decodeTile } from '../shared/tileformat.js';
 import { buildTile, blockMesh } from './meshing.js';
 import { makeSurface } from '../shared/decks.js';
 import { mergeArrows } from '../shared/roadway.js';
+import { prepareChannels } from './channels.js';
 
-let grid = null, surface = null, merging = null; // merging: the turn arrows painted where nothing turns (roadway.js)
+let grid = null, surface = null, merging = null, channels = null; // merging: the turn arrows painted where nothing turns (roadway.js)
 
 // All typed arrays in a result, so they are transferred rather than copied.
 function buffers(o, out = []) {
@@ -64,6 +65,7 @@ self.onmessage = async ({ data: m }) => {
   if (m.type === 'init') {
     grid = { ...m.grid, data: new Float32Array(m.grid.data) };
     surface = makeSurface(grid, m.decks);
+    channels = m.channels ? prepareChannels(m.channels, m.tileSize, grid) : null; // (channels.json: src/world/channels.js)
     return;
   }
   if (m.type === 'merges') { merging = mergeArrows(new Float32Array(m.segs)); return; }
@@ -74,7 +76,7 @@ self.onmessage = async ({ data: m }) => {
       if (m.type === 'blocks') { const mesh = blockChunk(await res.arrayBuffer()); self.postMessage({ type: 'blocks', key: m.key, mesh }, buffers(mesh)); return; }
       const tile = decodeTile(await res.arrayBuffer());
       if (merging) tile.props = tile.props.filter((p) => !merging(p));
-      const mesh = buildTile(tile, grid, m.tileSize, surface);
+      const mesh = buildTile(tile, grid, m.tileSize, surface, channels);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
       self.postMessage({ type: 'tile', key: m.key, mesh }, buffers(mesh));
     } catch (e) {

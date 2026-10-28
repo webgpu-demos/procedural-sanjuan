@@ -15,16 +15,20 @@ npm run dev                            # http://localhost:5280  (needs compiled 
 
 Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/world/meshing.js`).
 
-- **Buildings**: OSM footprints with OSM heights and floor counts, FEMA LiDAR heights where OSM has none;
+- **Buildings**: OSM footprints with OSM heights; where OSM has no height, the height Garita measured from the
+  USGS lidar point cloud, then OSM floor counts, then FEMA's;
   walls in painted plaster and stucco, pastel in the neighbourhoods, white and cream on the condominium towers.
   Inside Old San Juan's walls every house gets one of the colonial city's colours, and El Morro, San
-  Cristóbal and their bastions are drawn as windowless sandstone. Flat concrete roofs with water tanks; a
+  Cristóbal and their bastions are drawn as windowless sandstone: El Morro on its terraces stepping down to the
+  sea, with its sunken plaza; the University of Puerto Rico's tower with its clock, belfry and tiled dome. Flat concrete roofs with water tanks; a
   few houses with metal roofs. Windows lit room by room at night.
 - **Water** (`materials.js`, `water.js`, `reflections.js`): the trade-wind sea in waves, deep blue offshore and turquoise
   over the shallows, surf where the Atlantic reaches the shore and still water in the bay and the lagoons (a map of
   the distance to land and the openness to the ocean, made at load); the sun's glitter, and the city mirrored in it.
 - **Ground**: terrain, the sea traced from OSM's coastline (the Atlantic, San Juan Bay, the Condado lagoon),
-  beaches, parks, mangrove, the blue adoquín cobbles of the old city, the city walls (La Muralla), and
+  beaches, parks, mangrove, the blue adoquín cobbles of the old city, the city walls (La Muralla); rivers,
+  canals and streams in channels cut into the ground (`src/world/channels.js`), the water level from bank to
+  bank and falling the way it flows (`tools/pipeline/channels.mjs`); and
   road surfaces generated from the OSM centrelines (`tools/pipeline/roadsurface.mjs`): each road widened
   to its lanes and sidewalks, the buildings cut out of it, then split into carriageway and sidewalk.
 - **Rules of the road**: right-hand traffic. US (MUTCD) paint: double yellow centre lines, white lane and
@@ -256,13 +260,14 @@ World frame: metres, x east, y up (above mean sea level), z south; the origin is
 |---|---|
 | `manifest.json` | origin, bounds, tile list, terrain grid description, sea level, default view, attribution |
 | `t_<x>_<z>.bin` | one 256 m tile: buildings, ground surfaces (roads, paint, parks, beaches, the sea), props and wires; format in `src/shared/tileformat.js` |
-| `x_<x>_<z>.bin` | a tile's landmark models (`tools/pipeline/landmarks.mjs`): the forts with their tiers, parapets and garitas, the garitas of the city walls, El Morro's lighthouse, the Capitol dome, the cathedral front, the Convention Center roof |
+| `x_<x>_<z>.bin` | a tile's landmark models (`tools/pipeline/landmarks.mjs`): the forts with their tiers, parapets and garitas (El Morro's terraces and sunken plaza), the garitas of the city walls, El Morro's lighthouse, the Capitol dome, the cathedral front, the Convention Center roof, the UPR tower |
 | `k_<x>_<z>.bin` | the buildings alone, 4 x 4 tiles to a file, drawn as plain blocks in the distance when an area streams |
 | `terrain.bin` | Float32 height grid, 5 m spacing, out to the tile grid (`manifest.extent`) |
 | `far.bin` | Float32 height grid of the surroundings, 128 m spacing, 12 km beyond the extent (sea below 0) |
 | `roads.json` | road graph: junction nodes `[x, y, z]`, edges with polylines (road level per point) and OSM attributes |
 | `rails.json` | surface and elevated railway polylines |
 | `structures.json` | footbridges, station platforms and canopies |
+| `channels.json` | rivers, canals, streams and ditches: per stretch its kind, width, end flags and line with the water's level (`tools/pipeline/channels.mjs`) |
 
 `src/shared/` is used by both the compiler and the client.
 

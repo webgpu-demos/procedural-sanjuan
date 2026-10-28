@@ -82,6 +82,11 @@ function landKind(t) {
   return null;
 }
 
+// How thickly a park or a wood is filled with trees not mapped one by one (a share of TREE_SPACING's): open ground
+// none (a cemetery, a meadow, grassland), a lawn few (San Juan maps its trees: some 27,000 of them), scrub a
+// third (bushes on a slope, not a forest).
+const treeFill = (t) => (t.landuse === 'cemetery' || t.landuse === 'meadow' || t.natural === 'grassland' ? 0
+  : t.landuse === 'grass' ? 0.25 : t.natural === 'scrub' ? 0.35 : 1);
 const sportOf = (t) => (/tennis/.test(t.sport ?? '') ? SPORT.TENNIS : /soccer|futsal|multi|american_football|rugby/.test(t.sport ?? '') ? SPORT.TURF
   : /baseball|softball/.test(t.sport ?? '') ? SPORT.DIRT : SPORT.OTHER);
 // Tree models by genus: 1 coconut palm (and palms in general), 2 flamboyán, 3 royal palm, 0 anything else
@@ -129,7 +134,7 @@ export function readLand(file) {
       if (kind == null) continue;
       const outers = e.members.filter((m) => m.type === 'way' && m.role !== 'inner' && ways.has(m.ref)).map((m) => ways.get(m.ref).nodes);
       e.members.forEach((m) => inRelation.add(m.ref));
-      for (const ring of stitch(outers)) out.areas.push({ kind, ring: ll(ring), code: sportOf(t) });
+      for (const ring of stitch(outers)) out.areas.push({ kind, ring: ll(ring), code: sportOf(t), trees: treeFill(t) });
     }
   }
   for (const e of elements) {
@@ -143,7 +148,7 @@ export function readLand(file) {
       if (t.natural === 'tree_row') { const row = ll(e.nodes); row.genus = genusOf(t); out.treeRows.push(row); continue; }
       if (t.footway === 'crossing') { if (t.crossing !== 'unmarked' && t.crossing !== 'no') out.crossings.push(ll(e.nodes)); continue; }
       const kind = landKind(t);
-      if (kind != null && e.nodes[0] === e.nodes.at(-1) && e.nodes.length >= 4) out.areas.push({ kind, ring: ll(e.nodes), code: sportOf(t) });
+      if (kind != null && e.nodes[0] === e.nodes.at(-1) && e.nodes.length >= 4) out.areas.push({ kind, ring: ll(e.nodes), code: sportOf(t), trees: treeFill(t) });
     }
   }
   return out;
@@ -174,7 +179,7 @@ const TREE_SPACING = { [AREA.PARK]: [15, 0.5], [AREA.WOOD]: [8.5, 0.85], [AREA.B
 const AVENUE = new Set(['trunk', 'primary', 'secondary', 'tertiary']);
 const BACKSTREET = new Set(['residential', 'unclassified', 'living_street', 'tertiary']);
 
-// land: [{ kind, ring: [[x, z]] }] in world metres; edges: road graph edges with pts [x, y, z, ...];
+// land: [{ kind, ring: [[x, z]], trees }] in world metres (trees: the share of the usual filling); edges: road graph edges with pts [x, y, z, ...];
 // idx: { building, road, carriageway, sidewalk, water } PolyIndex. Returns { props, wires }.
 export function placeProps({ land, trees, treeRows, vending, edges, idx, inBounds }) {
   const props = [], wires = [];
@@ -199,10 +204,10 @@ export function placeProps({ land, trees, treeRows, vending, edges, idx, inBound
   for (const row of treeRows) forEachAlong(row, 7, (x, z) => tree(x, z, true, row.genus));
 
   // parks, woods and beaches: a jittered grid inside each polygon (coconut palms on the sand)
-  for (const { kind, ring } of land) {
+  for (const { kind, ring, trees: share = 1 } of land) {
     const sp = TREE_SPACING[kind];
-    if (!sp) continue;
-    const [step, fill] = sp;
+    if (!sp || !share) continue;
+    const step = sp[0], fill = sp[1] * share;
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
     for (let i = Math.floor(x0 / step); i <= Math.floor(x1 / step); i++)
