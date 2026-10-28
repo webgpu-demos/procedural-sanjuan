@@ -1,0 +1,7 @@
+1239 counted roads matched; simulated/counted 0.51; GEH<5 14%, GEH<10 28%, r² 0.37
+  other                  n    4  ratio 3.53  GEH<5    0%  GEH<10    0%
+  interstate / freeway   n  343  ratio 0.43  GEH<5    8%  GEH<10   17%
+  arterials              n  789  ratio 0.63  GEH<5   16%  GEH<10   31%
+  collectors             n   81  ratio 0.82  GEH<5   23%  GEH<10   47%
+  local                  n   22  ratio 0.44  GEH<5    9%  GEH<10   32%
+worst: [('PR-18', 19472, 1407), ('PR-22', 15976, 410), ('PR-22', 19072, 2269), ('PR-22', 19072, 2411), ('PR-22', 15976, 1160), ('PR-22', 19072, 2572)]
