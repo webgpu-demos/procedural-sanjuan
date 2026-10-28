@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-10-28T00:28:11.730940+00:00 by Eclipse SUMO sumo 1.28.0
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz"/>
+        <route-files value="/mnt/sim/assign/009/trips_009.rou.alt.xml.gz,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/buses.xml"/>
+        <additional-files value="/mnt/sim/diag/ed.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/busstops.add.xml,/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/lab/taz.add.xml"/>
+    </input>
+
+    <output>
+        <summary-output value="/mnt/sim/diag/summary.xml"/>
+        <summary-output.period value="60"/>
+        <statistic-output value="/mnt/res/stats.xml"/>
+    </output>
+
+    <time>
+        <begin value="16200"/>
+        <end value="36900"/>
+    </time>
+
+    <processing>
+        <ignore-junction-blocker value="15"/>
+        <ignore-route-errors value="true"/>
+        <time-to-teleport value="240"/>
+        <max-depart-delay value="900"/>
+        <lanechange.duration value="2.5"/>
+        <time-to-impatience value="90"/>
+    </processing>
+
+    <routing>
+        <routing-algorithm value="astar"/>
+        <device.rerouting.probability value="0.25"/>
+        <device.rerouting.period value="300"/>
+        <device.rerouting.threads value="4"/>
+    </routing>
+
+    <report>
+        <log value="/mnt/sim/diag/sumo.log"/>
+        <duration-log.statistics value="true"/>
+        <step-log.period value="900"/>
+    </report>
+
+</sumoConfiguration>
+-->
+
+<statistics xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/statistic_file.xsd">
+    <performance clockBegin="1793147292.78" clockEnd="1793153174.04" clockDuration="5881.26" traciDuration="104.47" realTimeFactor="3.52" vehicleUpdatesPerSecond="64894.11" personUpdatesPerSecond="0.00" begin="16200.00" end="36900.00" duration="20700.00"/>
+    <vehicles loaded="202402" inserted="189918" running="35081" waiting="2"/>
+    <teleports total="27005" jam="14405" yield="9601" wrongLane="2801"/>
+    <safety collisions="198" emergencyStops="2" emergencyBraking="81"/>
+    <persons loaded="0" running="0" jammed="0"/>
+    <personTeleports total="0" abortWait="0" wrongDest="0"/>
+    <vehicleTripStatistics count="154837" routeLength="8712.16" speed="10.28" duration="1166.79" waitingTime="432.23" timeLoss="596.83" departDelay="13.41" departDelayWaiting="-1.00" totalTravelTime="180661842.00" totalDepartDelay="2076890.00"/>
+    <pedestrianStatistics number="0" routeLength="0.00" duration="0.00" timeLoss="0.00"/>
+    <rideStatistics number="0"/>
+    <transportStatistics number="0"/>
+</statistics>
