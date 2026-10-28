@@ -1,0 +1,7 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
+++ SCALE=0.85
+++ ITER=0
+++ RUNARGS='--reroute=1 --reroute-period=300'
+++ DEMANDARGS=--spread=15
+++ sh tools/sim/all.sh sanjuan
