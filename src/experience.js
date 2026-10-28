@@ -248,16 +248,17 @@ export class Experience {
   }
   // (the high shots stay under the trade-wind cumulus: its base is at 450 m)
   // The apagón as a scene: high over Hato Rey, looking south to Monacillos as the grid stumbles and the dark rolls
-  // towards the camera; then, with the day, Avenida Piñero in Río Piedras queued at its dead signals (where the
-  // run jams worst against the ordinary morning); then Río Piedras from the east, the sun behind, red with the jam
+  // towards the camera; then, with the day, Avenida 65 de Infantería queued 700 m back from a dead signal (where the
+  // run jams worst against the ordinary morning: 4% of its free speed at 7:00, against 94%); then the city's east
+  // from the east, the sun behind, red with the jam
   apagonShots(at) {
     const h = (s) => (at + s) / 3600;
     return [
       { hour: h(-9), rate: 1, dur: 21, eye: [[4150, 410, 2350], [4250, 390, 2750]], at: [[4450, 0, 7600], [4450, 0, 7700]],
         cap: ['5:45 a.m.', 'Monacillos, Río Piedras · el centro de transmisión'], capAt: 1.5 },
-      { hour: 7.0, rate: 1, dur: 15, eye: [[5040, 8, 6425], [5072, 6.5, 6422]], at: [[5195, 2.5, 6416], [5195, 2.5, 6416]],
-        cap: ['7:00 a.m. · Avenida Piñero, Río Piedras', 'sin semáforos: cada esquina, un pare · every signal dark, every corner a stop'] },
-      { hour: 7.3, rate: 1, dur: 15, map: true, eye: [[6500, 380, 6000], [6300, 330, 6150]], at: [[4800, 0, 7200], [4750, 0, 7250]],
+      { hour: 7.0, rate: 1, dur: 15, eye: [[12490, 6.5, 7473], [12458, 5.5, 7476]], at: [[12230, 2, 7500], [12230, 2, 7500]],
+        cap: ['7:00 a.m. · Avenida 65 de Infantería', 'sin semáforos: cada esquina, un pare · every signal dark, every corner a stop'] },
+      { hour: 7.3, rate: 1, dur: 15, map: true, eye: [[13300, 380, 6200], [13100, 330, 6350]], at: [[11500, 0, 6900], [11450, 0, 6950]],
         cap: ['7:18 a.m. · sin semáforos', 'the rush hour, with no signals: red is the jam'] },
     ];
   }
