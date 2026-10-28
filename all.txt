@@ -1,0 +1,294 @@
+   0.2s 16 expressway stretches narrowed to the lanes beyond them
+   0.2s 7072 joins: 42907 edges
+   0.3s 1030 junctions joined from 2382 nodes
+   0.6s plain network: 17442 nodes (427 with lights, 8 zippers), 40491 directed edges from 36830 roads
+Success.
+  10.0s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.1 MB)
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39268 of 39942 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+201902 trips: {'work': 130751, 'through': 8605, 'school': 25026, 'errand': 24040, 'airport': 6261, 'delivery': 8564} (scale 0.6)
+departures by half hour: 4.5h 2450 5.0h 6867 5.5h 8674 6.0h 18399 6.5h 21298 7.0h 46067 7.5h 30392 8.0h 22992 8.5h 15608 9.0h 13905 9.5h 15250
+-> data/sim/sanjuan/morning
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+> Executing step 0
+>> Running router on /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/trips.xml
+>>> Begin time: 2026-10-27 23:48:41.786160
+>>> End time: 2026-10-27 23:49:11.680131
+>>> Duration: 0:00:29.893971
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:49:11.680162
+>>> End time: 2026-10-27 23:50:28.314735
+>>> Duration: 0:01:16.634573
+<<
+< Step 0 ended (duration: 0:01:46.528633)
+------------------
+
+> Executing step 1
+>> Running router on 000/trips_000.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:50:28.315694
+>>> End time: 2026-10-27 23:52:29.473676
+>>> Duration: 0:02:01.157982
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:52:29.473715
+>>> End time: 2026-10-27 23:54:03.980084
+>>> Duration: 0:01:34.506369
+<<
+< Step 1 ended (duration: 0:03:35.664449)
+------------------
+
+> Executing step 2
+>> Running router on 001/trips_001.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:54:03.981530
+>>> End time: 2026-10-27 23:56:13.272955
+>>> Duration: 0:02:09.291425
+<<
+>> Running simulation
+>>> Begin time: 2026-10-27 23:56:13.272997
+>>> End time: 2026-10-27 23:57:49.001273
+>>> Duration: 0:01:35.728276
+<<
+< Step 2 ended (duration: 0:03:45.019807)
+------------------
+
+> Executing step 3
+>> Running router on 002/trips_002.rou.alt.xml.gz
+>>> Begin time: 2026-10-27 23:57:49.002673
+>>> End time: 2026-10-28 00:00:08.802884
+>>> Duration: 0:02:19.800211
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:00:08.802925
+>>> End time: 2026-10-28 00:01:59.746263
+>>> Duration: 0:01:50.943338
+<<
+< Step 3 ended (duration: 0:04:10.743647)
+------------------
+
+> Executing step 4
+>> Running router on 003/trips_003.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 00:01:59.747370
+>>> End time: 2026-10-28 00:04:26.589762
+>>> Duration: 0:02:26.842392
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:04:26.589805
+>>> End time: 2026-10-28 00:06:11.583549
+>>> Duration: 0:01:44.993744
+<<
+< Step 4 ended (duration: 0:04:11.836231)
+------------------
+
+> Executing step 5
+>> Running router on 004/trips_004.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 00:06:11.584771
+>>> End time: 2026-10-28 00:08:44.630767
+>>> Duration: 0:02:33.045996
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:08:44.630799
+>>> End time: 2026-10-28 00:10:38.914266
+>>> Duration: 0:01:54.283467
+<<
+< Step 5 ended (duration: 0:04:27.329554)
+------------------
+
+> Executing step 6
+>> Running router on 005/trips_005.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 00:10:38.915345
+>>> End time: 2026-10-28 00:13:15.576321
+>>> Duration: 0:02:36.660976
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:13:15.576363
+>>> End time: 2026-10-28 00:15:19.925768
+>>> Duration: 0:02:04.349405
+<<
+< Step 6 ended (duration: 0:04:41.010482)
+------------------
+
+> Executing step 7
+>> Running router on 006/trips_006.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 00:15:19.926950
+>>> End time: 2026-10-28 00:18:06.023276
+>>> Duration: 0:02:46.096326
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:18:06.023315
+>>> End time: 2026-10-28 00:20:04.610771
+>>> Duration: 0:01:58.587456
+<<
+< Step 7 ended (duration: 0:04:44.683880)
+------------------
+
+> Executing step 8
+>> Running router on 007/trips_007.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 00:20:04.611897
+>>> End time: 2026-10-28 00:22:47.882035
+>>> Duration: 0:02:43.270138
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:22:47.882072
+>>> End time: 2026-10-28 00:24:46.492087
+>>> Duration: 0:01:58.610015
+<<
+< Step 8 ended (duration: 0:04:41.880249)
+------------------
+
+> Executing step 9
+>> Running router on 008/trips_008.rou.alt.xml.gz
+>>> Begin time: 2026-10-28 00:24:46.493466
+>>> End time: 2026-10-28 00:27:31.918336
+>>> Duration: 0:02:45.424870
+<<
+>> Running simulation
+>>> Begin time: 2026-10-28 00:27:31.918377
+>>> End time: 2026-10-28 00:29:38.467853
+>>> Duration: 0:02:06.549476
+<<
+< Step 9 ended (duration: 0:04:51.974447)
+------------------
+
+dua-iterate ended (duration: 0:40:56.682979)
+10 rounds in 41 min -> data/sim/sanjuan/morning/assign/009/trips_009.rou.alt.xml.gz
+    2.3s sumo morning: 4.50 h to 10.25 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (4737ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml' ... done (43ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (10ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (5ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz'
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/buses.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+Step #16200.00 (133ms ~= 7.52*RT, ~0.00UPS, vehicles TOT 0 ACT 0 BUF 0)                   Step #17100.00 (16ms ~= 62.50*RT, ~43875.00UPS, vehicles TOT 934 ACT 702 BUF 0)           Step #18000.00 (22ms ~= 45.45*RT, ~52363.64UPS, vehicles TOT 2457 ACT 1152 BUF 6)         Step #18900.00 (47ms ~= 21.28*RT, ~52148.94UPS, vehicles TOT 5653 ACT 2451 BUF 0)         Step #19800.00 (60ms ~= 16.67*RT, ~50933.33UPS, vehicles TOT 9365 ACT 3056 BUF 2)         Step #20700.00 (5687ms ~= 0.18*RT, ~633.55UPS, vehicles TOT 13680 ACT 3603 BUF 3)         Step #21600.00 (72ms ~= 13.89*RT, ~53819.44UPS, vehicles TOT 18075 ACT 3875 BUF 3)        Step #22500.00 (98ms ~= 10.20*RT, ~74571.43UPS, vehicles TOT 26705 ACT 7308 BUF 7)        Step #23400.00 (136ms ~= 7.35*RT, ~68757.35UPS, vehicles TOT 36005 ACT 9351 BUF 524)      Step #24300.00 (132ms ~= 7.58*RT, ~75522.73UPS, vehicles TOT 44827 ACT 9969 BUF 1113)     Step #25200.00 (148ms ~= 6.76*RT, ~81756.76UPS, vehicles TOT 55425 ACT 12100 BUF 975)     Step #26100.00 (226ms ~= 4.42*RT, ~92796.46UPS, vehicles TOT 75594 ACT 20972 BUF 1384)    Step #27000.00 (320ms ~= 3.12*RT, ~95553.12UPS, vehicles TOT 98831 ACT 30577 BUF 1963)    Step #27900.00 (344ms ~= 2.91*RT, ~102537.79UPS, vehicles TOT 114563 ACT 35273 BUF 2558)  Step #28800.00 (379ms ~= 2.64*RT, ~101187.34UPS, vehicles TOT 125690 ACT 38350 BUF 2131)  Step #29700.00 (371ms ~= 2.70*RT, ~111520.22UPS, vehicles TOT 135257 ACT 41374 BUF 2025)  Step #30600.00 (434ms ~= 2.30*RT, ~104366.36UPS, vehicles TOT 144516 ACT 45295 BUF 2637)  Step #31500.00 (401ms ~= 2.49*RT, ~116648.38UPS, vehicles TOT 150827 ACT 46776 BUF 2091)  Step #32400.00 (421ms ~= 2.38*RT, ~116562.95UPS, vehicles TOT 156954 ACT 49073 BUF 1477)  Step #33300.00 (433ms ~= 2.31*RT, ~118579.68UPS, vehicles TOT 162678 ACT 51345 BUF 1328)  Step #34200.00 (455ms ~= 2.20*RT, ~118261.54UPS, vehicles TOT 168732 ACT 53809 BUF 1234)  Step #35100.00 (475ms ~= 2.11*RT, ~118981.05UPS, vehicles TOT 175195 ACT 56516 BUF 1105)  Step #36000.00 (520ms ~= 1.92*RT, ~115182.69UPS, vehicles TOT 182186 ACT 59895 BUF 1134)  Step #36900.00 (493ms ~= 2.03*RT, ~116565.92UPS, vehicles TOT 182432 ACT 57467 BUF 2)     
+Simulation ended at time: 36900.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 7890.36s
+ Real time factor: 2.62345
+ UPS: 69781.870393
+Vehicles:
+ Inserted: 182432 (Loaded: 202402)
+ Running: 57467
+ Waiting: 2
+ Teleports: 51417 (Collisions: 230, Jam: 26472, Yield: 19258, Wrong Lane: 5457)
+ Emergency Braking: 51
+Statistics (avg of 182432):
+ RouteLength: 7023.97
+ Speed: 7.04
+ Duration: 3018.13
+ WaitingTime: 2205.03
+ TimeLoss: 2471.23
+ DepartDelay: 17.50
+ DepartDelayWaiting: 901.00
+AStarRouter answered 31968 queries and explored 677.98 edges on average.
+AStarRouter spent 26.75s answering queries (0.84ms on average).
+ 7900.1s sumo done
+ 7935.2s tracks: 21 M samples read, up to 6.40 h, 23701 tracks, 8709 on the road
+ 7959.0s tracks: 41 M samples read, up to 6.95 h, 41759 tracks, 11431 on the road
+ 7981.9s tracks: 62 M samples read, up to 7.30 h, 58319 tracks, 22581 on the road
+ 7999.7s tracks: 81 M samples read, up to 7.50 h, 70083 tracks, 30321 on the road
+ 8015.2s tracks: 100 M samples read, up to 7.67 h, 78803 tracks, 33643 on the road
+ 8031.0s tracks: 121 M samples read, up to 7.84 h, 86361 tracks, 35789 on the road
+ 8045.0s tracks: 140 M samples read, up to 7.98 h, 92198 tracks, 37386 on the road
+ 8059.7s tracks: 161 M samples read, up to 8.13 h, 98019 tracks, 39146 on the road
+ 8074.0s tracks: 182 M samples read, up to 8.28 h, 103096 tracks, 40682 on the road
+ 8087.1s tracks: 201 M samples read, up to 8.40 h, 107499 tracks, 42500 on the road
+ 8100.6s tracks: 221 M samples read, up to 8.54 h, 112139 tracks, 44092 on the road
+ 8112.8s tracks: 240 M samples read, up to 8.65 h, 116384 tracks, 44668 on the road
+ 8125.9s tracks: 261 M samples read, up to 8.78 h, 120643 tracks, 45454 on the road
+ 8137.8s tracks: 280 M samples read, up to 8.90 h, 124406 tracks, 46389 on the road
+ 8151.1s tracks: 301 M samples read, up to 9.02 h, 128397 tracks, 47327 on the road
+ 8163.8s tracks: 322 M samples read, up to 9.14 h, 132190 tracks, 48382 on the road
+ 8175.5s tracks: 341 M samples read, up to 9.25 h, 135796 tracks, 49090 on the road
+ 8188.3s tracks: 361 M samples read, up to 9.36 h, 139546 tracks, 50158 on the road
+ 8199.9s tracks: 380 M samples read, up to 9.47 h, 143241 tracks, 50981 on the road
+ 8213.0s tracks: 401 M samples read, up to 9.58 h, 147273 tracks, 52020 on the road
+ 8225.7s tracks: 422 M samples read, up to 9.69 h, 151281 tracks, 53024 on the road
+ 8237.4s tracks: 441 M samples read, up to 9.79 h, 154921 tracks, 54091 on the road
+ 8250.1s tracks: 461 M samples read, up to 9.89 h, 158904 tracks, 55325 on the road
+ 8260.9s tracks: 480 M samples read, up to 9.99 h, 162459 tracks, 56563 on the road
+ 8272.6s tracks: 501 M samples read, up to 10.09 h, 166228 tracks, 55749 on the road
+ 8285.0s tracks: 522 M samples read, up to 10.19 h, 169456 tracks, 54967 on the road
+ 8293.6s 225808 tracks from 533 M samples; peak 56742 cars on the road at once
+ 8663.0s 138 windows, 253.0 MB (gzipped)
+ 8669.1s speeds: 69 intervals x 46803 edges
+ 8673.6s done: {"total": "51417", "jam": "26472", "yield": "19258", "wrongLane": "5457"}
+1239 counted roads matched; simulated/counted 0.29; GEH<5 9%, GEH<10 17%, r² 0.20
+  other                  n    4  ratio 2.74  GEH<5    0%  GEH<10   25%
+  interstate / freeway   n  343  ratio 0.20  GEH<5    7%  GEH<10   12%
+  arterials              n  789  ratio 0.41  GEH<5   10%  GEH<10   20%
+  collectors             n   81  ratio 0.45  GEH<5   11%  GEH<10   19%
+  local                  n   22  ratio 0.25  GEH<5    5%  GEH<10    9%
+worst: [('PR-18', 21296, 1374), ('PR-18', 19472, 999), ('PR-18', 19472, 1195), ('PR-18', 21296, 1963), ('PR-18', 21296, 1975), ('PR-22', 15976, 0)]
+    3.6s sumo apagon: 5.75 h to 8.50 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/allway.net.xml.gz' ... done (4750ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/outputs.add.xml' ... done (40ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (12ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (6ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/apagon.add.xml' ... done (5ms).
+Loading state from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/state_20700.xml.gz' ... done (2995ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz'
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/buses.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 20700.00.
+Step #20700.00 (100ms ~= 10.00*RT, ~36030.00UPS, vehicles TOT 13681 ACT 3603 BUF 3)       Step #21600.00 (75ms ~= 13.33*RT, ~52093.33UPS, vehicles TOT 18071 ACT 3907 BUF 9)        Step #22500.00 (113ms ~= 8.85*RT, ~63522.12UPS, vehicles TOT 26304 ACT 7178 BUF 410)      Step #23400.00 (142ms ~= 7.04*RT, ~66140.85UPS, vehicles TOT 35430 ACT 9392 BUF 1043)     Step #24300.00 (149ms ~= 6.71*RT, ~69476.51UPS, vehicles TOT 44188 ACT 10352 BUF 1637)    Step #25200.00 (167ms ~= 5.99*RT, ~76479.04UPS, vehicles TOT 54795 ACT 12772 BUF 1596)    Step #26100.00 (256ms ~= 3.91*RT, ~87074.22UPS, vehicles TOT 74764 ACT 22291 BUF 1733)    Step #27000.00 (332ms ~= 3.01*RT, ~96924.70UPS, vehicles TOT 97397 ACT 32179 BUF 2490)    Step #27900.00 (358ms ~= 2.79*RT, ~103558.66UPS, vehicles TOT 112853 ACT 37074 BUF 2823)  Step #28800.00 (375ms ~= 2.67*RT, ~106277.33UPS, vehicles TOT 123564 ACT 39854 BUF 2632)  Step #29700.00 (405ms ~= 2.47*RT, ~105441.98UPS, vehicles TOT 132934 ACT 42704 BUF 2617)  Step #30600.00 (411ms ~= 2.43*RT, ~113440.39UPS, vehicles TOT 142424 ACT 46624 BUF 2823)  
+Simulation ended at time: 30600.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 3464.96s
+ Real time factor: 2.85717
+ UPS: 63133.654202
+Vehicles:
+ Inserted: 142424 (Loaded: 158197)
+ Running: 46624
+ Waiting: 2823
+ Teleports: 11974 (Collisions: 80, Jam: 5061, Yield: 5484, Wrong Lane: 1349)
+ Emergency Braking: 50
+Statistics (avg of 132346):
+ RouteLength: 6895.67
+ Speed: 7.31
+ Duration: 1665.91
+ WaitingTime: 861.52
+ TimeLoss: 1203.56
+ DepartDelay: 31.62
+ DepartDelayWaiting: 453.31
+AStarRouter answered 13450 queries and explored 498.07 edges on average.
+AStarRouter spent 7.94s answering queries (0.59ms on average).
+ 3475.9s sumo done
+ 3508.6s tracks: 21 M samples read, up to 6.65 h, 20434 tracks, 9863 on the road
+ 3531.7s tracks: 40 M samples read, up to 7.10 h, 35929 tracks, 16507 on the road
+ 3553.6s tracks: 61 M samples read, up to 7.37 h, 49293 tracks, 26929 on the road
+ 3570.7s tracks: 81 M samples read, up to 7.55 h, 58808 tracks, 33094 on the road
+ 3586.4s tracks: 100 M samples read, up to 7.70 h, 66213 tracks, 35932 on the road
+ 3602.4s tracks: 121 M samples read, up to 7.86 h, 72966 tracks, 37886 on the road
+ 3617.9s tracks: 142 M samples read, up to 8.01 h, 78829 tracks, 39245 on the road
+ 3631.7s tracks: 161 M samples read, up to 8.14 h, 83712 tracks, 40658 on the road
+ 3646.5s tracks: 182 M samples read, up to 8.28 h, 88561 tracks, 42340 on the road
+ 3659.5s tracks: 201 M samples read, up to 8.40 h, 92998 tracks, 43863 on the road
+ 3669.5s 141804 tracks from 216 M samples; peak 45531 cars on the road at once
+ 3850.3s 96 windows, 162.2 MB (gzipped)
+ 3853.7s speeds: 48 intervals x 46803 edges
+ 3855.7s done: {"total": "11974", "jam": "5061", "yield": "5484", "wrongLane": "1349"}
+1239 counted roads matched; simulated/counted 0.27; GEH<5 7%, GEH<10 16%, r² 0.21
+  other                  n    4  ratio 2.10  GEH<5   50%  GEH<10   50%
+  interstate / freeway   n  343  ratio 0.19  GEH<5    5%  GEH<10   10%
+  arterials              n  789  ratio 0.38  GEH<5    8%  GEH<10   19%
+  collectors             n   81  ratio 0.41  GEH<5   10%  GEH<10   16%
+  local                  n   22  ratio 0.27  GEH<5    9%  GEH<10    9%
+worst: [('PR-18', 21296, 1121), ('PR-18', 19472, 863), ('PR-18', 21296, 1567), ('PR-18', 21296, 1585), ('PR-18', 19472, 982), ('PR-18', 21296, 1744)]
+all runs done
