@@ -8,7 +8,7 @@ cd "$(dirname "$0")/../.."
 AREA=${1:-sanjuan}
 PY=.venv-sim/bin/python
 node tools/sim/network.mjs --area=$AREA
-$PY tools/sim/demand.py --area=$AREA --scale=${SCALE:-1}
+$PY tools/sim/demand.py --area=$AREA --scale=${SCALE:-1} $DEMANDARGS
 $PY tools/sim/gtfs.py --area=$AREA
 $PY tools/sim/assign.py --area=$AREA --iter=${ITER:-10}
 $PY tools/sim/run.py --area=$AREA --scenario=morning --demand=morning --end=10.25 --share=${SCALE:-1} $RUNARGS

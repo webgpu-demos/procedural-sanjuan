@@ -164,10 +164,14 @@ def profile(name):
 # share had been their sum over San Juan's workers alone, 2.4 for 0.83: Toa Baja and Toa Alta drove in three times over)
 ALL = {k: sum(v[k] for v in DEP.values()) for k in ['total'] + LABELS}
 AM_SHARE = {n: profile(n).sum() / (DEP.get(n) or ALL)['total'] for n in MUNI}
+SPREAD = float(args.get('spread', 0)) * 60  # (--spread=minutes: each departure moved by up to that, either way)
 def depart_time(name):
     w = profile(name); i = np.searchsorted(np.cumsum(w), rng.random() * w.sum())
     lo, hi = BINS[i]; lo = max(lo, 4.5)
-    return (lo + rng.random() * (hi - lo)) * 3600
+    t = (lo + rng.random() * (hi - lo)) * 3600
+    # (people answer the survey in round half hours: half past seven stands for 7:20 as much as 7:40, and the
+    # half hours' steps smooth into a slope)
+    return t + (rng.random() - rng.random()) * SPREAD if SPREAD else t
 
 # ---------------------------------------------------------------- trip ends inside the area
 def zone_sampler(name, kind):
