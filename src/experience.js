@@ -413,7 +413,7 @@ export class Experience {
     this.truth.innerHTML = `<h3>¿Qué tan real es esto?</h3><div class="sub">How real is this</div>
       <div>${n} viajes simulados con SUMO, de las 4:30 a las ${end}, a partir de los flujos de viaje al trabajo del Censo (ACS),
       las horas de salida de cada municipio y los edificios de la ciudad. Se comparan con los conteos de tránsito de la FHWA (HPMS 2024).</div>
-      ${sim.index.share ? `<div class="not">Se simula el ${Math.round(sim.index.share * 100)}% de la demanda estimada: con más, las
+      ${sim.index.share && sim.index.share < 1 ? `<div class="not">Se simula el ${Math.round(sim.index.share * 100)}% de la demanda estimada: con más, las
       intersecciones de la red simulada (trazadas de OpenStreetMap, con semáforos supuestos) se trancan por completo antes de las 8. Es
       un límite del modelo, no de la ciudad. · ${Math.round(sim.index.share * 100)}% of the estimated demand: with more, the simulated
       network locks solid before 8 a.m.</div>` : ''}
