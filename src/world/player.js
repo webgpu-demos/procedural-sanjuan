@@ -123,7 +123,8 @@ function person() {
 }
 
 export class Walker {
-  constructor({ scene, surface, sim, tiles, lift = () => 0 }) {
+  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null }) {
+    this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
     this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
     this.on = false; this.label = 'A pie'; this.unit = 'km/h';
     this.model = new THREE.Group(); this.figure = person(); this.model.add(this.figure); this.model.visible = false; scene.add(this.model);
@@ -138,7 +139,7 @@ export class Walker {
   // the ground under (x, z), or the deck at about this height (a walkway, a flyover)
   floor(x, z) {
     // (the street as drawn, a bridge's deck at street level included; on the sidewalk, not in it)
-    const ground = streetAt(this.surface, x, z, this.y) + this.lift(x, z), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null;
+    const ground = streetAt(this.surface, x, z, this.y) + this.lift(x, z), deck = this.decks?.at(x, z, this.y + 0.3, 2.4) ?? null;
     return deck != null && Math.abs(deck - this.y) < 1.2 ? deck : ground;
   }
   update(dt, keys) {
@@ -226,7 +227,8 @@ function bicycle() {
 }
 
 export class Cyclist {
-  constructor({ scene, surface, sim, tiles, lift = () => 0 }) {
+  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null }) {
+    this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
     this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
     this.on = false; this.label = 'Bicicleta'; this.unit = 'km/h';
     this.model = bicycle(); this.model.visible = false; scene.add(this.model);
@@ -266,7 +268,7 @@ export class Cyclist {
   stop() { this.on = false; this.model.visible = false; this.view = null; }
   floor(x, z) {
     // (the street as drawn, a bridge's deck at street level included; on the sidewalk, not in it)
-    const ground = streetAt(this.surface, x, z, this.y) + this.lift(x, z), deck = this.sim()?.deckAt(x, z, this.y + 0.3) ?? null;
+    const ground = streetAt(this.surface, x, z, this.y) + this.lift(x, z), deck = this.decks?.at(x, z, this.y + 0.3, 2.4) ?? null;
     return deck != null && Math.abs(deck - this.y) < 1.2 ? deck : ground;
   }
   update(dt, keys) {

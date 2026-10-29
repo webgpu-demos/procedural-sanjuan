@@ -704,8 +704,8 @@ export class Props {
         rows.forEach((i, n) => body.setColorAt(n, new THREE.Color().setRGB(...VENDING_BODY[props[i + 1] % 4], THREE.SRGBColorSpace)));
         instanced(rows, this.models.quad, this.mats.panel, { lift: 0.02, shadow: false, local: [0, 0.97, 0.365], scale: () => [0.94, 1.66, 1] });
       } else if (kind === PROP.PARKED) {
-        const kit = parkedVehicles(), mesh = instanced(rows, kit.models[variant % kit.models.length], kit.material, { lift: 0.05 });
-        rows.forEach((i, n) => mesh.setColorAt(n, new THREE.Color(kit.colors[(props[i + 1] >> 2) % kit.colors.length])));
+        const kit = parkedVehicles(), car = kit.model(variant, rows.map((i) => (props[i + 1] >> 2) * 7919 + Math.round(props[i + 3] * 31 + props[i + 4] * 17)));
+        const mesh = instanced(rows, car.geometry, car.material, { lift: 0.02, scale: car.scale ? () => car.scale : null });
         mesh.userData.vehicle = true; // (labelled as vehicles in synthetic training images, src/synth/labels.js)
       } else if (this.furniture[kind]) {
         const models = this.furniture[kind];

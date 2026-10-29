@@ -38,9 +38,23 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   shade trees (the trees OSM maps, and parks and woods filled out; a lawn only lightly, open ground such as El
   Morro's esplanade not at all), concrete utility poles with wires, street lights, signals that cycle, USPS collection
   boxes, pillar hydrants, bus stops, statues (Columbus on his column at Plaza Colón).
-- **Traffic**: the simulated morning (below): every car a trip SUMO drove, with its brake lights, its
-  lamps on the road at dawn, the signal heads showing the simulation's own lights. Outside the simulated
-  hours, compacts, sedans, SUVs, pickups, delivery trucks and AMA buses drive around the camera.
+- **Traffic** (`traffic.js`, `simtraffic.js`, `fleet.js`): the simulated morning (below): every car a trip SUMO drove,
+  the signal heads showing the simulation's own lights; outside the simulated hours, compacts, sedans, SUVs and
+  minivans, pickups, delivery vans and AMA buses drive around the camera. The cars are the lofted bodies of mrdoob's
+  [slop-newyork](https://github.com/mrdoob/slop-newyork) (MIT, `carbodies.js`): each body lofted from design tables
+  (half-width, sill, shoulder, belt and crown curves along the car, rounded into the nose and tail; a glasshouse
+  lofted over it; lathed tyres and alloys), every detail (glass and its seals, pillars, door seams and handles,
+  headlamps with their projectors and daytime bar, tail lamps with an LED bar, grille mesh, plates with Puerto Rico's)
+  painted by one material from the object-space position and normal, the edges filtered over their screen footprint
+  (`carmaterial.js`). Per car: its paint, solid or metallic, chrome or blacked-out trim, a black roof now and then,
+  one of four wheel designs, whose pattern turns as it goes (blurred to the rim's mean once it turns faster than the
+  eye can follow); brake lights, turn signals before a turn, reversing lamps on the car you drive; a soft contact
+  shadow under it; near the camera the full model (3,400 triangles), further off a ~490-triangle stand-in in the same
+  material (the bus: `busbody.js`, `busmaterial.js`, white with a band in its route's colour). A car stands on its
+  road's deck where the flyovers draw one under it, else on the street the tiles draw, and up onto any deck drawn too
+  low over that to drive under (`roadlevel.js`). The roads' asphalt is worn and repaired as San Juan's is: block
+  cracking, utility-cut patches and trenches with sealed edges, tar snakes, oil drips, potholes (after slop-newyork's
+  road material).
 - **People on foot** (`people.js`): the sidewalks, crossings, footways and plazas walked by as many people as would be
   there at that hour (below), each one of 38 of Microsoft's [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox)
   avatars (MIT), chosen for a San Juan street: everyday clothes for the heat, office clothes in the Milla de Oro, a
@@ -327,4 +341,4 @@ World frame: metres, x east, y up (above mean sea level), z south; the origin is
 Buildings, roads, coastline and places: © OpenStreetMap contributors (ODbL); a redistributed compiled area
 is a derived database under the ODbL. Building heights: FEMA / ORNL USA Structures (public domain).
 Elevation: USGS 3DEP via the AWS Terrain Tiles. Aerial photo: USGS The National Map (public domain).
-Textures: Poly Haven (CC0). Trees: ez-tree (MIT). People: Microsoft Rocketbox (MIT; `public/models/people/README.md`). Original city engine: procedural-tokyo.
+Textures: Poly Haven (CC0). Trees: ez-tree (MIT). People: Microsoft Rocketbox (MIT; `public/models/people/README.md`). Cars, the bus and the asphalt's wear: after mrdoob's slop-newyork (MIT). Original city engine: procedural-tokyo.

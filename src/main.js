@@ -13,6 +13,7 @@ import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
 import { buildFlyovers, overDecks, landDecks } from './world/flyovers.js';
+import { DrawnDecks } from './world/roadlevel.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
@@ -179,24 +180,27 @@ roads.lanes = lanes;
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
 landDecks(roads, (x, z) => streamer.ground(x, z)); // (decks flush with the streets they meet: world/flyovers.js)
+// the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
+const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
 scene.add(railways);
 {
-  const flyovers = await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint });
+  const flyovers = await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint }, drawnDecks);
   scene.add(flyovers);
   streamer.under = overDecks(flyovers.userData.footprints, PROP); // (nothing on the ground standing up through a deck)
 }
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));
 if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
-const traffic = new Traffic(roads, streamer.surface);
+const traffic = new Traffic(roads, streamer.surface, drawnDecks);
+traffic.eye = camera.position; // (the level of detail of its cars)
 let people = null, peopleOn = true, peopleCars = [], peopleCarsAt = 0; // (people on foot: loadPeople below)
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
 // The simulated morning (tools/sim): every car a trip SUMO drove. Without a time in the link it opens on it,
 // running in real time from before dawn.
-let sim = params.get('sim') === '0' ? null : await SimTraffic.load(`tiles/${AREA}/sim/${params.get('scenario') || 'morning'}`, streamer.surface, roads, (x, z) => streamer.ground(x, z));
+let sim = params.get('sim') === '0' ? null : await SimTraffic.load(`tiles/${AREA}/sim/${params.get('scenario') || 'morning'}`, streamer.surface, roads, (x, z) => streamer.ground(x, z), drawnDecks);
 // its signals: the heads at the junctions show what the simulation's lights showed (before any tile is built)
 const simSignals = sim && await fetch(`${sim.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).then((j) => j && new SimSignals(j, roads)).catch(() => null);
 if (simSignals) { props.signalSlot = (x, z, rot) => simSignals.slot(x, z, rot); props.mats.lens.uniforms.uSig.value = simSignals.texture; }
@@ -214,7 +218,7 @@ const ferries = sim && await Ferries.load(`tiles/${AREA}/sim/ferries.json`);
 if (ferries) scene.add(ferries.group);
 // Another run of the morning (the apagón): its cars and its signals in place of the current ones.
 async function setScenario(name) {
-  const next = await SimTraffic.load(`tiles/${AREA}/sim/${name}`, streamer.surface, roads, (x, z) => streamer.ground(x, z));
+  const next = await SimTraffic.load(`tiles/${AREA}/sim/${name}`, streamer.surface, roads, (x, z) => streamer.ground(x, z), drawnDecks);
   if (!next) return false;
   const lights = await fetch(`${next.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   if (sim) { scene.remove(sim.group); next.followed = sim.followed; sim.dispose(); }
@@ -580,6 +584,7 @@ function stopRiding() { setMode('explore'); if (!sim) return; sim.followed = nul
 // cinematic). Where you were, and how, is kept for the next visit.
 const tiles = () => scene.children.filter((o) => o.name.startsWith('tile '));
 const lift = (x, z) => streamer.lift(x, z); // (how high the paving stands: what stands on it is not sunk in it)
+drawnDecks.lift = lift; // (the cars on it too)
 // People on foot (world/people.js): their walks and avatars load once the city around the view has (?people=0: none;
 // ?people=2: twice as many)
 const PEOPLE = params.get('people') == null ? 1 : Number(params.get('people'));
@@ -589,8 +594,8 @@ function loadPeople() {
     .then((p) => { if (!p) return; people = p; p.density = PEOPLE; p.enabled = peopleOn; scene.add(p.group); })
     .catch((e) => console.warn('the people stay at home:', e));
 }
-const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift });
-const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
+const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks });
+const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
 // What you run into (collide.js): the street's things come with the tiles; the vehicles round you are gathered
 // each frame (the simulated cars near you, the traffic, the car you left). And what you are, to them: the
@@ -977,7 +982,7 @@ function frame(_, manual) {
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, get people() { return people; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
+window.__app = { THREE, scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, get people() { return people; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
   proj, manifest,
   // synthetic drone images with labels (src/synth/synth.js; tools/synth/export.mjs), made on first use
   get synth() { return (synthApi ??= import('./synth/synth.js').then(({ Synth }) => new Synth(window.__app))); } };
