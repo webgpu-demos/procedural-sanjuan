@@ -11,200 +11,20 @@
 //   - never enter a junction without room on the far side
 import * as THREE from 'three';
 import { segDist } from './collide.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { shared } from './materials.js';
-import { LAMP_LAYER, lampMaterial, lampUniforms, HERO_RIM } from './lamplight.js';
+import { lampMaterial } from './lamplight.js';
+import { Fleet, BODY_OF, SCALE_OF, lookOf, wheelBlur } from './fleet.js';
+import { BODY_SPECS, buildCarProxyGeometry } from './carbodies.js';
+import { loftedCarMaterial } from './carmaterial.js';
 
 const LANE = 3.0;
 const CAR_RADIUS = 330, CARS = 260; // the default number of cars, and the distance from the focus they keep within
 export const MAX_CARS = 1500;
 const CYCLE = 64, GREEN = 27; // seconds: must match the lens shader in props.js
 const LANE_CELL = 256;         // metres: the cells lanes are bucketed in, to pick one near the focus
+const NEAR_LOD = 160;          // metres from the camera: within, a car's full model; beyond, its stand-in
 
-// ---------------------------------------------------------------- models
-// Parts carry a colour and a code per vertex (aGlow): 0 paint, 1 headlamp, 2 tail lamp, 3 glass, 4 rubber and
-// trim. Paint of colour 1,1,1 is tinted per car by the instance colour; glass and trim are dark, so the tint
-// barely shows on them.
-function finish(g, rgb, code) {
-  g = g.index ? g.toNonIndexed() : g;
-  const n = g.attributes.position.count, c = new Float32Array(n * 3), e = new Float32Array(n);
-  for (let i = 0; i < n; i++) { c.set(rgb, i * 3); e[i] = code; }
-  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
-  g.setAttribute('aGlow', new THREE.BufferAttribute(e, 1));
-  g.deleteAttribute('uv');
-  return g;
-}
-const part = (w, h, d, x, y, z, rgb, code = 0) => finish(new THREE.BoxGeometry(w, h, d).translate(x, y, z), rgb, code);
-// A block that narrows and shortens towards its top: width w0 and length zA0..zB0 at y0, w1 and zA1..zB1 at y1.
-function taper(w0, w1, y0, y1, zA0, zB0, zA1, zB1, rgb, code = 0) {
-  const g = new THREE.BoxGeometry(1, 1, 1), p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const top = p.getY(i) > 0, front = p.getZ(i) > 0;
-    p.setXYZ(i, p.getX(i) * (top ? w1 : w0), top ? y1 : y0, top ? (front ? zB1 : zA1) : (front ? zB0 : zA0));
-  }
-  const flat = g.toNonIndexed();
-  flat.computeVertexNormals();
-  return finish(flat, rgb, code);
-}
-// a wheel: the tyre, its rim set in a little, five spokes; the driven car's: an alloy, its lip a bright ring and
-// the dark of the brake between the spokes (in the traffic: a grey wheel face, which reads at a distance)
-const wheel = (r, x, z, hi = false, lo = false) => {
-  const out = Math.sign(x), seg = hi ? 28 : lo ? 8 : 14, alloy = hi ? [0.6, 0.61, 0.64] : [0.5, 0.51, 0.54];
-  if (lo) return [finish(new THREE.CylinderGeometry(r, r, 0.23, seg).rotateZ(Math.PI / 2).translate(x, r, z), TYRE, 4)]; // (far off: a tyre)
-  const parts = [
-    finish(new THREE.CylinderGeometry(r, r, 0.23, seg).rotateZ(Math.PI / 2).translate(x, r, z), TYRE, 4),
-    finish(new THREE.CylinderGeometry(r * 0.66, r * 0.66, 0.02, seg).rotateZ(Math.PI / 2).translate(x + out * 0.1, r, z), hi ? [0.05, 0.05, 0.055] : [0.26, 0.26, 0.28], 4),
-    finish(new THREE.CylinderGeometry(r * 0.16, r * 0.16, 0.05, 8).rotateZ(Math.PI / 2).translate(x + out * 0.12, r, z), alloy, 4),
-  ];
-  if (hi) parts.push(finish(new THREE.TorusGeometry(r * 0.64, 0.022, 6, seg).rotateY(Math.PI / 2).translate(x + out * 0.11, r, z), alloy, 4));
-  for (let k = 0; k < 5; k++) {
-    const a = (k / 5) * Math.PI * 2;
-    parts.push(finish(new THREE.BoxGeometry(0.03, r * 0.5, hi ? 0.075 : 0.06).translate(0, r * 0.38, 0).rotateX(a).translate(x + out * 0.115, r, z), alloy, 4));
-  }
-  return parts;
-};
-const PAINT = [1, 1, 1], GLASS = [0.03, 0.04, 0.05], TYRE = [0.015, 0.015, 0.015], TRIM = [0.05, 0.05, 0.055], LAMP = [1, 1, 1];
-// A vehicle along +z: length L, width W, body up to `belt`, cabin from z0 to z1 (fractions of L) up to `roof`,
-// its windscreen leaning back by `rake` metres. Sculpted rather than boxed: the body is lofted through rounded
-// sections (rounded corners in plan, the bonnet and boot falling away to the ends, the sides tucked in at the
-// bottom, wheel arches cut out of the sill), the glasshouse through narrower ones that lean in towards the roof,
-// with its pillars and roof in paint. detail 0: a car of the traffic seen from afar (about 450 triangles);
-// 1: near (about 1,700); 2: the one driven.
-export function vehicle({ L, W, belt, roof, z0, z1, box, rake = 0.5, tyre = 0.31 }, detail = 1) {
-  const parts = [], zr = -L / 2, zf = L / 2, sill = 0.2, hi = detail > 1, lo = detail < 1;
-  const wheelZ = (L > 8 ? 0.34 : 0.31) * L;
-  const plan = (z) => { const zn = Math.min(1, Math.abs(z) / (L / 2)); return Math.pow(Math.max(0, 1 - Math.pow(zn, 7)), 1 / 7); };
-  const halfW = (z) => (W / 2) * (0.9 + 0.1 * plan(z)) * Math.pow(plan(z), 0.35);
-  // the top of the body: the bonnet falls towards the nose, the boot a little towards the tail
-  const deck = (z) => {
-    const zn = z / (L / 2);
-    return belt + 0.02 - (zn > 0 ? 0.2 * Math.pow(Math.max(0, (zn - 0.45) / 0.55), 1.6) : 0.12 * Math.pow(Math.max(0, (-zn - 0.6) / 0.4), 1.6));
-  };
-  // the bottom edge: the sill, cut up round each wheel
-  const bottom = (z) => {
-    let y = sill;
-    for (const wz of [wheelZ, -wheelZ]) { const d = Math.abs(z - wz), r = tyre * 1.18; if (d < r) y = Math.max(y, tyre + Math.sqrt(r * r - d * d) * 0.92); }
-    return y;
-  };
-  // ---- the body: rings of M points round a rounded box, from the tail to the nose
-  // (a box truck's body is its cab: behind it the cargo box stands on a bare chassis. Lofted the whole length, a
-  // car's rounded tail and its wrap-round lamps showed under the box, a sedan carrying a crate)
-  const boxFront = box ? (box.z - 0.5) * L + (box.len * L) / 2 : zr, boxRear = box ? (box.z - 0.5) * L - (box.len * L) / 2 : zr;
-  const bodyFrom = box ? boxFront - 0.25 : zr;
-  const N = hi ? 44 : lo ? 10 : 18, M = hi ? 28 : lo ? 10 : 14, ring = [];
-  for (let i = 0; i <= N; i++) {
-    const t = i / N, z = bodyFrom + (zf - bodyFrom) * (box ? t : 0.5 - 0.5 * Math.cos(Math.PI * t)); // (closer together at the ends, where it curves)
-    const w = halfW(z), top = deck(z), bot = Math.min(bottom(z), top - 0.05), mid = (top + bot) / 2, hh = (top - bot) / 2, pts = [];
-    for (let j = 0; j < M; j++) {
-      const a = (j / M) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), n = 4.2;
-      const x = Math.sign(c) * Math.pow(Math.abs(c), 2 / n) * w * (s < 0 ? 0.94 + 0.06 * (1 + s) : 1); // (tucked in below)
-      const y = mid + Math.sign(s) * Math.pow(Math.abs(s), 2 / n) * hh;
-      pts.push([x, y, z]);
-    }
-    ring.push(pts);
-  }
-  parts.push(loft(ring, true, false, (i, j, [x, y, z]) => (y < sill + 0.13 || y < bottom(z) + 0.06 ? [TRIM, 4] : [PAINT, 0])));
-  // ---- the glasshouse: from the foot of the back window to the foot of the windscreen, leaning in to the roof
-  const c0 = zr + z0 * L, c1 = zr + z1 * L, back = Math.max(0.25, rake * 0.6);
-  const roofAt = (z) => belt + (roof - belt) * Math.max(0, Math.min(1, (c1 - z) / rake, (z - c0) / back));
-  const G = hi ? 20 : lo ? 4 : 8, gring = [], K = hi ? 9 : lo ? 3 : 5;
-  for (let i = 0; i <= G; i++) {
-    const z = c0 + (c1 - c0) * (i / G), yt = Math.max(belt + 0.01, roofAt(z)), wb = halfW(z) * 0.93, wt = wb * 0.8, pts = [];
-    // up one side, over the top (rounded), down the other
-    for (let j = 0; j <= K; j++) { const f = j / K; pts.push([-(wb + (wt - wb) * Math.pow(f, 0.8)), belt - 0.01 + (yt - belt) * f, z]); }
-    for (let j = 1; j < K; j++) { const f = j / K; pts.push([-wt + 2 * wt * f, yt + 0.025 * Math.sin(Math.PI * f), z]); }
-    for (let j = K; j >= 0; j--) { const f = j / K; pts.push([wb + (wt - wb) * Math.pow(f, 0.8), belt - 0.01 + (yt - belt) * f, z]); }
-    gring.push(pts);
-  }
-  // the sides are glass, and so is the top over the windscreen and the back window; the flat of the roof is
-  // paint (rings run up one side, K - 1 points over the top, down the other: they turn the other way round from
-  // the body's, hence the flip); the pillars after
-  // The pillars are part of that surface, in paint: the A pillars a strip down each side of the windscreen,
-  // the C pillars the broad panels behind the rear side windows (as separate bars they stood off the glass like
-  // the rails of a cage); the B pillar between the doors is a dark strip in the glass.
-  const side = (j) => j < K || j >= 2 * K, top = (j) => j >= K && j < 2 * K;
-  const cPillar = Math.min(back + 0.12, (c1 - c0) * 0.3), aPillar = rake * 0.12;
-  parts.push(loft(gring, false, true, (i, j, [x, y, z]) => (
-    (top(j) && roofAt(z) > roof - 0.03) || (side(j) && (z < c0 + cPillar || z > c1 - aPillar)) ? [PAINT, 0] : [GLASS, 3])));
-  if (c1 - c0 > 2.2) {
-    const z = (c0 + c1) / 2 + 0.1;
-    for (const sx of [-1, 1]) parts.push(bar([sx * halfW(z) * 0.925, belt, z], [sx * halfW(z) * 0.93 * 0.81, roof - 0.02, z], 0.06, TRIM, 4, 0.03));
-  }
-  if (box) {
-    parts.push(part(W, box.h, box.len * L, 0, belt + box.h / 2, (box.z - 0.5) * L, [0.92, 0.92, 0.9])); // cargo body
-    parts.push(part(W * 0.62, 0.26, boxFront - boxRear, 0, belt - 0.32, (boxFront + boxRear) / 2, TRIM, 4)); // the chassis under it
-    parts.push(part(W * 0.97, belt - sill, 0.05, 0, (belt + sill) / 2, bodyFrom + 0.03, PAINT, 0));         // the back of the cab
-    parts.push(part(W * 0.9, 0.1, 0.08, 0, 0.52, boxRear + 0.06, TRIM, 4));                                // the underride bar
-    for (const sx of [-1, 1]) parts.push(part(0.2, 0.16, 0.04, sx * (W / 2 - 0.18), belt + 0.12, boxRear - 0.025, LAMP, 2)); // tail lamps, low on the doors
-  }
-  if (!box && z0 >= 0.28 && L > 5.2) parts.push(part(W * 0.86, 0.04, c0 - zr - 0.25, 0, deck(c0 - 0.6) + 0.005, (zr + c0) / 2, TRIM, 4)); // a pickup's bed
-  // ---- the face and the tail: grille, lamps wrapping the corners, plates
-  const yl = deck(zf - 0.15) - 0.14, yt = deck(zr + 0.15) - 0.1;
-  parts.push(part(W * 0.42, 0.13, 0.05, 0, yl - 0.06, zf - 0.03, TRIM, 4));                                // grille
-  parts.push(part(W * 0.6, 0.1, 0.05, 0, sill + 0.12, zf - 0.02, TRIM, 4));                                // lower intake
-  for (const z of [zf - 0.005, box ? boxRear - 0.03 : zr + 0.005]) parts.push(part(0.34, 0.12, 0.02, 0, z < 0 && box ? 0.72 : sill + 0.24, z, [0.9, 0.9, 0.86], 4)); // plates
-  // Lamps and trim that hug the rounded nose and tail: strips of short bars laid along the body's own outline at
-  // their height, from near the middle round the corner onto the flank (flat boxes stood out at the corners).
-  // (at the lamps' height and down at the bumper the rounded section is some 6 per cent narrower than its widest)
-  const outline = (x, tail) => {
-    for (let k = 0; k <= 160; k++) { const z = tail ? zr + k * 0.005 : zf - k * 0.005; if (halfW(z) * 0.94 >= Math.abs(x) + 0.004) return z; }
-    return tail ? zr + 0.8 : zf - 0.8;
-  };
-  const strips = hi ? 6 : lo ? 2 : 4; // (bars per strip: a car far off has thousands of others round it)
-  const hug = (xa, xb, y, h, rgb, code, tail, out = 0.012) => {
-    let prev = null;
-    for (let k = 0; k <= strips; k++) {
-      const x = xa + (xb - xa) * (k / strips), p = [x, y, outline(x, tail) + (tail ? -out : out)];
-      if (prev) parts.push(bar(prev, p, 0.04, rgb, code, h));
-      prev = p;
-    }
-  };
-  if (!lo && !box) {
-    hug(-W * 0.2, W * 0.2, yt, 0.08, TRIM, 4, true);               // the band between the tail lamps
-    hug(-W * 0.42, W * 0.42, sill + 0.09, 0.07, TRIM, 4, true);    // the bumper's lower edge
-  }
-  for (const sx of [-1, 1]) {
-    for (const wz of [wheelZ, -wheelZ]) parts.push(...wheel(tyre, sx * (W / 2 - 0.12), wz, hi, lo));
-    hug(sx * W * 0.19, sx * W * 0.45, yl, 0.1, LAMP, 1, false);     // headlamps, round the front corners
-    if (!box) hug(sx * W * 0.2, sx * W * 0.455, yt, 0.15, LAMP, 2, true); // tail lamps, across the tail and round onto the flank
-    // the mirror on its stalk
-    parts.push(part(0.13, 0.11, 0.2, sx * (halfW(c1) * 0.93 + 0.08), belt + 0.08, c1 - rake * 0.35, PAINT));
-  }
-  return mergeGeometries(parts);
-}
-// Quads between consecutive rings of points (closed round, or open), facing out: rings turning
-// anticlockwise seen from ahead (+z) as they run towards the front, or clockwise with `flip`. paint(i, j, mid)
-// gives the quad from ring i, point j its [colour, code]. Smooth normals across the parts of one colour.
-function loft(rings, closed, flip, paint) {
-  const pos = [], tag = [], M = rings[0].length;
-  for (let i = 0; i < rings.length - 1; i++) {
-    for (let j = 0; j < (closed ? M : M - 1); j++) {
-      const a = rings[i][j], b = rings[i][(j + 1) % M], c = rings[i + 1][(j + 1) % M], d = rings[i + 1][j];
-      if (flip) pos.push(...a, ...c, ...b, ...a, ...d, ...c); else pos.push(...a, ...b, ...c, ...a, ...c, ...d);
-      const mid = [0, 1, 2].map((k) => (a[k] + b[k] + c[k] + d[k]) / 4), pt = paint(i, j, mid);
-      tag.push(pt, pt);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals(); // (flat, to start: smoothed below, across shared corners)
-  const n = pos.length / 3, nor = g.attributes.normal.array, sum = new Map(), key = (v) => `${Math.round(pos[v * 3] * 1e3)},${Math.round(pos[v * 3 + 1] * 1e3)},${Math.round(pos[v * 3 + 2] * 1e3)},${tag[Math.floor(v / 3)][1]}`;
-  for (let v = 0; v < n; v++) { const k = key(v), s = sum.get(k) ?? [0, 0, 0]; s[0] += nor[v * 3]; s[1] += nor[v * 3 + 1]; s[2] += nor[v * 3 + 2]; sum.set(k, s); }
-  for (let v = 0; v < n; v++) { const s = sum.get(key(v)), l = Math.hypot(...s) || 1; nor[v * 3] = s[0] / l; nor[v * 3 + 1] = s[1] / l; nor[v * 3 + 2] = s[2] / l; }
-  const col = new Float32Array(n * 3), code = new Float32Array(n);
-  for (let v = 0; v < n; v++) { const [rgb, k] = tag[Math.floor(v / 3)]; col.set(rgb, v * 3); code[v] = k; }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.setAttribute('aGlow', new THREE.BufferAttribute(code, 1));
-  return g;
-}
-// a slim bar from a to b (a pillar, a lamp's lens): thickness t, depth d
-function bar(a, b, t, rgb, code = 0, d = t) {
-  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), len = A.distanceTo(B);
-  const g = new THREE.BoxGeometry(t, d, len);
-  g.lookAt(new THREE.Vector3().subVectors(B, A));
-  g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
-  return finish(g, rgb, code);
-}
+// ---------------------------------------------------------------- the cars (fleet.js: the lofted bodies)
 // What the lamps throw on the road: a long pool ahead of the car and a short red one behind it, as one
 // instanced mesh per vehicle type that shares the cars' own matrices. Like the street lamps' pools
 // (props.js), it multiplies the road under it.
@@ -242,20 +62,39 @@ export function beamGeometry(L) {
 // What drives in San Juan: compact cars and sedans, a great many SUVs and pickups, delivery trucks, and the
 // AMA's city buses.
 export const TYPES = [
-  { name: 'compact', share: 0.26, L: 4.2, spec: { L: 4.2, W: 1.74, belt: 0.92, roof: 1.46, z0: 0.18, z1: 0.8, rake: 0.7 } },
-  { name: 'sedan', share: 0.22, L: 4.8, spec: { L: 4.8, W: 1.82, belt: 0.92, roof: 1.44, z0: 0.2, z1: 0.72, rake: 0.75 } },
-  { name: 'suv', share: 0.26, L: 4.7, spec: { L: 4.7, W: 1.9, belt: 1.08, roof: 1.76, z0: 0.12, z1: 0.86, rake: 0.55, tyre: 0.36 } },
-  { name: 'pickup', share: 0.12, L: 5.6, spec: { L: 5.6, W: 1.95, belt: 1.12, roof: 1.84, z0: 0.3, z1: 0.62, rake: 0.5, tyre: 0.38 } },
-  { name: 'truck', share: 0.08, L: 7.0, spec: { L: 7.0, W: 2.3, belt: 1.05, roof: 2.4, z0: 0.76, z1: 0.97, rake: 0.18, tyre: 0.45, box: { h: 2.3, len: 0.7, z: 0.36 } } },
-  { name: 'bus', share: 0.06, L: 12.0, spec: { L: 12.0, W: 2.55, belt: 1.25, roof: 3.1, z0: 0.02, z1: 0.98, rake: 0.14, tyre: 0.48 } },
+  // (L and W: the lofted bodies' own, fleet.js; spec.W the width, the rest the proportions of the models before them)
+  { name: 'compact', share: 0.26, L: 4.15, spec: { L: 4.2, W: 1.78, belt: 0.92, roof: 1.46, z0: 0.18, z1: 0.8, rake: 0.7 } },
+  { name: 'sedan', share: 0.22, L: 4.5, spec: { L: 4.8, W: 1.86, belt: 0.92, roof: 1.44, z0: 0.2, z1: 0.72, rake: 0.75 } },
+  { name: 'suv', share: 0.26, L: 4.7, spec: { L: 4.7, W: 1.94, belt: 1.08, roof: 1.76, z0: 0.12, z1: 0.86, rake: 0.55, tyre: 0.36 } },
+  { name: 'pickup', share: 0.12, L: 5.7, spec: { L: 5.6, W: 2.05, belt: 1.12, roof: 1.84, z0: 0.3, z1: 0.62, rake: 0.5, tyre: 0.38 } },
+  { name: 'truck', share: 0.08, L: 5.9, spec: { L: 7.0, W: 2.0, belt: 1.05, roof: 2.4, z0: 0.76, z1: 0.97, rake: 0.18, tyre: 0.45, box: { h: 2.3, len: 0.7, z: 0.36 } } },
+  { name: 'bus', share: 0.06, L: 12.3, spec: { L: 12.0, W: 2.6, belt: 1.25, roof: 3.1, z0: 0.02, z1: 0.98, rake: 0.14, tyre: 0.48 } },
 ];
-export const CAR_COLORS = [0xd4d4d0, 0xd4d4d0, 0xd4d4d0, 0x111214, 0x111214, 0xa4a7ab, 0xa4a7ab, 0x6d7278, 0x1f3a6e, 0x8c1c1c, 0x2f6fb0, 0xc4b68f]; // (white kept off full brightness: it blooms)
-export const BUS_COLORS = [0xe8e4d8, 0xe8e4d8, 0x1d5fa8];
 
-// Vehicle models for cars parked in car parks (props.js): geometries by type, the paint material, colours.
+// Cars parked in car parks (props.js): the lofted bodies' stand-ins (fleet.js), a compact, a sedan, an SUV, a pickup by
+// the prop's variant; per car its paint and style, from its own number
 let parkedKit = null;
 export function parkedVehicles() {
-  parkedKit ??= { models: TYPES.slice(0, 4).map((t) => vehicle(t.spec)), material: carMaterial(false), colors: [0xd4d4d0, 0x111214, 0xa4a7ab, 0x1f3a6e] };
+  if (parkedKit) return parkedKit;
+  const kinds = ['compact', 'sedan', 'suv', 'pickup'], geos = {}, mats = {};
+  parkedKit = {
+    kind: (variant) => kinds[variant % kinds.length],
+    // the geometry for `n` cars of a variant, with their looks (n numbers: their seeds), and its material
+    model(variant, seeds) {
+      const kind = kinds[variant % kinds.length], looks = seeds.map((sd) => lookOf(kind, sd));
+      const body = looks[0]?.body ?? BODY_OF[kind];
+      geos[body] ??= buildCarProxyGeometry(BODY_SPECS[body]);
+      mats[body] ??= loftedCarMaterial(BODY_SPECS[body]);
+      // (an SUV's look may be a minivan's: parked, it keeps the SUV's body)
+      const g = geos[body].clone(), n = looks.length, paint = new Float32Array(n * 3), state = new Float32Array(n * 4);
+      looks.forEach((l, k) => { paint.set(l.paint, k * 3); state[k * 4 + 3] = l.style; });
+      g.setAttribute('paintColor', new THREE.InstancedBufferAttribute(paint, 3));
+      g.setAttribute('carState', new THREE.InstancedBufferAttribute(state, 4));
+      g.setAttribute('aWheel', new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2));
+      g.setAttribute('aHide', new THREE.InstancedBufferAttribute(new Float32Array(n), 1));
+      return { geometry: g, material: mats[body], scale: SCALE_OF[kind] ?? null };
+    },
+  };
   return parkedKit;
 }
 
@@ -270,45 +109,6 @@ export function dissolve(shader) {
   const [a, b, c, d] = DISSOLVE.vertex, [e, f, g, h] = DISSOLVE.fragment;
   shader.vertexShader = shader.vertexShader.replace(a, b).replace(c, d);
   shader.fragmentShader = shader.fragmentShader.replace(e, f).replace(g, h);
-}
-
-// hero: the car driven, in a clear-coated paint (a lacquer over the colour that mirrors the sky)
-export function carMaterial(lit = true, { hero = false } = {}) {
-  const m = hero
-    ? new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.38, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.05 })
-    : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.5 });
-  m.onBeforeCompile = (shader) => {
-    // (no lamp light on the traffic: a car is lit by its own lamps; the sampler still needs its texture.) The car
-    // driven takes it: the pools of the street lamps slide over its roof and bonnet as it passes under them
-    if (hero) lampUniforms(shader); else { shader.uniforms.uLampOn = { value: 0 }; shader.uniforms.uLampMap = shared.uLampMap; }
-    shader.uniforms.uNight = shared.uNight;
-    shader.vertexShader = shader.vertexShader
-      // aBrake (per car, from simtraffic.js; 0 where a mesh has none): the tail lamps flare when it brakes
-      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nattribute float aBrake;\nvarying float vGlow;\nvarying float vBrake;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;\nvBrake = aBrake;')
-      // the car's colour is its paint's: lamps, glass, tyres and wheels keep their own
-      .replace('#include <color_vertex>', '#include <color_vertex>\n#ifdef USE_COLOR\nif (aGlow > 0.5) vColor.rgb = color.rgb;\n#endif');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying float vGlow;\nvarying float vBrake;')
-      // lamps keep their own colour instead of the body paint, and shine at night
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        vec3 lamp = vGlow > 1.5 ? vec3(0.9, 0.03, 0.02) : vec3(1.0, 0.96, 0.85);
-        if (vGlow > 0.5 && vGlow < 2.5) diffuseColor.rgb = lamp * 0.6;`)
-      // glass is a dark mirror, rubber and trim are matt, the paint has a hard shine
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vGlow > 3.5 ? 0.85 : vGlow > 2.5 ? 0.06 : roughnessFactor;')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vGlow > 3.5 ? 0.0 : vGlow > 2.5 ? 0.9 : metalnessFactor;')
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        ${hero ? `// (and at night the glow of the city along its edges, so its shape reads against the dark street)
-        if (vGlow < 0.5) totalEmissiveRadiance += ${HERO_RIM};` : ''}
-        if (vGlow > 0.5 && vGlow < 2.5) totalEmissiveRadiance += lamp * (0.15 + uNight * ${lit ? '(vGlow > 1.5 ? 2.0 : 3.6)' : '0.0'}
-          + (vGlow > 1.5 ? vBrake * (1.4 + uNight * 3.0) : 0.0));`)
-      // (the windows are marked in alpha for the reflection pass, like those of the buildings)
-      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif (vGlow > 2.5 && vGlow < 3.5) gl_FragColor.a = 0.1;');
-    dissolve(shader);
-  };
-  if (hero) m.defines = { ...m.defines, LAMP_SIDES: '' };
-  m.customProgramCacheKey = () => (hero ? 'car-hero-v3' : lit ? 'car-v7' : 'car-parked-v7');
-  return m;
 }
 
 // ---------------------------------------------------------------- the graph, as directed lanes
@@ -330,16 +130,8 @@ function buildGraph({ nodes, edges, signals }, surface) {
       // lateral offset of lane k, to the right of travel: one-way roads centred on the line; two-way ones
       // on its right half (right-hand traffic). A two-way single-lane street is shared down the middle.
       const offset = (k) => (e.oneway ? (k - (n - 1) / 2) * LANE : e.lanes >= 2 ? (k + 0.5) * LANE : 1.15);
-      // An expressway ramp climbing to its flyover is a structure of its own (flyovers.js builds it where the
-      // road's level stands 1.5 m above the ground somewhere): cars follow the road's level there too.
-      let ramp = false;
-      if (!e.flyover && !e.span && !e.tunnel && e.highway.startsWith('motorway')) {
-        for (let i = 1; i < p.length && !ramp; i++) for (let s = 0; s <= 1; s += Math.min(1, 3 / (cum[i] - cum[i - 1] || 1))) {
-          if (p[i - 1].y + (p[i].y - p[i - 1].y) * s - surface(p[i - 1].x + (p[i].x - p[i - 1].x) * s, p[i - 1].z + (p[i].z - p[i - 1].z) * s) > 1.5) { ramp = true; break; }
-        }
-      }
       const lane = {
-        ramp, pts: p, cum, length: cum.at(-1), from: fwd ? e.a : e.b, to: fwd ? e.b : e.a, n, offset, speed, weight, motorway: e.highway.startsWith('motorway'),
+        pts: p, cum, length: cum.at(-1), from: fwd ? e.a : e.b, to: fwd ? e.b : e.a, n, offset, speed, weight, motorway: e.highway.startsWith('motorway'),
         raised: !!e.flyover, hidden: !!e.tunnel, signal: signalled.has(fwd ? e.b : e.a), edge: e, cars: [],
       };
       // which way the signal for this approach is phased (see lensMaterial in props.js)
@@ -387,9 +179,11 @@ function along(lane, s, pos, dir) {
 }
 
 export class Traffic {
-  // roads: parsed roads.json; surface(x, z): height of the road surface there.
-  constructor(roads, surface) {
+  // roads: parsed roads.json; surface(x, z): height of the road surface there; drawn: the decks the flyovers draw
+  // (roadlevel.js), for the cars on them
+  constructor(roads, surface, drawn = null) {
     this.surface = surface;
+    this.drawn = drawn;
     this.graph = buildGraph(roads, surface);
     // lanes by the 256 m cell of their middle point: a large area has tens of thousands
     this.cells = new Map();
@@ -405,19 +199,20 @@ export class Traffic {
     this.time = 0;
     this.seed = 12345;
 
-    const material = carMaterial();
     // what the lamps throw on the road, for the light map (lamplight.js)
     this.beam = lampMaterial(beamTexture(), { vertexColors: true });
-    this.fleets = TYPES.map((t) => {
-      const mesh = new THREE.InstancedMesh(vehicle(t.spec), material, Math.ceil(MAX_CARS * t.share * 1.25) + 8);
-      mesh.castShadow = true; mesh.frustumCulled = false; mesh.count = 0;
-      const beams = new THREE.InstancedMesh(beamGeometry(t.L), this.beam, mesh.instanceMatrix.count);
-      beams.instanceMatrix = mesh.instanceMatrix; // the lamps go where the cars go
-      beams.frustumCulled = false; beams.count = 0;
-      beams.layers.set(LAMP_LAYER);
-      this.group.add(mesh, beams);
-      return { ...t, mesh, beams };
-    });
+    // the cars and the buses: the lofted bodies (fleet.js)
+    const caps = {};
+    for (const t of TYPES) {
+      if (!BODY_OF[t.name]) continue;
+      for (const body of t.name === 'suv' ? ['suv', 'minivan'] : [BODY_OF[t.name]]) {
+        const n = Math.ceil(MAX_CARS * t.share * (t.name === 'suv' ? (body === 'suv' ? 1 : 0.4) : 1) * 1.25) + 8;
+        caps[body] = [(caps[body]?.[0] ?? 0) + Math.ceil(n * 0.6) + 8, (caps[body]?.[1] ?? 0) + n];
+      }
+    }
+    this.fleet = new Fleet(caps, { beam: beamGeometry, beamMaterial: this.beam });
+    this.group.add(this.fleet.group);
+    this.eye = null; // (the camera's position, for the level of detail: main.js)
     this.cars = [];
     this.count = CARS;   // how many cars there are (the panel changes it)
     this.highway = 5;    // how much busier the expressway is than its class alone would make it
@@ -525,12 +320,12 @@ export class Traffic {
     while (this.cars.length < this.count) {
       const r = this.rnd(); let acc = 0, type = 0;
       for (let i = 0; i < TYPES.length; i++) { acc += TYPES[i].share; if (r < acc) { type = i; break; } }
-      const palette = TYPES[type].name === 'bus' ? BUS_COLORS : CAR_COLORS;
-      const car = { type, color: palette[Math.floor(this.rnd() * palette.length)], lane: null };
+      const car = { type, id: Math.floor(this.rnd() * 1e9), lane: null }; // (its look: fleet.js lookOf, from its id)
       if (!this.spawnCar(car, focus)) break;
       this.cars.push(car);
     }
-    const counts = this.fleets.map(() => 0);
+    this.fleet.begin();
+    const eye = this.eye ?? focus, now = this.time;
     const { junction, into } = this.graph;
     for (const car of this.cars) {
       if (!car.lane && !this.spawnCar(car, focus)) continue; // nowhere to drive near the focus right now
@@ -581,7 +376,9 @@ export class Traffic {
       if (giveWay && toEnd < 14) want = Math.min(want, 1.2 + toEnd * 0.35);
       if (gap < Infinity) want = Math.min(want, Math.max(0, lead + (gap - 2.5) / 1.4));
       if (gap < 0.6) want = 0;
+      const was = car.v;
       car.v = Math.max(0, car.v + THREE.MathUtils.clamp(want - car.v, -6 * dt, 2.2 * dt));
+      car.braking = car.v < was - 1.2 * dt || (car.v < 0.3 && want < 0.3);
       car.s += car.v * dt;
       // stuck for a long time (a jam that cannot clear): start again somewhere else
       car.waited = car.v < 0.2 ? (car.waited ?? 0) + dt : 0;
@@ -600,33 +397,40 @@ export class Traffic {
       if (Math.hypot(tmp.x - focus.x, tmp.z - focus.z) > (this.radius ?? CAR_RADIUS) + 90) { if (!this.spawnCar(car, focus)) continue; along(car.lane, car.s, tmp, tmp2); }
       if (car.lane.hidden) continue;
 
-      const off = car.lane.offset(car.k), px = tmp.x - tmp2.z * off, pz = tmp.z + tmp2.x * off;
-      const fleet = this.fleets[car.type];
-      if (counts[car.type] >= fleet.mesh.instanceMatrix.count) continue; // (more of this type than there are instances for)
-      const i = counts[car.type]++;
-      // (a ramp comes down to the ground: the higher of its level and the ground)
-      const onRamp = car.lane.ramp && tmp.y > this.surface(px, pz) + 0.03;
-      d.position.set(px, car.lane.raised || onRamp ? tmp.y + 0.04 : this.surface(px, pz) + 0.07, pz);
+      const off = car.lane.offset(car.k);
+      let px = tmp.x - tmp2.z * off, pz = tmp.z + tmp2.x * off;
+      const name = TYPES[car.type].name;
+      // on its road's deck the flyovers draw under it, or the street the tiles draw (roadlevel.js): never at the road's
+      // level where nothing is drawn at it
+      const stood = this.drawn ? this.drawn.stand(this.surface, px, pz, tmp.y, Math.atan2(tmp2.x, tmp2.z), car.lane.edge) : { y: this.surface(px, pz), deck: false };
+      if (stood.push) { px += stood.push[0]; pz += stood.push[1]; } // (onto it, from just beyond its edge)
+      d.position.set(px, stood.y + 0.03, pz);
       // nose up or down with the road (and with it the light the lamps throw on it): the slope over the car's length
-      const slope = car.lane.raised || onRamp ? tmp2.y : (this.surface(px + tmp2.x * 5, pz + tmp2.z * 5) - this.surface(px - tmp2.x * 5, pz - tmp2.z * 5)) / 10;
+      const slope = stood.deck ? tmp2.y : (this.surface(px + tmp2.x * 5, pz + tmp2.z * 5) - this.surface(px - tmp2.x * 5, pz - tmp2.z * 5)) / 10;
       d.rotation.set(-Math.atan(slope), Math.atan2(tmp2.x, tmp2.z), 0);
       d.updateMatrix();
       Object.assign(car, { px, pz, py: d.position.y, hx: tmp2.x, hz: tmp2.z }); // (where it is: for what it stops for, and what runs into it)
       // on top of you (you were set down where it was): it starts again somewhere else, next frame
       if (this.blockers.length) {
         const h = Math.max(0, TYPES[car.type].L / 2 - TYPES[car.type].spec.W / 2), sx = tmp2.x * h, sz = tmp2.z * h, r = TYPES[car.type].spec.W / 2;
-        if (this.blockers.some((b) => segDist(px - sx, pz - sz, px + sx, pz + sz, b[0], b[1], b[2], b[3]) < r + b[4] - 0.05)) { counts[car.type]--; car.elsewhere = true; continue; }
+        if (this.blockers.some((b) => segDist(px - sx, pz - sz, px + sx, pz + sz, b[0], b[1], b[2], b[3]) < r + b[4] - 0.05)) { car.elsewhere = true; continue; }
       }
-      fleet.mesh.setMatrixAt(i, d.matrix);
-      fleet.mesh.setColorAt(i, this.color.setHex(car.color));
+      // a lofted body: the full model near the camera, the stand-in further off; its wheels turning as it goes, its
+      // brake lights, its turn signal blinking before a turn
+      car.look ??= lookOf(name, car.id);
+      const r = this.fleet.wheelRadius(car.look.body), far = (px - eye.x) ** 2 + (pz - eye.z) ** 2 + (d.position.y - eye.y) ** 2 > NEAR_LOD * NEAR_LOD;
+      car.dist = (car.dist ?? 0) + car.v * dt;
+      let left = 0, right = 0;
+      if (next && car.lane === lane && toEnd < 35 && !lane.inside) {
+        const a = next.pts[0], b = next.pts[Math.min(1, next.pts.length - 1)], turn = Math.atan2(b.x - a.x, b.z - a.z) - Math.atan2(lane.hx, lane.hz);
+        const t = Math.atan2(Math.sin(turn), Math.cos(turn)), on = (now * 1.4 + (car.id % 997) / 997) % 1 < 0.5 ? 1 : 0;
+        if (t > 0.5) left = on; else if (t < -0.5) right = on;
+      }
+      this.fleet.add(far ? 1 : 0, d.matrix, car.look, car.braking ? 1 : 0, left, right, car.dist / r, wheelBlur(car.v, r));
     }
     const night = shared.uNight.value;
     this.beam.color.setScalar(0.36 * this.headlights * night); // the light on the road just ahead of a car
     this.beam.visible = night > 0.02;
-    this.fleets.forEach((f, i) => {
-      f.mesh.count = f.beams.count = counts[i];
-      f.mesh.instanceMatrix.needsUpdate = true;
-      if (f.mesh.instanceColor) f.mesh.instanceColor.needsUpdate = true;
-    });
+    this.fleet.end();
   }
 }

@@ -9,7 +9,10 @@
 // through it fades out instead (simtraffic.js, probe).
 import * as THREE from 'three';
 import { vehicleCapsule } from './collide.js';
-import { TYPES, vehicle, carMaterial, beamGeometry, beamTexture } from './traffic.js';
+import { TYPES, beamGeometry, beamTexture } from './traffic.js';
+import { BODY_SPECS, buildCarGeometry, carStyleCode } from './carbodies.js';
+import { loftedCarMaterial, carDepth } from './carmaterial.js';
+import { wheelBlur } from './fleet.js';
 import { LAMP_LAYER, lampMaterial } from './lamplight.js';
 import { streetAt } from '../shared/decks.js';
 
@@ -115,17 +118,22 @@ export class Roofs {
 export class Driver {
   // scene; surface(x, z, -2): the terrain; sim(): the simulated traffic (decks, the cars round about), or null;
   // tiles(): the scene's tile groups (for the walls)
-  constructor({ scene, surface, sim, tiles, lift = () => 0 }) {
+  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null }) {
+    this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
     this.surface = surface; this.sim = sim; this.tiles = tiles; this.lift = lift; // (lift: the paving's height over the terrain)
     this.on = false; this.label = 'Sedán';
-    this.spec = TYPES[1]; // a sedan
-    const geo = vehicle(this.spec.spec, 2);
-    this.brake = new THREE.InstancedBufferAttribute(new Float32Array(1), 1);
-    geo.setAttribute('aBrake', this.brake);
+    this.spec = TYPES[1]; // a sedan: the lofted body (carbodies.js), in a clear-coated paint
+    const body = BODY_SPECS.sedan, geo = buildCarGeometry(body, true);
+    this.wheelR = body.wheelRadius; this.turned = 0;
+    const red = new THREE.Color(0x8c1c1c); // (a red that reads against the asphalt by day and by night)
+    geo.setAttribute('paintColor', new THREE.InstancedBufferAttribute(new Float32Array([red.r, red.g, red.b]), 3));
+    this.state = new THREE.InstancedBufferAttribute(new Float32Array([0, 0, 0, carStyleCode({ metallic: 1, trim: 1, wheel: 1 })]), 4);
+    this.wheel = new THREE.InstancedBufferAttribute(new Float32Array(2), 2);
+    geo.setAttribute('carState', this.state); geo.setAttribute('aWheel', this.wheel);
     geo.setAttribute('aHide', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
-    this.mesh = new THREE.InstancedMesh(geo, carMaterial(true, { hero: true }), 1);
-    this.mesh.setColorAt(0, new THREE.Color(0x8c1c1c)); // (a red that reads against the asphalt by day and by night)
+    this.mesh = new THREE.InstancedMesh(geo, loftedCarMaterial(body, { hero: true }), 1);
     this.mesh.castShadow = true; this.mesh.frustumCulled = false; this.mesh.visible = false;
+    this.mesh.customDepthMaterial = carDepth();
     this.beams = new THREE.InstancedMesh(beamGeometry(this.spec.L), lampMaterial(beamTexture(), { vertexColors: true }), 1);
     this.beams.instanceMatrix = this.mesh.instanceMatrix; this.beams.layers.set(LAMP_LAYER); this.beams.frustumCulled = false; this.beams.visible = false;
     scene.add(this.mesh, this.beams);
@@ -144,7 +152,7 @@ export class Driver {
   }
   // Out of it: gone, or (park) left where it stopped, lamps off, to get back into (parked: its place)
   stop({ park = false } = {}) {
-    this.on = false; this.view = null; this.beams.visible = false; this.brake.array[0] = 0; this.brake.needsUpdate = true;
+    this.on = false; this.view = null; this.beams.visible = false; this.state.array[0] = 0; this.state.needsUpdate = true; this.mesh.material.userData.reverse.value = 0;
     this.parked = park ? { x: this.x, z: this.z, y: this.y, heading: this.heading } : null;
     this.mesh.visible = park;
     if (this.sim()) this.sim().probe = null;
@@ -202,7 +210,7 @@ export class Driver {
     // the ground, or the deck it is on: a deck near its height (a ramp grows out of the road a step at a time,
     // so the car climbs onto it; driving under a flyover, the deck is far above and the ground is the way)
     // (the asphalt as drawn, a bridge's deck at street level included; the kerb up onto a sidewalk)
-    const ground = streetAt(this.surface, this.x, this.z, this.y) + this.lift(this.x, this.z), deck = sim?.deckAt(this.x, this.z, this.y + 0.5) ?? null;
+    const ground = streetAt(this.surface, this.x, this.z, this.y) + this.lift(this.x, this.z), deck = this.decks?.at(this.x, this.z, this.y + 0.5, 2.4) ?? null;
     const want = deck != null && Math.abs(deck - this.y) < 2.4 ? deck : ground;
     // (no steeper than a road climbs: the elevation model has the odd bridge embankment in it, a wall to drive into)
     const moved = Math.hypot(nx - this.x, nz - this.z) + Math.abs(v) * dt, climb = 0.35 * moved + 0.02;
@@ -221,7 +229,11 @@ export class Driver {
     m.makeRotationY(this.heading).multiply(new THREE.Matrix4().makeRotationX(-this.pitch + dive)).multiply(new THREE.Matrix4().makeRotationZ(this.roll + lean));
     m.setPosition(this.x, this.y + 0.01, this.z);
     this.mesh.setMatrixAt(0, m); this.mesh.instanceMatrix.needsUpdate = true;
-    this.brake.array[0] = brake && v > 0.3 ? 1 : 0; this.brake.needsUpdate = true;
+    this.state.array[0] = brake && v > 0.3 ? 1 : 0; this.state.needsUpdate = true;
+    // its wheels turn as it goes; its reversing lamps light going backwards
+    this.turned += (v * dt) / this.wheelR;
+    this.wheel.array[0] = this.turned; this.wheel.array[1] = wheelBlur(Math.abs(v), this.wheelR); this.wheel.needsUpdate = true;
+    this.mesh.material.userData.reverse.value = v < -0.3 ? 1 : 0;
     this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: Math.abs(v), kmh: Math.abs(v) * 3.6, bump: this.bump, reversing: v < -0.3 };
   }
 }

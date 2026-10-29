@@ -131,7 +131,8 @@ export function overDecks(footprints, PROP) {
 
 // paving: the tiles' road and paint materials (materials.js): a bridge at grade is paved with them, as the road up to
 // it is, so that it reads as the same road and not as a patch of another colour
-export async function buildFlyovers(roads, ground, depth = null, paving = null) { // (roads: roads.json, or its url)
+// decks: the decks as drawn (roadlevel.js DrawnDecks), for where two merge
+export async function buildFlyovers(roads, ground, depth = null, paving = null, decks = null) { // (roads: roads.json, or its url)
   const { edges } = typeof roads === 'string' ? await (await fetch(roads)).json() : roads;
   const concrete = [0.6, 0.6, 0.58], asphalt = [0.3, 0.3, 0.32], paint = [0.9, 0.9, 0.87], barrier = [0.7, 0.72, 0.72], sidewalk = [0.55, 0.55, 0.53];
   const soup = new Soup();
@@ -198,9 +199,15 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null) 
         for (const s of [-1, 1]) sweep(a, b, [[s * c, 0], [s * width.half, 0]], side === 'sidewalk' ? sidewalk : asphalt);
         for (const l of lines) if (!l.dashed || dashed) sweep(a, b, [[l.o - 0.075, 0.015], [l.o + 0.075, 0.015]], l.yellow ? [0.88, 0.66, 0.12] : paint);
       }
-      // parapets, with a taller noise barrier on the expressway's flyovers
+      // parapets, with a taller noise barrier on the expressway's flyovers; none on a side that lies on the paving
+      // of another deck at its level, where a ramp merges or forks (the cars changing from one to the other drove
+      // through the parapet between them)
       const top = expressway && !e.grade ? 1.9 : 1.0;
       for (const s of [-1, 1]) {
+        if (decks) {
+          const p = at(a, s * (w - 0.125), 0), q = at(b, s * (w - 0.125), 0), L = Math.hypot(q[0] - p[0], q[2] - p[2]) || 1;
+          if (decks.paved((p[0] + q[0]) / 2, (p[2] + q[2]) / 2, (p[1] + q[1]) / 2, e, (q[0] - p[0]) / L, (q[2] - p[2]) / L)) continue;
+        }
         sweep(a, b, [[s * (w - 0.25), 0], [s * (w - 0.25), 0.9], [s * w, 0.9]], concrete);
         if (top > 1) sweep(a, b, [[s * (w - 0.1), 0.9], [s * (w - 0.1), top]], barrier);
       }

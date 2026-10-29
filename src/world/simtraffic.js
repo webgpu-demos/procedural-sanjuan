@@ -9,9 +9,10 @@
 // Tracks come in windows of the morning (w_<t>.bin, WINDOW s each), fetched ahead of the clock.
 import * as THREE from 'three';
 import { segDist, vehicleCapsule } from './collide.js';
-import { RAMP_ABOVE, structureEdges, leftOut, roadLanes, paintOf } from './flyovers.js';
-import { streetAt } from '../shared/decks.js';
-import { TYPES, vehicle, carMaterial, dissolve, beamGeometry, beamTexture, CAR_COLORS, BUS_COLORS } from './traffic.js';
+import { roadLanes, paintOf, pavedHalf } from './flyovers.js';
+import { DrawnDecks } from './roadlevel.js';
+import { Fleet, BODY_OF, lookOf, wheelBlur } from './fleet.js';
+import { TYPES, dissolve, beamGeometry, beamTexture } from './traffic.js';
 import { shared } from './materials.js';
 import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
 
@@ -57,11 +58,11 @@ function lightsMaterial() {
 export class SimTraffic {
   static NEAR = NEAR;
   // base: the scenario's folder (tiles/<area>/sim/<scenario>); surface(x, z): height of the road surface.
-  static async load(base, surface, roads = null, ground = surface) {
+  static async load(base, surface, roads = null, ground = surface, drawn = null) {
     const index = await fetch(`${base}/index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     if (!index) return null;
     const sim = new SimTraffic(base, index, surface);
-    if (roads) sim.raise(roads, ground);
+    if (roads) sim.raise(roads, ground, drawn);
     // the AMA's buses (tools/sim/gtfs.py): route, headsign, colour by vehicle id
     sim.buses = await fetch(`${base}/../buses.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
     return sim;
@@ -85,30 +86,21 @@ export class SimTraffic {
     this.stats = { active: 0, near: 0, mid: 0, lights: 0 };
     this.headlights = 5;
 
-    const material = carMaterial();
     this.beam = lampMaterial(beamTexture(), { vertexColors: true });
     const share = [0.27, 0.24, 0.29, 0.16, 0.04, 0.01];
-    // each type twice: the full model near the camera, a lighter one further off (they look alike where they
-    // hand over); the second of each pair is the far one
-    this.fleets = TYPES.flatMap((t, k) => [1, 0].map((detail) => {
-      const cap = Math.ceil(MAX_NEAR * share[k] * (detail ? 0.5 : 1.6)) + 16;
-      const geo = vehicle(t.spec, detail);
-      const brake = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
-      brake.setUsage(THREE.DynamicDrawUsage);
-      geo.setAttribute('aBrake', brake);
-      const hide = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
-      hide.setUsage(THREE.DynamicDrawUsage);
-      geo.setAttribute('aHide', hide);
-      const mesh = new THREE.InstancedMesh(geo, material, cap);
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.castShadow = !!detail; mesh.frustumCulled = false; mesh.count = 0; // (the far ones' shadows are not seen)
-      mesh.setColorAt(0, new THREE.Color());
-      const beams = new THREE.InstancedMesh(beamGeometry(t.L), this.beam, cap);
-      beams.instanceMatrix = mesh.instanceMatrix;
-      beams.frustumCulled = false; beams.count = 0; beams.layers.set(LAMP_LAYER);
-      this.group.add(mesh, beams);
-      return { ...t, mesh, beams, brake, hide, cap, detail };
-    }));
+    // The cars and the buses: the lofted bodies (fleet.js), the full model within DETAIL of the camera, the stand-in out
+    // to `near`
+    const caps = {};
+    TYPES.forEach((t, k) => {
+      if (!BODY_OF[t.name]) return;
+      for (const [body, f] of t.name === 'suv' ? [['suv', 1], ['minivan', 0.4]] : [[BODY_OF[t.name], 1]]) {
+        const c = caps[body] ?? (caps[body] = [16, 16]);
+        c[0] += Math.ceil(MAX_NEAR * share[k] * 0.5 * f); c[1] += Math.ceil(MAX_NEAR * share[k] * 1.6 * f);
+      }
+    });
+    this.fleet = new Fleet(caps, { beam: beamGeometry, beamMaterial: this.beam });
+    this.group.add(this.fleet.group);
+    this.looks = new Map(); this.spins = new Map();
     // mid distance: one box per car, sized to its type
     const boxGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), boxMat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.3 });
     this.boxHide = new THREE.InstancedBufferAttribute(new Float32Array(MAX_MID), 1); this.boxHide.setUsage(THREE.DynamicDrawUsage);
@@ -149,11 +141,6 @@ export class SimTraffic {
     this.view = null;      // the followed car's place this frame: { x, y, z, heading, speed }
   }
 
-  // The raised roads as segments by 24 m cell: the decks and ramps the city draws (src/world/flyovers.js builds
-  // them from the same roads, by the same rules: a flyover, or an expressway that climbs well off the ground, on a
-  // structure wherever its level stands RAMP_ABOVE over the ground). A car over one, at about its height in the
-  // simulation, drives on it; any other on the street the tiles draw. (A road whose level stands off the ground
-  // with nothing drawn under it, a hump the old elevation model put in it, is driven on the ground.)
   // The expressway's lanes as SUMO drove them and as the tiles paint them. The tiles paint the lanes as the
   // carriageway is wide (four-metre lanes on PR-22). The network (tools/sim/network.mjs) gives SUMO the same lanes,
   // as wide, and lists them in the run's index; only where it narrowed a stretch (a toll plaza's six lanes into two,
@@ -281,19 +268,16 @@ export class SimTraffic {
     return [-g.tz * shift, g.tx * shift];
   }
 
-  raise(roads, ground) {
+  raise(roads, ground, drawn) {
     this.relanes(roads);
-    this.decks = new Map();
-    this.flush = new Map(); // (the bridges at grade where they lie on the ground: the deck a few centimetres up)
-    // (where the expressway's height was corrected, src/shared/profile.js: the simulation drove the old levels,
-    // pts0; a car on one is put at the new: fixAt. A run whose network was built on the roads' levels as they are,
-    // index.levels 'roads', drove those: nothing to fix)
+    // (where the client corrected the roads' levels, src/shared/profile.js correctProfiles and flyovers.js landDecks,
+    // the simulation drove the levels roads.json has, kept in pts0: a car on one is put at the new, fixAt. The decks
+    // are drawn at the new: a car left at the simulation's level was metres off them, flying beside a bridge at grade
+    // or sunk under one. A run built on roads.json's levels, index.levels 'roads', drove pts0 too.)
     this.fixes = new Map();
-    if (this.index?.levels !== 'roads') this.fixLevels(roads);
-    // (the roads flyovers.js builds a structure for; a span's surface is the tiles' own, draped on its deck: the
-    // surface)
-    const built = structureEdges(roads.edges, ground);
-    this.deckSegments(roads, ground, built);
+    this.fixLevels(roads);
+    // what the flyovers draw (roadlevel.js): a car on one, at about its level, drives on it; any other on the street
+    this.drawn = drawn ?? new DrawnDecks(roads, ground);
   }
   fixLevels(roads) {
     const keep = [];
@@ -307,11 +291,12 @@ export class SimTraffic {
         if (cell.at(-1) !== seg) cell.push(seg);
       }
     };
+    const lanesOf = roadLanes(roads.edges);
     for (const e of roads.edges) {
-      const p = e.pts, o = e.pts0;
+      const p = e.pts, o = e.pts0, hw = pavedHalf(e, lanesOf(e)).half + 2.5; // (a car on it is within its paved width, or not far out: SUMO's lanes are its own)
       for (let k = 3; k < p.length; k += 3) {
         const y0 = o ? o[k / 3 - 1] : p[k - 2], y1 = o ? o[k / 3] : p[k + 1];
-        const seg = [p[k - 3], y0, p[k - 1], p[k], y1, p[k + 2], p[k - 2], p[k + 1]];
+        const seg = [p[k - 3], y0, p[k - 1], p[k], y1, p[k + 2], p[k - 2], p[k + 1], hw, e.oneway, e];
         if (Math.abs(y1 - p[k + 1]) < 0.5 && Math.abs(y0 - p[k - 2]) < 0.5) keep.push(seg); else file(seg);
       }
     }
@@ -321,67 +306,31 @@ export class SimTraffic {
     const near = (key) => { for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (fixed.has(key + a * CELLS + b)) return true; return false; };
     for (const seg of keep) file(seg, near);
   }
-  deckSegments(roads, ground, built) {
-    for (const e of roads.edges) {
-      if (!built.has(e)) continue;
-      const p = e.pts, [from, to] = built.get(e);
-      let along = 0;
-      for (let k = 3; k < p.length; k += 3) {
-        let x0 = p[k - 3], y0 = p[k - 2], z0 = p[k - 1], x1 = p[k], y1 = p[k + 1], z1 = p[k + 2];
-        const whole = Math.hypot(x1 - x0, z1 - z0), s0 = along; along += whole;
-        // (the stretch of it that has a structure)
-        const f0 = Math.max(0, (from - s0) / (whole || 1)), f1 = Math.min(1, (to - s0) / (whole || 1));
-        if (f1 <= f0) continue;
-        if (f0 > 0 || f1 < 1) {
-          const ax = x0, ay = y0, az = z0, bx = x1, by = y1, bz = z1;
-          x0 = ax + (bx - ax) * f0; y0 = ay + (by - ay) * f0; z0 = az + (bz - az) * f0;
-          x1 = ax + (bx - ax) * f1; y1 = ay + (by - ay) * f1; z1 = az + (bz - az) * f1;
-        }
-        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, len = Math.hypot(x1 - x0, z1 - z0);
-        if (len < 0.1) continue;
-        const low = Math.max(y0 - ground(x0, z0), y1 - ground(x1, z1)) <= RAMP_ABOVE && (y0 + y1) / 2 < ground(mx, mz) + RAMP_ABOVE;
-        // (a bridge at grade, low as it is, is driven on its deck: flush, below)
-        const into = low ? (leftOut(e) ? this.flush : null) : this.decks;
-        if (!into) continue;
-        const seg = [x0, y0, z0, x1, y1, z1];
-        for (let s = 0; s <= len; s += 12) {
-          const f = s / len, key = Math.floor((x0 + (x1 - x0) * f) / 24) + ',' + Math.floor((z0 + (z1 - z0) * f) / 24);
-          if (!into.has(key)) into.set(key, []);
-          const cell = into.get(key); if (cell.at(-1) !== seg) cell.push(seg);
-        }
-      }
-    }
-  }
-  // The corrected level of the expressway under (x, z) for a car the simulation has at height y on its old level
-  // there, or null
-  fixAt(x, z, y) {
-    const c = cellKey(x, z);
+  // The corrected level of the road under (x, z) for a car the simulation has at height y on its old level there,
+  // facing `heading`, or null: of the roads it is on (within their paved width, driving along them), the one whose old
+  // level is nearest its height (this.fixEdge: that road). (Matched by nearness alone, a car on a flyover could take
+  // the level of a bridge at grade beside it, corrected metres down, and drive under the flyover's deck.)
+  fixAt(x, z, y, heading = null) {
+    const c = cellKey(x, z), hx = heading == null ? 0 : Math.sin(heading), hz = heading == null ? 0 : Math.cos(heading);
     let best = null, score = Infinity;
+    this.fixEdge = null;
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
-      for (const [x0, y0, z0, x1, y1, z1, n0, n1] of this.fixes?.get(c + a * CELLS + b) ?? []) {
+      for (const [x0, y0, z0, x1, y1, z1, n0, n1, hw, oneway, e] of this.fixes?.get(c + a * CELLS + b) ?? []) {
         const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
-        const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f, s = d + 4 * Math.abs(h - y);
-        if (d < 12 && Math.abs(h - y) < 2.5 && s < score) { score = s; best = n0 + (n1 - n0) * f; }
+        const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f;
+        if (d > hw || Math.abs(h - y) >= 2.5) continue;
+        if (heading != null) {
+          const al = (hx * dx + hz * dz) / Math.sqrt(l2), along = oneway === 1 ? al : oneway === -1 ? -al : Math.abs(al);
+          if (along < 0.5) continue; // (a road it crosses, or one the other way)
+        }
+        const sc = Math.abs(h - y) + 0.05 * d;
+        if (sc < score) { score = sc; best = n0 + (n1 - n0) * f; this.fixEdge = e; }
       }
     }
     return best;
   }
-  // the deck under (x, z) near height y, or null (the cells round about too: a wide deck's centreline can run
-  // through the next cell, and a car on its outer lane is well off the line)
-  deckAt(x, z, y, decks = this.decks) {
-    if (!decks) return null;
-    const cx = Math.floor(x / 24), cz = Math.floor(z / 24);
-    // (the deck at the car's own height: a ramp under a flyover is a different deck from the flyover)
-    let best = null, score = Infinity;
-    for (let i = cx - 1; i <= cx + 1; i++) for (let j = cz - 1; j <= cz + 1; j++) {
-      for (const [x0, y0, z0, x1, y1, z1] of decks.get(i + ',' + j) ?? []) {
-        const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
-        const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f, s = d + 4 * Math.abs(h - y);
-        if (d < 14 && Math.abs(h - y) < 2.0 && s < score) { score = s; best = h; }
-      }
-    }
-    return best;
-  }
+  // the deck drawn under (x, z) near height y, or null (the visitor's car, bike and walk: drive.js, player.js)
+  deckAt(x, z, y) { return this.drawn?.at(x, z, y, 2.0) ?? null; }
 
   // ---------------------------------------------------------------- windows
   windowStart(T) { return this.begin + Math.floor((T - this.begin) / this.index.window) * this.index.window; }
@@ -440,10 +389,10 @@ export class SimTraffic {
 
     const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
     const p = [0, 0, 0], q = [0, 0, 0], r = [0, 0, 0];
-    const counts = this.fleets.map(() => 0);
     let mid = 0, lights = 0, active = 0, nearSpeed = 0, nearStopped = 0, nearN = 0;
     const m = this.m.elements, night = shared.uNight.value;
     this.view = null; this.probeHits.length = 0; this.nearby.length = 0; (this.cars ??= []).length = 0;
+    this.fleet.begin();
     // A seen car's height follows the street exactly, but a step of more than half a metre from one frame to the
     // next (onto a deck, off it) is eased over a tenth of a second, or at the speed of the opening the car would
     // hop. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
@@ -513,22 +462,19 @@ export class SimTraffic {
       }
       const sin = Math.sin(heading), cos = Math.cos(heading);
       // On what the city draws there: the street (the tiles' surface, flat across the triangles they draw it with:
-      // src/shared/terrain.js meshHeight), or a deck or a ramp the flyovers draw (deckAt), when the simulation has
-      // the car up at about its level. Never at a height nothing is drawn at: the simulation drove the levels the
+      // src/shared/terrain.js meshHeight), or a deck or a ramp the flyovers draw (roadlevel.js), the one of the two
+      // nearer the level the simulation has the car at. Never at a height nothing is drawn at: the simulation drove the levels the
       // compiler gave the roads, humps of the elevation model in them here and there, and a car following them
       // sank into the street where the street ran over a hump the levels did not have, or rose off it where the
       // levels had one the street did not. For a car seen only as its lamps, the simulation's own height is near
       // enough (and the ground is not looked up for tens of thousands).
       const seen = d2 < MID * MID || followed;
-      // (the simulation's height for it, the expressway's humps taken out: src/shared/profile.js)
-      const sy = (seen && this.fixes?.size ? this.fixAt(p[0], p[2], p[1]) : null) ?? p[1];
-      // the street: on a bridge's deck at street level (the tiles drape the road on it), or under it if the car is
-      // nearer the ground there (a road passing beneath)
-      const ground = seen ? streetAt(this.surface, p[0], p[2], sy) : sy;
-      const deck = seen && sy > ground + 0.25 ? this.deckAt(p[0], p[2], sy) : null, raised = deck != null && deck > ground + 0.1;
-      let y = seen ? (raised ? deck : ground) : sy;
-      // on a bridge at grade: on its deck, which flyovers.js lays just clear of the ground
-      if (seen && !raised && this.flush?.size) { const f = this.deckAt(p[0], p[2], sy, this.flush); if (f != null && f < ground + 0.5) y = Math.max(f, ground + 0.02); }
+      // (the simulation's height for it, put on the corrected levels: fixAt)
+      const fixed = seen && this.fixes?.size ? this.fixAt(p[0], p[2], p[1], heading) : null, sy = fixed ?? p[1], road = fixed == null ? null : this.fixEdge;
+      // its road's deck drawn under it, or the street (roadlevel.js)
+      const stood = seen ? this.drawn.stand(this.surface, p[0], p[2], sy, heading, road) : null, raised = !!stood?.deck;
+      if (stood?.push) { p[0] += stood.push[0]; p[2] += stood.push[1]; } // (onto the deck drawn, from just beyond its edge)
+      let y = seen ? stood.y : sy;
       if (seen) {
         const h = this.heights.get(vid);
         if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12 && Math.abs(y - h[0]) > 0.5) y = h[0] + (y - h[0]) * ease; // (a step: onto a deck, off it)
@@ -554,7 +500,7 @@ export class SimTraffic {
           for (const s of this.solids) shown *= smooth(0.05, 0.7, segDist(c[0], c[1], c[2], c[3], s[0], s[1], s[2], s[3]) - c[4] - s[4]);
         }
       }
-      if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], ground, deck, shown, heading, spec);
+      if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], sy, raised, shown, heading, spec);
       if (d2 < 320 * 320) this.nearby.push([p[0], p[2]]); // (for the minimap)
       if (d2 < 420 * 420) this.cars.push(p[0], p[2], heading, speed); // (for the people waiting to cross: src/world/people.js)
       if (d2 < 250 * 250) { nearN++; nearSpeed += speed; if (speed < 0.5) nearStopped++; }
@@ -562,22 +508,43 @@ export class SimTraffic {
       const d = Math.sqrt(d2), near = this.near, handover = followed ? 0 : smooth(near - BAND, near, d);
       let boxed = true, modelled = false;
       if (d < near || followed) {
-        const fi = t * 2 + (d < DETAIL || followed ? 0 : 1), f = this.fleets[fi];
-        if (counts[fi] < f.cap) {
-          const k = counts[fi]++;
-          // nose up or down with the road
-          const ahead = raised ? 0 : (this.surface(p[0] + sin * 2.5, p[2] + cos * 2.5, -2) - this.surface(p[0] - sin * 2.5, p[2] - cos * 2.5, -2)) / 5;
-          const pitch = -Math.atan(ahead), cp = Math.cos(pitch), sp = Math.sin(pitch);
-          // rotation Y(heading) * X(pitch), then translation
-          m[0] = cos; m[1] = 0; m[2] = -sin; m[3] = 0;
-          m[4] = sin * sp; m[5] = cp; m[6] = cos * sp; m[7] = 0;
-          m[8] = sin * cp; m[9] = -sp; m[10] = cos * cp; m[11] = 0;
-          m[12] = p[0]; m[13] = y + 0.07; m[14] = p[2]; m[15] = 1;
-          f.mesh.setMatrixAt(k, this.m);
-          f.mesh.setColorAt(k, this.color.setHex(this.paint(vid, t)));
-          f.brake.array[k] = brake;
-          f.hide.array[k] = 1 - shown * (1 - handover);
-          boxed = handover > 0; modelled = true;
+        // nose up or down with the road
+        const ahead = (this.drawn.stand(this.surface, p[0] + sin * 2.5, p[2] + cos * 2.5, y, heading, road).y - this.drawn.stand(this.surface, p[0] - sin * 2.5, p[2] - cos * 2.5, y, heading, road).y) / 5;
+        const pitch = -Math.atan(ahead), cp = Math.cos(pitch), sp = Math.sin(pitch);
+        // rotation Y(heading) * X(pitch), then translation
+        m[0] = cos; m[1] = 0; m[2] = -sin; m[3] = 0;
+        m[4] = sin * sp; m[5] = cp; m[6] = cos * sp; m[7] = 0;
+        m[8] = sin * cp; m[9] = -sp; m[10] = cos * cp; m[11] = 0;
+        m[12] = p[0]; m[13] = y + 0.03; m[14] = p[2]; m[15] = 1;
+        const lod = d < DETAIL || followed ? 0 : 1, hide = 1 - shown * (1 - handover);
+        {
+          let look = this.looks.get(vid);
+          if (!look) {
+            look = lookOf(spec.name, vid);
+            // (a bus in its route's colour: buses.json, from the GTFS)
+            const bus = this.buses?.[vid];
+            if (bus && look.body === 'bus') { this.color.set(bus[3]); look.paint = [this.color.r, this.color.g, this.color.b]; }
+            this.looks.set(vid, look);
+          }
+          // its wheels turn with the way it goes (eased over cuts: a car first seen starts where its id puts it)
+          const r = this.fleet.wheelRadius(look.body), sp0 = this.spins.get(vid);
+          const dist = sp0 && sp0[1] === frame - 1 ? sp0[0] + speed * dt : hash(vid) * 40;
+          if (sp0) { sp0[0] = dist; sp0[1] = frame; } else this.spins.set(vid, [dist, frame]);
+          // its turn signal, blinking where its track turns a few seconds on (at a junction's pace, not a curve's)
+          let left = 0, right = 0;
+          if (lod === 0 && speed < 14) {
+            const on = this.on3 ??= [0, 0, 0], on4 = this.on4 ??= [0, 0, 0];
+            if (SimTraffic.at(W, i, T + 3, on) && SimTraffic.at(W, i, T + 4.5, on4)) {
+              const gx = on4[0] - on[0], gz = on4[2] - on[2];
+              if (gx * gx + gz * gz > 1) {
+                const turn = Math.atan2(gx, gz) - heading, tt = Math.atan2(Math.sin(turn), Math.cos(turn));
+                const blink = (shared.uTime.value * 1.4 + hash(vid + 3)) % 1 < 0.5 ? 1 : 0;
+                if (tt > 0.6) left = blink; else if (tt < -0.6) right = blink;
+              }
+            }
+            SimTraffic.at(W, i, T, (this.scratch ??= [0, 0, 0])); // (restore the cursor)
+          }
+          if (this.fleet.add(lod, this.m, look, brake, left, right, dist / r, wheelBlur(speed, r), hide)) { boxed = handover > 0; modelled = true; }
         }
       }
       if (boxed && d2 < MID * MID && mid < MAX_MID) {
@@ -587,7 +554,8 @@ export class SimTraffic {
         m[8] = sin * L; m[9] = 0; m[10] = cos * L; m[11] = 0;
         m[12] = p[0]; m[13] = y + 0.15; m[14] = p[2]; m[15] = 1;
         this.boxes.setMatrixAt(mid, this.m);
-        this.boxes.setColorAt(mid, this.color.setHex(this.paint(vid, t)));
+        const lk = this.looks.get(vid) ?? lookOf(spec.name, vid);
+        this.boxes.setColorAt(mid, this.color.setRGB(...lk.paint));
         this.boxHide.array[mid] = 1 - shown * (modelled ? handover : 1); // (no model drawn: the box is the car)
         mid++;
       }
@@ -602,12 +570,8 @@ export class SimTraffic {
         lights++;
       }
     }
-    this.fleets.forEach((f, k) => {
-      f.mesh.count = f.beams.count = counts[k];
-      f.mesh.instanceMatrix.needsUpdate = true;
-      if (f.mesh.instanceColor) f.mesh.instanceColor.needsUpdate = true;
-      f.brake.needsUpdate = true; f.hide.needsUpdate = true;
-    });
+    this.fleet.end();
+    if (frame % 240 === 0) for (const [k, v] of this.spins) if (frame - v[1] > 60) { this.spins.delete(k); this.looks.delete(k); }
     this.boxHide.needsUpdate = true;
     this.boxes.count = mid; this.boxes.instanceMatrix.needsUpdate = true;
     if (this.boxes.instanceColor) this.boxes.instanceColor.needsUpdate = true;
@@ -617,13 +581,13 @@ export class SimTraffic {
     this.lights.material.uniforms.uScale.value = Math.min(3, devicePixelRatio || 1);
     this.beam.color.setScalar(0.36 * this.headlights * night);
     this.beam.visible = night > 0.02;
-    this.stats = { active, near: counts.reduce((a, b) => a + b, 0), mid, lights, nearSpeed: nearN ? nearSpeed / nearN : null, nearStopped, nearCount: nearN };
+    this.stats = { active, near: this.fleet.count, mid, lights, nearSpeed: nearN ? nearSpeed / nearN : null, nearStopped, nearCount: nearN };
   }
 
   dispose() { this.worker.terminate(); this.windows.clear(); }
 
   hide() {
-    for (const f of this.fleets) f.mesh.count = f.beams.count = 0;
+    this.fleet.hide();
     this.boxes.count = 0; this.lights.geometry.setDrawRange(0, 0);
     this.stats = { active: 0, near: 0, mid: 0, lights: 0 };
   }
@@ -640,12 +604,7 @@ export class SimTraffic {
     return 0;
   }
 
-  paint(vid, type) {
-    const bus = this.buses?.[vid];
-    if (bus) return parseInt(bus[3].slice(1), 16) || 0xe8e4d8;
-    const palette = TYPES[type].name === 'bus' ? BUS_COLORS : CAR_COLORS;
-    return palette[Math.floor(hash(vid + 7) * palette.length)];
-  }
+
 
   // Cars within `radius` of (x, z) at time T that will still be driving `until` seconds on: [{ vid, x, z, heading }].
   // Whether car vid is on the road at T (its window loaded)

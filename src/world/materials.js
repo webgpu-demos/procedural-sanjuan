@@ -398,6 +398,61 @@ function facadeMaterial(tex) {
 }
 
 // ---------------------------------------------------------------- ground
+const ROAD_WEAR = /* glsl */ `
+// The asphalt's wear and repairs (after mrdoob's road material in slop-newyork, MIT): hairline block cracking in the
+// worn stretches, utility-cut patches and trenches with tar-sealed edges (fresh and dark, or old and pale), potholes,
+// tar snakes over the wider cracks, oil drips. Each is traced only while it is wider than a pixel, then settles to its
+// mean. wxz: world position; px: metres a pixel spans.
+// (smoothstep with its edges either way round: GLSL leaves a reversed smoothstep undefined)
+float rss(float a, float b, float x) { float t = clamp((x - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+float voronoiBorder(vec2 p) {
+  vec2 ip = floor(p), fp = fract(p);
+  float f1 = 8.0, f2 = 8.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 id = ip + vec2(float(i), float(j));
+    vec2 site = vec2(float(i), float(j)) + vec2(hash12(id), hash12(id + vec2(37.1, 11.7))) * 0.8 + 0.1;
+    float d = length(fp - site);
+    f2 = min(f2, max(f1, d)); f1 = min(f1, d);
+  }
+  return (f2 - f1) * 0.5;
+}
+// x: crack coverage, y: signed distance to a patch's edge (< 0 inside), z: pothole (0..1), w: 1 where the cell has a patch
+vec4 roadWear(vec2 wxz, float px) {
+  float worn = rss(0.5, 0.78, vnoise(wxz * 0.045 + 71.0));
+  float crack = 0.0;
+  if (worn > 0.001 && px < 0.04) {
+    vec2 warp = (vec2(vnoise(wxz * 2.7), vnoise(wxz * 2.7 + 13.0)) - 0.5) * 0.35;
+    float border = voronoiBorder(wxz / 0.55 + warp) * 0.55;
+    float width = worn * 0.0016 + 0.0012, eff = max(width, px * 0.6);
+    crack = (1.0 - rss(eff, eff + px, border)) * (width / eff) * worn * rss(0.04, 0.015, px);
+  }
+  vec2 pCell = floor(wxz / 11.0);
+  float hasPatch = step(0.5, hash12(pCell + vec2(3.7, 8.1))), trench = step(0.6, hash12(pCell + vec2(2.9, 6.3))), alongX = step(0.5, hash12(pCell + vec2(5.5, 9.9)));
+  vec2 pCentre = (pCell + 0.5 + (vec2(hash12(pCell + vec2(1.3, 5.9)), hash12(pCell + vec2(9.2, 2.4))) - 0.5) * mix(0.4, 0.08, trench)) * 11.0;
+  vec2 cutHalf = vec2(hash12(pCell + vec2(4.4, 0.6)) * 1.8 + 0.6, hash12(pCell + vec2(7.8, 3.1)) * 1.4 + 0.5);
+  float trenchLong = hash12(pCell + vec2(0.7, 4.8)) * 2.0 + 2.4, trenchNarrow = hash12(pCell + vec2(6.6, 7.2)) * 0.25 + 0.3;
+  vec2 pHalf = mix(cutHalf, mix(vec2(trenchNarrow, trenchLong), vec2(trenchLong, trenchNarrow), alongX), trench);
+  vec2 pq = abs(wxz - pCentre) - pHalf;
+  float patchDist = max(pq.x, pq.y);
+  vec2 hCell = floor(wxz / 7.0);
+  vec2 hCentre = (hCell + vec2(hash12(hCell + vec2(2.2, 7.7)), hash12(hCell + vec2(6.1, 1.9))) * 0.6 + 0.2) * 7.0;
+  float hRadius = hash12(hCell + vec2(5.3, 4.2)) * 0.24 + 0.12;
+  float hDist = length(wxz - hCentre) * ((vnoise(wxz * 6.0) - 0.5) * 0.5 + 1.0);
+  float hasHole = step(0.975 - worn * 0.12, hash12(hCell + vec2(8.8, 0.3)));
+  float pothole = rss(hRadius + px, hRadius * 0.35, hDist) * hasHole;
+  return vec4(crack * (1.0 - step(patchDist, 0.0) * hasPatch), patchDist, pothole, hasPatch);
+}
+float roadTarSnakes(vec2 wxz, float px) {
+  float zone = rss(0.3, 0.48, vnoise(wxz * 0.03 + 17.0));
+  if (zone < 0.001 || px > 0.12) return 0.0;
+  vec2 warp = (vec2(vnoise(wxz * 0.9), vnoise(wxz * 0.9 + 31.0)) - 0.5) * 0.6;
+  float border = voronoiBorder(wxz / 2.4 + warp) * 2.4;
+  float keep = rss(0.38, 0.5, vnoise(wxz * 0.6 + 5.0));
+  float width = vnoise(wxz * 1.7 + 9.0) * 0.012 + 0.014, eff = max(width, px * 0.6);
+  return (1.0 - rss(eff, eff + px, border)) * (width / eff) * zone * keep * rss(0.12, 0.06, px);
+}
+`;
+
 // Terrain and road surfaces: vertex colour x texture detail, layer from the aLayer attribute
 // (roads) or fixed (terrain).
 const GROUND_PARS = /* glsl */ `
@@ -428,6 +483,7 @@ vec3 gGlint = vec3(0.0), gSheen = vec3(0.0); // the sun in the water, where it r
 float gLampGain = 1.0; // the share of the street lamps' light it takes (LAMP_GAIN, on the tiles' ground)
 float gSand = 0.0;      // how much it is a beach's sand (a beach area, or open ground the photo shows bright and warm)
 ${NOISE}
+${ROAD_WEAR}
 `;
 const GROUND_MAIN = /* glsl */ `
 {
@@ -450,6 +506,28 @@ const GROUND_MAIN = /* glsl */ `
   gNm = texture(uGroundNor, vec3(st / sc, layer)).xyz * 2.0 - 1.0;
   gNm = normalize(vec3(gNm.xy * 0.8, gNm.z));
   gRough = layer < 0.5 ? 0.86 - 0.12 * blotch : layer > 4.5 ? 0.62 - 0.1 * blotch : 0.93; // (worn adoquines have a sheen)
+  // the asphalt of the roads (not the open ground's paving): worn, cracked and patched, the odd pothole (ROAD_WEAR)
+  // (the pixel's size taken outside the branch: derivatives need every pixel round it to take them)
+  float roadPx = max(length(fwidth(vWPos.xz)), 1e-4);
+  if (layer < 0.5 && uFixedLayer < 0.0) {
+    vec2 wxz = vWPos.xz;
+    float px = roadPx;
+    vec4 wear = roadWear(wxz, px);
+    float patchCover = rss(px, -px, wear.y) * wear.w;
+    float sealW = max(0.022, px * 0.75), patchSeal = (1.0 - rss(sealW, sealW + px, abs(wear.y))) * (0.022 / sealW) * wear.w;
+    float fresh = step(0.55, hash12(floor(wxz / 11.0) + vec2(12.9, 6.6)));
+    float chips = mix(0.035, rss(0.72, 0.8, vnoise(wxz * 30.0)), rss(0.03, 0.012, px));
+    float tar = roadTarSnakes(wxz, px) * (1.0 - patchCover);
+    vec2 oilCell = floor(wxz / 2.5);
+    vec2 oilCentre = (oilCell + vec2(hash12(oilCell + vec2(4.1, 2.2)), hash12(oilCell + vec2(8.3, 6.7))) * 0.6 + 0.2) * 2.5;
+    float oilDist = length(wxz - oilCentre) * ((vnoise(wxz * 5.0) - 0.5) * 0.8 + 1.0), oilR = hash12(oilCell + vec2(1.9, 9.4)) * 0.25 + 0.1;
+    float oil = rss(oilR + px, oilR * 0.3, oilDist) * step(0.66, hash12(oilCell + vec2(7.7, 3.3))) * (hash12(oilCell + vec2(2.6, 5.1)) * 0.6 + 0.4);
+    vec3 base = diffuseColor.rgb;
+    vec3 patchCol = mix(mix(base, vec3(dot(base, vec3(0.33))) * 1.25, 0.45) * 1.06, base * 0.62, fresh);
+    diffuseColor.rgb = mix(base, patchCol, patchCover) * (1.0 - patchSeal * 0.5) + chips * 0.02 * (1.0 - patchCover * fresh);
+    diffuseColor.rgb *= (1.0 - tar * 0.62) * (1.0 - oil * 0.45) * (1.0 - wear.x * 0.65) * (1.0 - wear.z * 0.45);
+    gRough = clamp(gRough - patchSeal * 0.3 - tar * 0.38 - oil * 0.18 - patchCover * fresh * 0.06 + wear.z * 0.06, 0.3, 1.0);
+  }
   // the open ground (not roads, which have their own surface) shows the aerial photo: car parks, yards, gardens
   if (uFixedLayer >= 0.0 && uOrthoOn > 0.5) {
     vec2 ouv = (vWPos.xz - uOrthoRect.xy) / uOrthoRect.zw;
