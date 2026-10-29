@@ -24,7 +24,10 @@ const BONES = ['Bip01_Pelvis', 'Bip01_Spine', 'Bip01_Spine1', 'Bip01_Spine2', 'B
   ...['L', 'R'].flatMap((s) => ['Clavicle', 'UpperArm', 'Forearm', 'Hand', 'Thigh', 'Calf', 'Foot', 'Toe0'].map((b) => `Bip01_${s}_${b}`))];
 const NB = BONES.length;
 const MOVE = ['walk', 'walk2', 'stroll', 'brisk', 'jog'], STILL = ['idle', 'wait', 'text', 'look', 'talk', 'sit', 'call'];
-const CLIPS = [...MOVE, ...STILL];
+// the transitions between them, played once (tools/motion/transitions.py: MotionBricks' motion between the clips' own
+// poses): setting off from standing, stopping from either foot, standing up from a seat
+const TRANS = ['start', 'stopL', 'stopR', 'standup'];
+const CLIPS = [...MOVE, ...STILL, ...TRANS];
 const FPS = { move: 30, still: 10 };
 const POOL = 1600;                  // people at once, at most
 const LOD = [24, 95];               // metres: the full body nearer than this, the plain one beyond the second
@@ -158,16 +161,38 @@ function personDepth(cutout, textures) {
 // rotations for every avatar of either; only the bones' lengths are each avatar's own (and the child's hips lower).
 // Only the rotations are kept, and the pelvis's track, its travel over a walk's cycle taken out (the person is carried
 // along at the clip's own pace instead) and that pace measured.
-function prepareClips(move, still) {
+// A transition (moves: <sex>-moves.glb) carries the person as it goes (setting off, stopping): its pelvis's travel,
+// key by key, is taken out of its track and kept (travel: metres forward of where it began) for the person to be
+// carried along by.
+function prepareClips(move, still, moves = null) {
   const V = () => new THREE.Vector3(), clips = {};
-  for (const [g, moving] of [[move, true], [still, false]]) {
+  for (const [g, moving] of [[move, true], [still, false], ...(moves ? [[moves, 'trans']] : [])]) {
     g.scene.updateMatrixWorld(true);
     let pelvis = null; g.scene.traverse((o) => { if (o.name === 'Bip01_Pelvis') pelvis = o; });
+    // (the way the rig faces at rest: its feet to its toes)
+    const ahead = V();
+    for (const s of ['L', 'R']) {
+      const f = g.scene.getObjectByName(`Bip01_${s}_Foot`), t = g.scene.getObjectByName(`Bip01_${s}_Toe0`);
+      if (f && t) ahead.add(t.getWorldPosition(V()).sub(f.getWorldPosition(V())));
+    }
+    ahead.y = 0; ahead.normalize();
     const mixer = new THREE.AnimationMixer(g.scene);
     for (const clip of g.animations) {
       clip.tracks = clip.tracks.filter((t) => t.name.endsWith('.quaternion') || t.name === 'Bip01_Pelvis.position');
       let speed = 0;
       const track = clip.tracks.find((t) => t.name === 'Bip01_Pelvis.position');
+      if (moving === 'trans') {
+        // (each key's travel from the first, in the world: forward kept, all of it taken out of the track)
+        const n = track.times.length, v = track.values, a = mixer.clipAction(clip); a.play();
+        const end = clip.duration - 1e-4, at = (t) => { mixer.setTime(Math.min(t, end)); g.scene.updateMatrixWorld(true); return pelvis.getWorldPosition(V()); };
+        const p0 = at(track.times[0]), travel = new Float32Array(n), m3 = new THREE.Matrix3().setFromMatrix4(pelvis.parent.matrixWorld).invert();
+        const shifts = [];
+        for (let i = 0; i < n; i++) { const d = at(track.times[i]).sub(p0); d.y = 0; travel[i] = d.dot(ahead); shifts.push(d.applyMatrix3(m3)); }
+        a.stop(); mixer.uncacheClip(clip);
+        for (let i = 0; i < n; i++) { v[i * 3] -= shifts[i].x; v[i * 3 + 1] -= shifts[i].y; v[i * 3 + 2] -= shifts[i].z; }
+        clips[clip.name] = { clip, speed: 0, moving: true, trans: true, times: Float32Array.from(track.times), travel };
+        continue;
+      }
       if (moving && track && pelvis) {
         const a = mixer.clipAction(clip); a.play();
         const at = (t) => { mixer.setTime(t); g.scene.updateMatrixWorld(true); return pelvis.getWorldPosition(V()); };
@@ -217,16 +242,28 @@ function bakeAvatar(gltf, clips) {
     const c = clips[name];
     if (!c) continue;
     const fps = c.moving ? FPS.move : STILL_FPS, cut = !c.moving && c.clip.duration > STILL_MAX + LOOP_FADE;
-    const T = cut ? STILL_MAX : c.clip.duration, frames = Math.max(2, Math.round(T * fps)), start = rows.length / (NB * 12);
+    const T = cut ? STILL_MAX : c.clip.duration, frames = Math.max(2, Math.round(T * fps) + (c.trans ? 1 : 0)), start = rows.length / (NB * 12);
     const action = mixer.clipAction(c.clip); action.play();
+    // (a transition is played once: its last frame its end, not its first again)
+    const tOf = (f) => (c.trans ? Math.min((f / (frames - 1)) * T, T - 1e-4) : (f / frames) * T); // (at its very end, the mixer would wrap to its start)
     for (let f = 0; f < frames; f++) {
-      const t = (f / frames) * T + (cut ? LOOP_FADE : 0);
+      const t = tOf(f) + (cut ? LOOP_FADE : 0);
       pose(t, A);
       if (cut && t >= T) { pose(t - T, B); const w = (t - T) / LOOP_FADE; for (let i = 0; i < A.length; i++) A[i] = A[i] * (1 - w) + B[i] * w; }
       for (let b = 0; b < NB; b++) { const e = A.subarray(b * 16, b * 16 + 16); rows.push(e[0], e[4], e[8], e[12], e[1], e[5], e[9], e[13], e[2], e[6], e[10], e[14]); }
     }
     action.stop();
     out[name] = { start, frames, duration: T, speed: c.speed };
+    if (c.trans) {
+      const travel = new Float32Array(frames);
+      for (let f = 0; f < frames; f++) {
+        const t = c.times[0] + tOf(f); let k = 0;
+        while (k < c.times.length - 2 && c.times[k + 1] < t) k++;
+        const w = THREE.MathUtils.clamp((t - c.times[k]) / ((c.times[k + 1] - c.times[k]) || 1), 0, 1);
+        travel[f] = c.travel[k] * (1 - w) + c.travel[k + 1] * w;
+      }
+      Object.assign(out[name], { trans: true, travel, reach: travel[frames - 1] });
+    }
   }
   return { rows: Float32Array.from(rows), clips: out };
 }
@@ -380,7 +417,7 @@ export class People {
     this.shadow = SHADOW; // (their shadows' offsets, in metres: __app.people.shadow)
     this.people = []; this.free = Array.from({ length: POOL }, (_, i) => POOL - 1 - i);
     this.density = 1; this.enabled = true; this.ready = false;
-    this.stats = { people: 0, drawn: 0, target: 0 };
+    this.stats = { people: 0, drawn: 0, target: 0, moves: {} }; // (moves: the transitions begun, by name)
     this.cars = []; this.signals = null; this.T = 0;
     this.v = [0, 0, 0, 0];
   }
@@ -388,8 +425,9 @@ export class People {
     const M = this.manifest, base = this.models;
     // the clips of each sex
     const sexes = new Map(await Promise.all(M.groups.map(async (g) => {
-      const [move, still] = await Promise.all([loader.loadAsync(`${base}/${g.move}`), loader.loadAsync(`${base}/${g.still}`)]);
-      return [g.id, prepareClips(move, still)];
+      const [move, still, moves] = await Promise.all([loader.loadAsync(`${base}/${g.move}`), loader.loadAsync(`${base}/${g.still}`),
+        g.moves ? loader.loadAsync(`${base}/${g.moves}`).catch((e) => { console.warn('crowd transitions', g.moves, e); return null; }) : null]);
+      return [g.id, prepareClips(move, still, moves)];
     })));
     // each person's clips and look (4 texels a person)
     const rowsOf = Math.ceil((POOL * 4) / 1024);
@@ -691,6 +729,7 @@ export class People {
       p.fade = Math.max(0, Math.min(1, p.fade + (p.out ? -dt : dt) / 0.6));
       if (p.out && (p.fade <= 0 || !on)) { this.release(p); this.people.splice(i, 1); continue; }
       if (p.state === 'walk' || p.state === 'wait' || p.state === 'cross') this.walk(p, dt, now);
+      else if (p.state === 'still' && p.tr) { const d = this.stepTrans(p, dt); p.x += Math.sin(p.heading) * d; p.z += Math.cos(p.heading) * d; }
       else if (p.state === 'still' && now > p.until) this.leaveSpot(p, now);
     }
     for (const p of this.people) if (p.state === 'follow') this.follow(p, dt);
@@ -722,11 +761,51 @@ export class People {
     // off along the sidewalk the spot is on, or (out of sight) gone
     const l = p.spot?.link;
     if (!l || l.dead || p.clipA === 'sit' && rnd() < 0.5) { p.until = now + 30 + rnd() * 120; return; }
+    // (from a seat: up first, then off)
+    if (p.clipA === 'sit' && this.begin(p, 'standup', (q) => { this.hold(q, 'idle'); this.leaveSpot(q, this.now); })) return;
     let best = 0, bu = 0;
     for (let k = 0; k <= 20; k++) { const u = (k / 20) * l.len, e = pointOn(l, u, this.v), d = Math.hypot(e[0] - p.x, e[1] - p.z); if (k === 0 || d < best) { best = d; bu = u; } }
     p.spot.busy = Math.max(0, p.spot.busy - 0.34); p.spot = null;
     p.dir = rnd() < 0.5 ? 1 : -1; p.link = l; p.u = p.dir > 0 ? bu : l.len - bu; p.state = 'walk'; p.goal = rnd() * Math.PI * 2;
-    p.pace = weighted([['walk', 2], ['walk2', 2], ['stroll', 1]]); this.switchClip(p, null); this.setPace(p);
+    p.pace = weighted([['walk', 2], ['walk2', 2], ['stroll', 1]]); this.setPace(p);
+    if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null);
+  }
+  // ---------------------------------------------------------------- the transitions
+  // A transition's clip played once from its start (the clip before fading out under it), the person carried along
+  // its travel (k: scaled, to end where it must); at its end, `then`: the clip it ends in (from that clip's first pose,
+  // the transition's last), or a function
+  begin(p, name, then) {
+    const c = p.clips[name];
+    if (!c?.trans) return false;
+    p.clipB = p.clipA; p.phaseB = p.phase; p.blend = 1; p.clipA = name; p.phase = 0;
+    p.tr = { name, t: 0, c, then, k: 1 };
+    this.stats.moves[name] = (this.stats.moves[name] ?? 0) + 1;
+    return true;
+  }
+  travelAt(c, t) {
+    const f = THREE.MathUtils.clamp(t / c.duration, 0, 1) * (c.frames - 1), i = Math.floor(f), w = f - i;
+    return c.travel[i] * (1 - w) + c.travel[Math.min(i + 1, c.frames - 1)] * w;
+  }
+  // (on along it by dt: how far it carried the person)
+  stepTrans(p, dt) {
+    const tr = p.tr, a = this.travelAt(tr.c, tr.t);
+    tr.t += dt;
+    const d = (this.travelAt(tr.c, tr.t) - a) * p.scale * tr.k;
+    if (tr.t >= tr.c.duration) {
+      p.tr = null;
+      if (typeof tr.then === 'function') tr.then(p);
+      else if (tr.then === 'walk' || tr.then === 'idle') this.hold(p, tr.then);
+      else { p.clipA = 'walk'; p.phase = 0; this.switchClip(p, tr.then); }
+    }
+    return d;
+  }
+  // (straight into a clip at its first pose: the transition's last)
+  hold(p, clip) { p.clipA = clip; p.phase = 0; p.clipB = null; p.blend = 0; }
+  // at a crossing it must wait at: there, standing, waiting
+  arrive(p, next, now) {
+    p.tr = null; // (setting off still, and there already: it stops where it is)
+    p.u = p.link.len; p.state = 'wait'; p.next = next; p.waitFrom = now; p.v = 0;
+    this.switchClip(p, weighted([['wait', 2], ['idle', 2], ['look', 1]]));
   }
   switchClip(p, clip) {
     const next = clip ?? p.pace;
@@ -741,8 +820,13 @@ export class People {
       if ((now - (p.check ?? 0)) > 0.25) {
         p.check = now;
         const go = this.canCross(p, p.next[0]) || now - p.waitFrom > 75;
-        if (go) { this.enter(p, p.next[0], p.next[1]); p.state = 'cross'; this.switchClip(p, null); }
+        if (go) { this.enter(p, p.next[0], p.next[1]); p.state = 'cross'; if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null); }
       }
+    } else if (p.tr) {
+      // carried along a transition (setting off, stopping)
+      const d = this.stepTrans(p, dt);
+      p.v = dt ? d / dt : 0; p.u = p.tr?.name.startsWith('stop') ? Math.min(p.u + d, l.len - 0.01) : p.u + d;
+      if (p.u >= l.len && p.state !== 'wait') this.onward(p, l, now);
     } else {
       // pace: its own, or the one in front's when close
       let target = p.speed;
@@ -755,15 +839,31 @@ export class People {
       }
       p.v += (target - p.v) * Math.min(1, dt * 3);
       p.u += p.v * dt;
-      if (p.u >= l.len) {
-        // at a node: on to the next link (and at a crossing, first wait)
-        const node = p.dir > 0 ? l.b : l.a, next = this.nextLink(p, node, l);
-        if (!next) { p.dir = -p.dir; p.u = 0; }
-        else if (next[0].kind === KIND.CROSSING && p.state !== 'cross') { p.u = l.len; p.state = 'wait'; p.next = next; p.waitFrom = now; p.v = 0; this.switchClip(p, weighted([['wait', 2], ['idle', 2], ['look', 1]])); }
-        else { const over = p.u - l.len; this.enter(p, next[0], next[1]); p.u = Math.min(over, p.link.len); p.state = 'walk'; }
+      // A crossing ahead it will have to wait at (its next link picked now): it stops, from the foot it is on, to stand
+      // at the kerb (the stop's travel fitted to the way left). One it may cross now, it walks straight on to.
+      const stop = p.clips.stopL;
+      if (stop?.trans && p.state === 'walk' && !p.plan && p.v > 0.6) {
+        const left = l.len - p.u, reach = stop.reach * p.scale;
+        if (left < reach + 0.25 && left > reach * 0.6) {
+          p.plan = this.nextLink(p, p.dir > 0 ? l.b : l.a, l) ?? 'none';
+          if (p.plan !== 'none' && p.plan[0].kind === KIND.CROSSING && !this.canCross(p, p.plan[0])) {
+            const ph = MOVE.includes(p.clipA) ? p.phase : 0, gap = (a) => (a - ph + 1) % 1;
+            const plan = p.plan;
+            if (this.begin(p, gap(0.30) < gap(0.78) ? 'stopL' : 'stopR', (q) => { q.plan = null; this.hold(q, 'idle'); this.arrive(q, plan, this.now); })) p.tr.k = left / reach;
+          }
+        }
       }
+      if (p.u >= l.len) this.onward(p, l, now);
     }
     this.place(p, dt);
+  }
+  // at a node: on to the next link (the one planned, or one picked now); at a crossing it may not cross yet, first wait
+  onward(p, l, now) {
+    const node = p.dir > 0 ? l.b : l.a, next = p.plan && p.plan !== 'none' ? p.plan : this.nextLink(p, node, l);
+    p.plan = null;
+    if (!next) { p.dir = -p.dir; p.u = 0; }
+    else if (next[0].kind === KIND.CROSSING && p.state !== 'cross' && !(p.clips.stopL?.trans && this.canCross(p, next[0]))) this.arrive(p, next, now);
+    else { const over = p.u - l.len; this.enter(p, next[0], next[1]); p.u = Math.min(over, p.link.len); p.state = next[0].kind === KIND.CROSSING ? 'cross' : 'walk'; }
   }
   // where: along the link, keeping to the right of the way it walks (dt 0: there at once)
   place(p, dt) {
@@ -774,7 +874,7 @@ export class People {
     if (p.v > 0.05 || !dt) p.headingTo = Math.atan2(dx, dz);
   }
   enter(p, l, dir) {
-    p.link = l; p.dir = dir; p.u = 0;
+    p.link = l; p.dir = dir; p.u = 0; p.plan = null;
     // its place across the way: right of centre (people keep right), some further out than others
     p.lane = p.lanePref = 0.25 + rnd() * 0.7;
   }
@@ -791,8 +891,10 @@ export class People {
     f.x += (tx - f.x) * k; f.z += (tz - f.z) * k;
     f.v = L.v; f.state = 'follow';
     const still = L.state === 'wait';
-    if (still && f.clipA !== 'idle') this.switchClip(f, 'idle');
-    if (!still && f.clipA !== L.clipA && !STILL.includes(L.clipA)) { this.switchClip(f, L.clipA); f.cycle = L.cycle; }
+    // (setting off or stopping as the one it walks with does)
+    if (L.tr) { if (f.clipA !== L.clipA && f.clips[L.clipA]) { f.clipB = f.clipA; f.phaseB = f.phase; f.blend = 1; f.clipA = L.clipA; } }
+    else if (still && f.clipA !== 'idle') this.switchClip(f, 'idle');
+    else if (!still && f.clipA !== L.clipA && !STILL.includes(L.clipA)) { this.switchClip(f, L.clipA); f.cycle = L.cycle; }
     if (L.v > 0.05) f.headingTo = Math.atan2(dx, dz);
   }
   queues(dt) {
@@ -838,13 +940,22 @@ export class People {
     const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)), at = new THREE.Vector3();
     for (const p of this.people) {
       const c = p.clips[p.clipA] ?? p.clips.idle;
-      // the clip runs on: a walk at the pace it is carried, standing still in its own time
-      if (MOVE.includes(p.clipA)) p.phase = (p.phase + (p.v * dt) / (p.cycle || c.speed * c.duration || 1)) % 1;
+      // the clip runs on: a walk at the pace it is carried, standing still in its own time, a transition once through
+      // (a follower's as its leader's)
+      if (this.frozen && p.tr) {
+        // (a lineup's transition, over and over, carried along as it would be)
+        p.tr.t = (p.tr.t + dt) % (p.tr.c.duration + 0.6);
+        const d = this.travelAt(p.tr.c, p.tr.t) * p.scale; p.x = p.x0 + Math.sin(p.heading) * d; p.z = p.z0 + Math.cos(p.heading) * d;
+      }
+      const tr = p.tr ?? (p.leader?.tr && p.leader.clipA === p.clipA ? p.leader.tr : null);
+      if (tr) p.phase = THREE.MathUtils.clamp(tr.t / c.duration, 0, 1) * (c.frames - 1) / c.frames;
+      else if (TRANS.includes(p.clipA)) p.phase = (c.frames - 1) / c.frames;
+      else if (MOVE.includes(p.clipA)) p.phase = (p.phase + (p.v * dt) / (p.cycle || c.speed * c.duration || 1)) % 1;
       else p.phase = (p.phase + dt / c.duration) % 1;
       if (p.blend > 0) {
         const b = p.clips[p.clipB];
-        if (b) p.phaseB = (p.phaseB + (MOVE.includes(p.clipB) ? (p.v * dt) / (b.speed * b.duration || 1) : dt / b.duration)) % 1;
-        p.blend = Math.max(0, p.blend - dt / 0.35);
+        if (b && !TRANS.includes(p.clipB)) p.phaseB = (p.phaseB + (MOVE.includes(p.clipB) ? (p.v * dt) / (b.speed * b.duration || 1) : dt / b.duration)) % 1;
+        p.blend = Math.max(0, p.blend - dt / (tr ? 0.2 : 0.35));
       }
       // the heading eases round
       if (p.headingTo != null) { const d = Math.atan2(Math.sin(p.headingTo - p.heading), Math.cos(p.headingTo - p.heading)); p.heading += d * Math.min(1, dt * 7); }
@@ -891,6 +1002,7 @@ export class People {
       if (!p) return;
       const k = (((a.fairHair ? 58 : 42) + 16) / (a.base + 16)) ** 3, o = (i - (list.length - 1) / 2) * 0.9;
       Object.assign(p, { avatar: a, clips: a.clips, tone: dark && k < 1 ? [k, k, k ** 1.06] : [1, 1, 1], scale: 1, state: 'still', x: x + ax * o, z: z + az * o, heading, clipA: a.clips[clip] ? clip : 'idle', fade: 1, until: Infinity, label: `${a.id}${dark ? ' dark' : ''}` });
+      if (a.clips[clip]?.trans) Object.assign(p, { tr: { name: clip, t: 0, c: a.clips[clip], then: null, k: 1 }, x0: p.x, z0: p.z });
     });
   }
   dispose() { this.body?.dispose(); this.hair?.dispose(); }

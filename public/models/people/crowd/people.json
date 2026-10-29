@@ -29,7 +29,8 @@
     "bchm",
     "km1",
     "km2"
-   ]
+   ],
+   "moves": "m-moves.glb"
   },
   {
    "id": "f",
@@ -52,7 +53,8 @@
     "jf2",
     "bchf",
     "kf1"
-   ]
+   ],
+   "moves": "f-moves.glb"
   }
  ],
  "avatars": [

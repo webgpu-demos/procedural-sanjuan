@@ -11,7 +11,10 @@ skin marked in its alpha (`crowd_atlas.py`: the client gives the same person ano
 (f_/m_ walk_neutral_01 and 02, walk_stroll_01, walk_fast_01, run_slow_01, idle_neutral_01, idle_waiting_01,
 cell_phone_textmessage, idle_look_around_01, gestic_talk_relaxed_01, sit_chair_idle_neutral_01, m_cell_phone_talk_01)
 retargeted onto the women's and the men's skeletons (`f-*.glb`, `m-*.glb`); packed with gltfpack
-(`crowd_pack.mjs`: meshopt). Which avatar is who: `crowd/people.json`.
+(`crowd_pack.mjs`: meshopt). Which avatar is who: `crowd/people.json`. `f-moves.glb`, `m-moves.glb`: transitions
+between those clips (setting off, stopping from either foot, standing up) generated with NVIDIA's MotionBricks
+(github.com/NVlabs/motionbricks; the model under the NVIDIA Open Model Agreement, which claims no ownership of its
+outputs) from the clips' own poses, on the same skeletons (`tools/motion/transitions.py`; `moves.json`: their lengths).
 
 Used under the MIT License:
 
