@@ -5,6 +5,7 @@
 //   <sex>-move.glb, <sex>-still.glb   the clips (crowd.py retargets them as the bones turn in the world, so every
 //                 avatar of the library's women, and of its men, gets the very same rotations; only the lengths of
 //                 the bones differ, which each avatar's own skeleton has): the walks at 30 frames a second, the rest at 10
+//   (<sex>-moves.glb, the transitions between them: tools/motion/transitions.py writes it here; listed if it is)
 //   people.json   the avatars, who they are (ROLES), their skeleton, their skin's colour
 // Usage: node tools/assets/crowd_pack.mjs <crowd.py output dir> [out dir]
 import fs from 'node:fs';
@@ -78,6 +79,6 @@ for (const g of groups.values()) {
   }
 }
 fs.writeFileSync(path.join(OUT, 'people.json'), JSON.stringify({
-  version: 1, groups: [...groups.values()].map((g) => ({ id: g.id, move: `${g.id}-move.glb`, still: `${g.id}-still.glb`, members: g.members })), avatars,
+  version: 1, groups: [...groups.values()].map((g) => ({ id: g.id, move: `${g.id}-move.glb`, still: `${g.id}-still.glb`, ...(fs.existsSync(path.join(OUT, `${g.id}-moves.glb`)) ? { moves: `${g.id}-moves.glb` } : {}), members: g.members })), avatars,
 }, null, 1));
 fs.rmSync(tmp, { recursive: true, force: true });

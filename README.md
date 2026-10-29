@@ -64,7 +64,9 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   the same avatar is drawn with a skin tone of San Juan's (fair to dark brown) by a mask of its skin in its atlas.
   They keep right, slow behind the one in front, wait at a crossing for the simulation's lights and for a gap in the
   cars, stand at bus stops and shop doors, talk in twos and threes, sit on benches; couples, friends and families
-  walk together. All of them are two draws (`THREE.BatchedMesh`), skinned on the GPU from a texture of every clip's
+  walk together. They stop at the kerb from the foot they are on, set off from standing, and stand up from a bench
+  before they go: transitions made by NVIDIA's [MotionBricks](https://github.com/NVlabs/motionbricks) between the
+  clips' own poses (`tools/motion/`). All of them are two draws (`THREE.BatchedMesh`), skinned on the GPU from a texture of every clip's
   poses, in three levels of detail.
 - **Surroundings** (`far.js`): beyond the area, the rest of the island out to the horizon (the far shore of
   the bay, Cataño, Guaynabo, the mountains) as coarse terrain under a low-resolution aerial photo, over the sea.
@@ -306,6 +308,19 @@ node tools/assets/crowd_pack.mjs <out>                        # -> public/models
   the face's and the hair's, and marked in alpha), and retargets the clips; `crowd_pack.mjs` keeps one set of clips for
   the women and one for the men (the retargeting gives every avatar of either the same rotations) and compresses the
   rest. In the client every avatar's every clip is baked into the pose texture on its own skeleton.
+- **The crowd's transitions** (`tools/motion/transitions.py`): NVIDIA's MotionBricks (SIGGRAPH 2026; code Apache-2.0,
+  the model under the NVIDIA Open Model Agreement) fills the motion between 4 poses of one clip and 4 of another. It
+  runs here on the CPU (`mbcpu.py`: the model's own encoding and decoding, Warp kernels, with ONNX Runtime in place of
+  TensorRT; about 0.15 s a generation on two cores). `rig.py` carries the crowd's Rocketbox clips onto the model's
+  SOMA skeleton and the result back (each bone turned as the joint it stands for, the two rest poses aligned bone by
+  bone; the hips scaled by the hip heights): setting off (idle to walk), stopping from either foot (walk to idle),
+  standing up (sit to idle), as `<sex>-moves.glb` (the pelvis's travel kept: the client carries the person along it).
+
+  ```
+  pip install onnxruntime warp-lang usd-core scipy
+  git clone https://github.com/NVlabs/motionbricks; cd motionbricks; git lfs pull   # (the ONNX models, the SOMA skeleton)
+  python tools/motion/transitions.py <motionbricks> <motionbricks>/motionbricks/assets/onnx/soma/mmm_v6_soma_fp32.onnx <crowd.py output>
+  ```
 
 ## Publishing
 
@@ -342,4 +357,4 @@ World frame: metres, x east, y up (above mean sea level), z south; the origin is
 Buildings, roads, coastline and places: © OpenStreetMap contributors (ODbL); a redistributed compiled area
 is a derived database under the ODbL. Building heights: FEMA / ORNL USA Structures (public domain).
 Elevation: USGS 3DEP via the AWS Terrain Tiles. Aerial photo: USGS The National Map (public domain).
-Textures: Poly Haven (CC0). Trees: ez-tree (MIT). People: Microsoft Rocketbox (MIT; `public/models/people/README.md`). Cars, the bus and the asphalt's wear: after mrdoob's slop-newyork (MIT). Original city engine: procedural-tokyo.
+Textures: Poly Haven (CC0). Trees: ez-tree (MIT). People: Microsoft Rocketbox (MIT; `public/models/people/README.md`), their transitions made with NVIDIA's MotionBricks. Cars, the bus and the asphalt's wear: after mrdoob's slop-newyork (MIT). Original city engine: procedural-tokyo.
