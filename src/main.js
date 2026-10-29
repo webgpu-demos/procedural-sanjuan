@@ -13,7 +13,7 @@ import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
 import { buildFlyovers, overDecks, landDecks } from './world/flyovers.js';
-import { DrawnDecks } from './world/roadlevel.js';
+import { DrawnDecks, mergeDecks } from './world/roadlevel.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
@@ -180,6 +180,7 @@ roads.lanes = lanes;
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
 landDecks(roads, (x, z) => streamer.ground(x, z)); // (decks flush with the streets they meet: world/flyovers.js)
+mergeDecks(roads, (x, z) => streamer.ground(x, z)); // (a ramp at the expressway's level where their decks overlap: world/roadlevel.js)
 // the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
 const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
