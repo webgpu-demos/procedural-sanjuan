@@ -402,8 +402,16 @@ export class Traffic {
       const name = TYPES[car.type].name;
       // on its road's deck the flyovers draw under it, or the street the tiles draw (roadlevel.js): never at the road's
       // level where nothing is drawn at it
-      const stood = this.drawn ? this.drawn.stand(this.surface, px, pz, tmp.y, Math.atan2(tmp2.x, tmp2.z), car.lane.edge) : { y: this.surface(px, pz), deck: false };
+      const hd = Math.atan2(tmp2.x, tmp2.z);
+      let stood = this.drawn ? this.drawn.stand(this.surface, px, pz, tmp.y, hd, car.lane.edge) : { y: this.surface(px, pz), deck: false };
       if (stood.push) { px += stood.push[0]; pz += stood.push[1]; } // (onto it, from just beyond its edge)
+      // (its whole body on what is drawn: roadlevel.js fit, eased)
+      if (this.drawn) {
+        const T = TYPES[car.type], f = this.drawn.fit(this.surface, px, pz, stood.y, hd, stood.deck, T.spec.W, T.L, car.lane.edge) ?? [0, 0];
+        const k = 1 - Math.exp(-dt / (f[0] * f[0] + f[1] * f[1] > (car.fx ?? 0) ** 2 + (car.fz ?? 0) ** 2 ? 0.2 : 0.5)); // (quickly out of a parapet; back slowly)
+        car.fx = (car.fx ?? 0) + (f[0] - (car.fx ?? 0)) * k; car.fz = (car.fz ?? 0) + (f[1] - (car.fz ?? 0)) * k;
+        if (Math.abs(car.fx) + Math.abs(car.fz) > 0.01) { px += car.fx; pz += car.fz; stood = this.drawn.stand(this.surface, px, pz, tmp.y, hd, car.lane.edge); }
+      }
       d.position.set(px, stood.y + 0.03, pz);
       // nose up or down with the road (and with it the light the lamps throw on it): the slope over the car's length
       const slope = stood.deck ? tmp2.y : (this.surface(px + tmp2.x * 5, pz + tmp2.z * 5) - this.surface(px - tmp2.x * 5, pz - tmp2.z * 5)) / 10;
