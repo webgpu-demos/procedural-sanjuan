@@ -147,16 +147,32 @@ export class DrawnDecks {
     return on;
   }
 
+  // Is (x, z) in under the side of a deck a little over the street (0.3 to 2 m over y), not the car's own road? A ramp
+  // come down beside the expressway, at grade a step below its deck: the cars on it had driven half in under the
+  // expressway's edge. (Under its side only: one coming up to its own ramp's start meets the deck end on.)
+  beneath(x, z, y, road) {
+    for (const [x0, y0, z0, x1, y1, z1, w, e] of this.cells.get(key(x, z)) ?? []) {
+      if (e === road) continue;
+      const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
+      if (t < 0 || t > 1) continue;
+      const h = y0 + (y1 - y0) * t - y;
+      if (h < 0.3 || h > 2) continue;
+      const ao = Math.abs(((x - x0) * -dz + (z - z0) * dx) / Math.sqrt(l2));
+      if (ao <= w + 0.05 && ao > w - 1.5) return true;
+    }
+    return false;
+  }
+
   // A car's footprint (W wide, L long, facing `heading`, at level y, on a deck or the street) kept on what is drawn:
   // the shift across its way ([dx, dz]) that puts all four corners on the paving (a deck's, clear of its parapets;
   // the street's carriageway), the least of up to 3 m; null if it is there already, or no such shift is found.
   // SUMO's lanes are its own: an outer lane wider than the deck drawn, a car merging off a ramp's line into the
   // expressway's outer lane, the inner lane of a dual carriageway against the other's parapet.
-  fit(surface, x, z, y, heading, deck, W, L) {
+  fit(surface, x, z, y, heading, deck, W, L, road = null) {
     const s = Math.sin(heading), c = Math.cos(heading), hw = W * 0.45, hl = L * 0.42, rx = c, rz = -s;
     // (a corner of a car on a deck past the deck's end: on the street there, at about its level)
     const street = (px, pz) => this.ground.on(px, pz) && Math.abs(streetAt(surface, px, pz, y) + (this.lift?.(px, pz) ?? 0) - y) < 0.4;
-    const ok = deck ? (px, pz) => this.cornerOn(px, pz, y) || street(px, pz) : (px, pz) => this.ground.on(px, pz);
+    const ok = deck ? (px, pz) => this.cornerOn(px, pz, y) || street(px, pz) : (px, pz) => this.ground.on(px, pz) && !this.beneath(px, pz, y, road);
     const bad = (dx, dz) => {
       let n = 0;
       for (const [u, v] of CORNERS) if (!ok(x + dx + rx * u * hw + s * v * hl, z + dz + rz * u * hw + c * v * hl)) n++;

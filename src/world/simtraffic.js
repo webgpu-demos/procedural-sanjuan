@@ -396,7 +396,7 @@ export class SimTraffic {
     // A seen car's height follows the street exactly, but a step of more than half a metre from one frame to the
     // next (onto a deck, off it) is eased over a tenth of a second, or at the speed of the opening the car would
     // hop. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
-    const ease = 1 - Math.exp(-dt / 0.1), turn = 1 - Math.exp(-dt / 0.3), drift = 1 - Math.exp(-dt / 0.5), frame = ++this.frameNo;
+    const ease = 1 - Math.exp(-dt / 0.1), turn = 1 - Math.exp(-dt / 0.3), drift = 1 - Math.exp(-dt / 0.5), fast = 1 - Math.exp(-dt / 0.2), frame = ++this.frameNo;
     if (frame % 120 === 0) {
       for (const map of [this.heights, this.turns]) for (const [k, v] of map) if (frame - v[1] > 60) map.delete(k);
       for (const [k, v] of this.shifts) if (frame - v[2] > 60) this.shifts.delete(k);
@@ -475,10 +475,13 @@ export class SimTraffic {
       let stood = seen ? this.drawn.stand(this.surface, p[0], p[2], sy, heading, road) : null;
       if (stood?.push) { p[0] += stood.push[0]; p[2] += stood.push[1]; } // (onto the deck drawn, from just beyond its edge)
       // and its whole body on what is drawn (roadlevel.js fit): across its way, as far as it takes (up to 3 m),
-      // eased in and out as relane's shift is (a car with nothing drawn near it is left where it is)
-      if (seen && d2 < DETAIL * DETAIL) {
-        const spec = TYPES[W.type[i]], f = this.drawn.fit(this.surface, p[0], p[2], stood.y, heading, stood.deck, spec.spec.W, spec.L) ?? [0, 0], was = this.fits.get(vid);
-        if (was && was[2] === frame - 1) { f[0] = was[0] + (f[0] - was[0]) * drift; f[1] = was[1] + (f[1] - was[1]) * drift; }
+      // eased in and out as relane's shift is (a car with nothing drawn near it is left where it is). (SUMO's lanes are
+      // not always the city's: netconvert's --ramps.guess gave Avenida Piñero a third lane for the 94 m before a ramp,
+      // 5 m out from its middle where the tiles pave 3.5)
+      if (seen && (d2 < this.near * this.near || followed)) {
+        const spec = TYPES[W.type[i]], f = this.drawn.fit(this.surface, p[0], p[2], stood.y, heading, stood.deck, spec.spec.W, spec.L, road) ?? [0, 0], was = this.fits.get(vid);
+        // (quickly out of a parapet, in a fifth of a second; back over half a second)
+        if (was && was[2] === frame - 1) { const k = f[0] * f[0] + f[1] * f[1] > was[0] * was[0] + was[1] * was[1] ? fast : drift; f[0] = was[0] + (f[0] - was[0]) * k; f[1] = was[1] + (f[1] - was[1]) * k; }
         if (f[0] || f[1] || was) {
           if (was) { was[0] = f[0]; was[1] = f[1]; was[2] = frame; } else this.fits.set(vid, [f[0], f[1], frame]);
           if (Math.abs(f[0]) + Math.abs(f[1]) > 0.01) { p[0] += f[0]; p[2] += f[1]; stood = this.drawn.stand(this.surface, p[0], p[2], sy, heading, road); }

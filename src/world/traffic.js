@@ -407,7 +407,8 @@ export class Traffic {
       if (stood.push) { px += stood.push[0]; pz += stood.push[1]; } // (onto it, from just beyond its edge)
       // (its whole body on what is drawn: roadlevel.js fit, eased)
       if (this.drawn) {
-        const T = TYPES[car.type], f = this.drawn.fit(this.surface, px, pz, stood.y, hd, stood.deck, T.spec.W, T.L) ?? [0, 0], k = Math.min(1, dt * 2);
+        const T = TYPES[car.type], f = this.drawn.fit(this.surface, px, pz, stood.y, hd, stood.deck, T.spec.W, T.L, car.lane.edge) ?? [0, 0];
+        const k = 1 - Math.exp(-dt / (f[0] * f[0] + f[1] * f[1] > (car.fx ?? 0) ** 2 + (car.fz ?? 0) ** 2 ? 0.2 : 0.5)); // (quickly out of a parapet; back slowly)
         car.fx = (car.fx ?? 0) + (f[0] - (car.fx ?? 0)) * k; car.fz = (car.fz ?? 0) + (f[1] - (car.fz ?? 0)) * k;
         if (Math.abs(car.fx) + Math.abs(car.fz) > 0.01) { px += car.fx; pz += car.fz; stood = this.drawn.stand(this.surface, px, pz, tmp.y, hd, car.lane.edge); }
       }
