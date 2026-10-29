@@ -133,3 +133,115 @@ export class DrawnDecks {
     return { y: at, deck, push };
   }
 }
+
+// ---------------------------------------------------------------- merges
+// Where two decks run the same way and their paving overlaps (a ramp merging into the expressway, or leaving it), the
+// one is drawn over the other's edge, and the levels the compiler gave them can differ there by a metre or two (each
+// road's own profile, measured on its own): the cars on the lower were hidden inside the higher, or stepped up onto it
+// (DrawnDecks.stand). Here the lesser of the two (a ramp before the expressway; fewer lanes; the lower, if alike)
+// takes the greater's level over the overlap, easing back to its own either side at a grade of at most `grade`, so
+// that the two meet as one carriageway. Run after landDecks, before anything uses the levels (DrawnDecks, the flyovers, the
+// traffic); the simulation's levels stay in pts0. Returns { roads, metres } moved.
+export function mergeDecks(roads, ground, { grade = 0.04, passes = 2 } = {}) {
+  const lanesOf = roadLanes(roads.edges);
+  const half = (e) => pavedHalf(e, lanesOf(e)).half;
+  const rank = (e) => (e.highway === 'motorway' ? 2000 : e.highway === 'trunk' ? 1000 : 0) + Math.max(1, lanesOf(e) || e.lanes || 1) * 10 + half(e);
+  const moved = new Set();
+  let metres = 0;
+  for (let pass = 0; pass < passes; pass++) {
+    const decks = new DrawnDecks(roads, ground), built = structureEdges(roads.edges, ground), plans = [];
+    for (const e of roads.edges) {
+      if (e.tunnel || e.span || !built.has(e)) continue;
+      const cs = sections(e.pts, ground), [from, to] = built.get(e), he = half(e), re = rank(e), sign = e.oneway === -1 ? -1 : 1;
+      const off = new Array(cs.length).fill(null);
+      let any = false;
+      for (let i = 0; i < cs.length; i++) {
+        const c = cs[i];
+        if (c.s < from || c.s > to || (c.h <= RAMP_ABOVE && !leftOut(e))) continue; // (its deck drawn there)
+        const y = c.p[1];
+        let best = null, bestRank = -1;
+        for (const [x0, y0, z0, x1, y1, z1, w, o] of decks.cells.get(key(c.p[0], c.p[2])) ?? []) {
+          if (o === e) continue;
+          const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((c.p[0] - x0) * dx + (c.p[2] - z0) * dz) / l2;
+          if (t < -0.15 || t > 1.15) continue;
+          // (the same way: a dual carriageway's two decks, each the other way, are left as they are)
+          const al = (dx * c.t[0] + dz * c.t[2]) / Math.sqrt(l2) * sign;
+          if ((o.oneway ? al * (o.oneway === -1 ? -1 : 1) : Math.abs(al)) < 0.7) continue;
+          const f = Math.max(0, Math.min(1, t)), d = Math.hypot(x0 + dx * f - c.p[0], z0 + dz * f - c.p[2]), h = y0 + (y1 - y0) * f;
+          if (he + (w - 0.25) - d < 0.5 || Math.abs(h - y) < 0.05 || Math.abs(h - y) > 3) continue; // (pavings overlapping)
+          const ro = rank(o);
+          if (ro < re || (ro === re && h < y)) continue; // (the greater keeps its level)
+          if (ro > bestRank) { bestRank = ro; best = h; }
+        }
+        if (best != null) { off[i] = best - y; any = true; }
+      }
+      if (any) plans.push([e, cs, off]);
+    }
+    if (!plans.length) break;
+    // the offset at every section of each road: over its overlaps, the greater's level less its own; from there no
+    // faster than `grade` a metre (on top of its own grade) down to nothing
+    const vals = new Map();
+    for (const [e, cs, off] of plans) {
+      const n = cs.length, up = new Float64Array(n), down = new Float64Array(n);
+      for (let i = 0; i < n; i++) if (off[i] != null) { if (off[i] > 0) up[i] = off[i]; else down[i] = -off[i]; }
+      for (const a of [up, down]) {
+        for (let i = 1; i < n; i++) a[i] = Math.max(a[i], a[i - 1] - grade * (cs[i].s - cs[i - 1].s));
+        for (let i = n - 2; i >= 0; i--) a[i] = Math.max(a[i], a[i + 1] - grade * (cs[i + 1].s - cs[i].s));
+      }
+      vals.set(e, Float64Array.from(up, (u, i) => u - down[i]));
+    }
+    // at either end, a road beyond that keeps its level holds the road there; where every road at the node moves,
+    // they move alike there (by their mean)
+    const ends = new Map();
+    for (const e of roads.edges) for (const [node, last] of [[e.a, false], [e.b, true]]) {
+      const v = vals.get(e);
+      let r = ends.get(node);
+      if (!r) ends.set(node, (r = { sum: 0, n: 0, fixed: false }));
+      if (!v) r.fixed = true; else { r.sum += last ? v[v.length - 1] : v[0]; r.n++; }
+    }
+    const nodeVal = (node) => { const r = ends.get(node); return r.fixed ? 0 : r.sum / r.n; };
+    for (const [e, cs] of plans) {
+      const v = vals.get(e), L = cs.at(-1).s, a = nodeVal(e.a), b = nodeVal(e.b);
+      for (let i = 0; i < v.length; i++) {
+        // (within the grade of both ends' values; where a short road cannot be, straight from the one to the other)
+        const s = cs[i].s, lo = Math.max(a - grade * s, b - grade * (L - s)), hi = Math.min(a + grade * s, b + grade * (L - s));
+        v[i] = lo <= hi ? Math.min(Math.max(v[i], lo), hi) : a + (b - a) * (L ? s / L : 0);
+      }
+    }
+    for (const [e, cs, off] of plans) {
+      const n = cs.length, val = vals.get(e);
+      // the road's points: one at every section where its level changes (its line as it was), each moved
+      const p = e.pts, m = p.length / 3, cum = [0];
+      for (let k = 1; k < m; k++) cum.push(cum[k - 1] + Math.hypot(p[k * 3] - p[k * 3 - 3], p[k * 3 + 2] - p[k * 3 - 1]));
+      const old0 = e.pts0 ?? Array.from({ length: m }, (_, k) => p[k * 3 + 1]);
+      const offAt = (s) => {
+        let j = Math.min(n - 1, Math.max(0, Math.round(s / 3)));
+        while (j > 0 && cs[j].s > s) j--;
+        while (j < n - 1 && cs[j + 1].s <= s) j++;
+        if (j >= n - 1) return val[n - 1];
+        const t = (s - cs[j].s) / Math.max(1e-6, cs[j + 1].s - cs[j].s);
+        return val[j] + (val[j + 1] - val[j]) * t;
+      };
+      const pts = [], pts0 = [];
+      let k = 0;
+      for (let i = 0; i <= n; i++) {
+        // (the road's own points up to this section, then the section's, where it moves)
+        const s = i < n ? cs[i].s : Infinity;
+        while (k < m && cum[k] <= s + 1e-6) {
+          pts.push(p[k * 3], p[k * 3 + 1] + offAt(cum[k]), p[k * 3 + 2]); pts0.push(old0[k]);
+          k++;
+        }
+        if (i >= n) break;
+        if (Math.abs(val[i]) < 1e-4 && (i === 0 || Math.abs(val[i - 1]) < 1e-4) && (i === n - 1 || Math.abs(val[i + 1]) < 1e-4)) continue;
+        if (k > 0 && Math.abs(cum[k - 1] - s) < 0.05) continue;
+        if (k >= m || Math.abs(cum[k] - s) < 0.05) continue;
+        const f = (s - cum[k - 1]) / Math.max(1e-6, cum[k] - cum[k - 1]);
+        pts.push(cs[i].p[0], cs[i].p[1] + val[i], cs[i].p[2]); pts0.push(old0[k - 1] + (old0[k] - old0[k - 1]) * f);
+      }
+      e.pts = pts; e.pts0 = pts0;
+      moved.add(e);
+      metres += off.filter((v) => v != null).length * 3;
+    }
+  }
+  return { roads: moved.size, metres };
+}

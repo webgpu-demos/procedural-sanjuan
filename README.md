@@ -52,7 +52,8 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   shadow under it; near the camera the full model (3,400 triangles), further off a ~490-triangle stand-in in the same
   material (the bus: `busbody.js`, `busmaterial.js`, white with a band in its route's colour). A car stands on its
   road's deck where the flyovers draw one under it, else on the street the tiles draw, and up onto any deck drawn too
-  low over that to drive under (`roadlevel.js`). The roads' asphalt is worn and repaired as San Juan's is: block
+  low over that to drive under (`roadlevel.js`); where a ramp's deck runs into the expressway's, it takes the
+  expressway's level over the overlap (`mergeDecks`). The roads' asphalt is worn and repaired as San Juan's is: block
   cracking, utility-cut patches and trenches with sealed edges, tar snakes, oil drips, potholes (after slop-newyork's
   road material).
 - **People on foot** (`people.js`): the sidewalks, crossings, footways and plazas walked by as many people as would be
