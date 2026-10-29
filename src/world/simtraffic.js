@@ -100,7 +100,7 @@ export class SimTraffic {
     });
     this.fleet = new Fleet(caps, { beam: beamGeometry, beamMaterial: this.beam });
     this.group.add(this.fleet.group);
-    this.looks = new Map(); this.spins = new Map();
+    this.looks = new Map(); this.spins = new Map(); this.fits = new Map();
     // mid distance: one box per car, sized to its type
     const boxGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), boxMat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.3 });
     this.boxHide = new THREE.InstancedBufferAttribute(new Float32Array(MAX_MID), 1); this.boxHide.setUsage(THREE.DynamicDrawUsage);
@@ -472,8 +472,19 @@ export class SimTraffic {
       // (the simulation's height for it, put on the corrected levels: fixAt)
       const fixed = seen && this.fixes?.size ? this.fixAt(p[0], p[2], p[1], heading) : null, sy = fixed ?? p[1], road = fixed == null ? null : this.fixEdge;
       // its road's deck drawn under it, or the street (roadlevel.js)
-      const stood = seen ? this.drawn.stand(this.surface, p[0], p[2], sy, heading, road) : null, raised = !!stood?.deck;
+      let stood = seen ? this.drawn.stand(this.surface, p[0], p[2], sy, heading, road) : null;
       if (stood?.push) { p[0] += stood.push[0]; p[2] += stood.push[1]; } // (onto the deck drawn, from just beyond its edge)
+      // and its whole body on what is drawn (roadlevel.js fit): across its way, as far as it takes (up to 3 m),
+      // eased in and out as relane's shift is (a car with nothing drawn near it is left where it is)
+      if (seen && d2 < DETAIL * DETAIL) {
+        const spec = TYPES[W.type[i]], f = this.drawn.fit(this.surface, p[0], p[2], stood.y, heading, stood.deck, spec.spec.W, spec.L) ?? [0, 0], was = this.fits.get(vid);
+        if (was && was[2] === frame - 1) { f[0] = was[0] + (f[0] - was[0]) * drift; f[1] = was[1] + (f[1] - was[1]) * drift; }
+        if (f[0] || f[1] || was) {
+          if (was) { was[0] = f[0]; was[1] = f[1]; was[2] = frame; } else this.fits.set(vid, [f[0], f[1], frame]);
+          if (Math.abs(f[0]) + Math.abs(f[1]) > 0.01) { p[0] += f[0]; p[2] += f[1]; stood = this.drawn.stand(this.surface, p[0], p[2], sy, heading, road); }
+        }
+      }
+      const raised = !!stood?.deck;
       let y = seen ? stood.y : sy;
       if (seen) {
         const h = this.heights.get(vid);
@@ -571,7 +582,10 @@ export class SimTraffic {
       }
     }
     this.fleet.end();
-    if (frame % 240 === 0) for (const [k, v] of this.spins) if (frame - v[1] > 60) { this.spins.delete(k); this.looks.delete(k); }
+    if (frame % 240 === 0) {
+      for (const [k, v] of this.spins) if (frame - v[1] > 60) { this.spins.delete(k); this.looks.delete(k); }
+      for (const [k, v] of this.fits) if (frame - v[2] > 60) this.fits.delete(k);
+    }
     this.boxHide.needsUpdate = true;
     this.boxes.count = mid; this.boxes.instanceMatrix.needsUpdate = true;
     if (this.boxes.instanceColor) this.boxes.instanceColor.needsUpdate = true;

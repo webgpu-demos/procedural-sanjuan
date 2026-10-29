@@ -158,11 +158,16 @@ const DRAPE_EDGE = 6;
 // cut (src/world/channels.js): the ground cover is taken out from over the channels (not the streets: where one
 // crosses a channel, the channel stops at it).
 const CUT = new Set([AREA.PARK, AREA.WOOD, AREA.OTHER, AREA.PITCH, AREA.BEACH, AREA.PATH, AREA.PLAZA, AREA.PARKING, AREA.STEPS]);
-export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(grid, surface), cut = null) {
+// ground: a draper on the terrain alone, for what never stands on a bridge — the water, the beach, the woods: a deck's
+// corridor holds everything in it at the deck's level (src/shared/decks.js), and had raised the lagoon under a bridge
+// at street level up to the deck, drawn over its road (0.08 m up to the carriageway's 0.06: the lane lines, kerbs and
+// islands stood out of it)
+const LOW = (a, style) => style.layer === GROUND.WATER || a.kind === AREA.BEACH || a.kind === AREA.WOOD;
+export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(grid, surface), cut = null, ground = null) {
   const pos = new Buf(), nor = new Buf(), col = new Buf(), lay = new Buf();
   let deck = -1; // deck of the parapet being meshed
-  const emit = (p, style) => {
-    const y = drape.height(p[0], p[1]) + style.lift;
+  const emit = (p, style, on = drape) => {
+    const y = on.height(p[0], p[1]) + style.lift;
     pos.push(p[0], y, p[1]); nor.push(...groundNormal(grid, p[0], p[1])); col.push(...style.color); lay.push(style.layer);
   };
   // Vertical walls are independent of the ground-layer triangulation.
@@ -206,12 +211,12 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
     else parapet(walls[i], walls[i + 1], walls[i + 2], walls[i + 3]);
   }
   for (const a of areas) {
-    const style = styleOf(a), cutting = cut && CUT.has(a.kind);
+    const style = styleOf(a), cutting = cut && CUT.has(a.kind), on = ground && LOW(a, style) ? ground : drape;
     for (const rings of a.polygons) {
-      for (const [p, q, r] of triangulate(rings)) drape.triangle(p, q, r, (a, b, c) => {
+      for (const [p, q, r] of triangulate(rings)) on.triangle(p, q, r, (a, b, c) => {
         const pieces = cutting ? cut([a, b, c]) : null;
-        if (!pieces) { emit(a, style); emit(b, style); emit(c, style); return; }
-        for (const piece of pieces) for (let k = 1; k + 1 < piece.length; k++) { emit(piece[0], style); emit(piece[k], style); emit(piece[k + 1], style); }
+        if (!pieces) { emit(a, style, on); emit(b, style, on); emit(c, style, on); return; }
+        for (const piece of pieces) for (let k = 1; k + 1 < piece.length; k++) { emit(piece[0], style, on); emit(piece[k], style, on); emit(piece[k + 1], style, on); }
       });
       if (style.kerb) for (const ring of rings) {
         const n = ring.length / 2;
@@ -675,12 +680,12 @@ function joinMeshes(a, b) {
 // channels: prepareChannels() (src/world/channels.js), or null
 export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z), channels = null) {
   // (the default surface ignores decks: fine for tests, the worker passes makeSurface())
-  const drape = createDraper(grid, surface, tileSize);
+  const drape = createDraper(grid, surface, tileSize), ground = createDraper(grid, (x, z) => sampleGrid(grid, x, z), tileSize);
   tile = { ...tile, ...clearRoadway(tile) }; // (nothing standing out in the lanes: src/shared/roadway.js)
   const ch = channels?.forTile(tile.tx, tile.tz), cut = ch?.cut ?? null;
   return {
     terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize, cut),
-    roads: joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null),
+    roads: joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut, ground), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null),
     paint: roadMesh(tile.areas.filter(isPaint), grid, surface, [], drape),
     decals: decalMesh(tile.props, drape),
     buildings: buildingMesh(tile.buildings, tile.tx, tile.tz),

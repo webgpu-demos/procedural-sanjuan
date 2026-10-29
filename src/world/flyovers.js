@@ -188,22 +188,32 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null, 
       // (dashes 5 m on, 5 m off, as markings.mjs paints them)
       const dashed = Math.floor(a.s / 5) % 2 === 0;
       const c = width.carriage / 2, side = width.half - c > 0.3 && !expressway ? 'sidewalk' : 'asphalt';
+      // (a dual carriageway's two decks overlapping at the median: either paved up to the line between their
+      // carriageways, one barrier on it; roadlevel.js DrawnDecks.medians)
+      const sd = decks?.sideOf(e, i), med = (s) => sd?.[s > 0 ? 1 : 0] ?? null, line = (s) => med(s)?.m ?? null;
+      const cut = (s) => Math.min(c, line(s) ?? Infinity), outer = (s) => line(s) ?? width.half;
+      const painted = (l) => (!l.dashed || dashed) && !(line(l.o >= 0 ? 1 : -1) != null && Math.abs(l.o) > line(l.o >= 0 ? 1 : -1) - 0.3);
       if (paving) {
         // the carriageway and (a street's) sidewalks, as the tiles pave them either side, in their materials
-        pave(a, b, -c, c, 'asphalt');
-        for (const s of [-1, 1]) pave(a, b, s * c, s * width.half, side);
-        if (side === 'sidewalk') for (const s of [-1, 1]) sweep(a, b, [[s * c, 0.06], [s * c, 0.2]], sidewalk); // (the kerb)
-        for (const l of lines) if (!l.dashed || dashed) pave(a, b, l.o - 0.075, l.o + 0.075, l.yellow ? 'yellow' : 'paint');
+        pave(a, b, -cut(-1), cut(1), 'asphalt');
+        for (const s of [-1, 1]) if (outer(s) > c) pave(a, b, s * c, s * outer(s), line(s) != null ? 'asphalt' : side);
+        if (side === 'sidewalk') for (const s of [-1, 1]) if (line(s) == null) sweep(a, b, [[s * c, 0.06], [s * c, 0.2]], sidewalk); // (the kerb)
+        for (const l of lines) if (painted(l)) pave(a, b, l.o - 0.075, l.o + 0.075, l.yellow ? 'yellow' : 'paint');
       } else {
-        sweep(a, b, [[-c, 0], [c, 0]], asphalt);
-        for (const s of [-1, 1]) sweep(a, b, [[s * c, 0], [s * width.half, 0]], side === 'sidewalk' ? sidewalk : asphalt);
-        for (const l of lines) if (!l.dashed || dashed) sweep(a, b, [[l.o - 0.075, 0.015], [l.o + 0.075, 0.015]], l.yellow ? [0.88, 0.66, 0.12] : paint);
+        sweep(a, b, [[-cut(-1), 0], [cut(1), 0]], asphalt);
+        for (const s of [-1, 1]) if (outer(s) > c) sweep(a, b, [[s * c, 0], [s * outer(s), 0]], side === 'sidewalk' && line(s) == null ? sidewalk : asphalt);
+        for (const l of lines) if (painted(l)) sweep(a, b, [[l.o - 0.075, 0.015], [l.o + 0.075, 0.015]], l.yellow ? [0.88, 0.66, 0.12] : paint);
       }
       // parapets, with a taller noise barrier on the expressway's flyovers; none on a side that lies on the paving
       // of another deck at its level, where a ramp merges or forks (the cars changing from one to the other drove
       // through the parapet between them)
       const top = expressway && !e.grade ? 1.9 : 1.0;
       for (const s of [-1, 1]) {
+        const md = med(s);
+        if (md) {
+          if (md.draw) sweep(a, b, [[s * (md.m - 0.2), 0], [s * (md.m - 0.2), 0.85], [s * (md.m + 0.2), 0.85], [s * (md.m + 0.2), 0]], concrete);
+          continue;
+        }
         if (decks) {
           const p = at(a, s * (w - 0.125), 0), q = at(b, s * (w - 0.125), 0), L = Math.hypot(q[0] - p[0], q[2] - p[2]) || 1;
           if (decks.paved((p[0] + q[0]) / 2, (p[2] + q[2]) / 2, (p[1] + q[1]) / 2, e, (q[0] - p[0]) / L, (q[2] - p[2]) / L)) continue;
@@ -211,16 +221,18 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null, 
         sweep(a, b, [[s * (w - 0.25), 0], [s * (w - 0.25), 0.9], [s * w, 0.9]], concrete);
         if (top > 1) sweep(a, b, [[s * (w - 0.1), 0.9], [s * (w - 0.1), top]], barrier);
       }
+      // (its outer faces, to the median's line under the paving where the other deck runs on beside it)
+      const el = line(-1) ?? w, er = line(1) ?? w, tl = line(-1) != null ? -0.05 : 0.9, tr = line(1) != null ? -0.05 : 0.9;
       if (e.grade) {
         // a slab on its abutments: its edge and underside show over the creek or the dip it crosses
-        sweep(a, b, [[-w, 0.9], [-w, -0.4], [-w * 0.8, -1.1], [w * 0.8, -1.1], [w, -0.4], [w, 0.9]], concrete);
+        sweep(a, b, [[-el, tl], [-el, -0.4], [-el * 0.8, -1.1], [er * 0.8, -1.1], [er, -0.4], [er, tr]], concrete);
       } else if (Math.min(a.h, b.h) > DECK_ABOVE) {
         // box girder: outer faces and the underside
-        sweep(a, b, [[-w, 0.9], [-w, -0.5], [-w * 0.55, -1.5], [w * 0.55, -1.5], [w, -0.5], [w, 0.9]], concrete);
+        sweep(a, b, [[-el, tl], [-el, -0.5], [-el * 0.55, -1.5], [er * 0.55, -1.5], [er, -0.5], [er, tr]], concrete);
       } else {
         // ramp on fill between retaining walls
-        sweep(a, b, (c) => [[-w, 0.9], [-w, -Math.max(c.h, 0) - 0.4]], concrete);
-        sweep(a, b, (c) => [[w, -Math.max(c.h, 0) - 0.4], [w, 0.9]], concrete);
+        sweep(a, b, (c) => [[-el, tl], [-el, -Math.max(c.h, 0) - 0.4]], concrete);
+        sweep(a, b, (c) => [[er, -Math.max(c.h, 0) - 0.4], [er, tr]], concrete);
       }
     }
     // piers every 27 m where the deck stands high, each at the nearest place clear of the lanes of the roads
