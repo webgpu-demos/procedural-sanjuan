@@ -474,7 +474,7 @@ export class SimTraffic {
       // its road's deck drawn under it, or the street (roadlevel.js)
       let stood = seen ? this.drawn.stand(this.surface, p[0], p[2], sy, heading, road) : null;
       if (stood?.push) { p[0] += stood.push[0]; p[2] += stood.push[1]; } // (onto the deck drawn, from just beyond its edge)
-      // and its whole body on what is drawn (roadlevel.js fit): across its way, as far as it takes (up to 3 m),
+      // and its whole body on what is drawn (roadlevel.js fit): across its way, as far as it takes (up to 4 m),
       // eased in and out as relane's shift is (a car with nothing drawn near it is left where it is). (SUMO's lanes are
       // not always the city's: netconvert's --ramps.guess gave Avenida Piñero a third lane for the 94 m before a ramp,
       // 5 m out from its middle where the tiles pave 3.5)

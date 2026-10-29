@@ -35,7 +35,7 @@ class GroundRoads {
     };
     for (const e of roads.edges) {
       if (e.tunnel || leftOut(e) || !DRIVEN.test(e.highway)) continue;
-      const half = pavedHalf(e, lanesOf(e)).carriage / 2 + 0.3, p = e.pts; // (to the kerb's face)
+      const half = pavedHalf(e, lanesOf(e)).carriage / 2 + 0.05, p = e.pts; // (to the kerb: the corners are inside the body, 0.45 of its width out)
       for (let k = 3; k < p.length; k += 3) file([p[k - 3], p[k - 1], p[k], p[k + 2], half], p[k - 3], p[k - 1], p[k], p[k + 2], half);
       for (const [n, x, z] of [[e.a, p[0], p[2]], [e.b, p.at(-3), p.at(-1)]]) { const r = at.get(n); if (!r || r[2] < half) at.set(n, [x, z, half]); }
     }
@@ -165,7 +165,7 @@ export class DrawnDecks {
 
   // A car's footprint (W wide, L long, facing `heading`, at level y, on a deck or the street) kept on what is drawn:
   // the shift across its way ([dx, dz]) that puts all four corners on the paving (a deck's, clear of its parapets;
-  // the street's carriageway), the least of up to 3 m; null if it is there already, or no such shift is found.
+  // the street's carriageway), the least of up to 4 m; null if it is there already, or no such shift is found.
   // SUMO's lanes are its own: an outer lane wider than the deck drawn, a car merging off a ramp's line into the
   // expressway's outer lane, the inner lane of a dual carriageway against the other's parapet.
   fit(surface, x, z, y, heading, deck, W, L, road = null) {
@@ -181,7 +181,7 @@ export class DrawnDecks {
     const b0 = bad(0, 0);
     if (!b0) return null;
     let best = null, bestN = b0;
-    for (let k = 1; k <= 12; k++) for (const sg of [1, -1]) {
+    for (let k = 1; k <= 16; k++) for (const sg of [1, -1]) {
       const d = sg * k * 0.25, n = bad(rx * d, rz * d);
       if (n < bestN) { bestN = n; best = [rx * d, rz * d]; if (!n) return best; }
     }
