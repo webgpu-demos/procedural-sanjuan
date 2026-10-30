@@ -1,0 +1,16 @@
+++ cd /home/runner/work/procedural-sanjuan/procedural-sanjuan
+++ S=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan
+++ T=public/tiles/sanjuan/sim
+++ PY=.venv-sim/bin/python
+++ mkdir -p /mnt/res/sim
+++ case ${MODE:-all} in
+++ code=0
+++ cp /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/stats.xml /mnt/res/stats-apagon.xml
+++ cp -r public/tiles/sanjuan/sim/apagon /mnt/res/sim/
+++ tr '\r' '\n'
+++ grep -v '^Warning'
+++ grep -v '^Step #'
+++ du -sh /mnt/res/sim/apagon /mnt/res/carry
+210M	/mnt/res/sim/apagon
+++ exit 0
+exit 0 after 158 min

@@ -1,0 +1,79 @@
+++ set -e
+++ git clone -q --depth 1 -b simres/N70a https://x-access-token:ghs_15368_eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRobmQiLCJjdHgiOiJKa25oR2RWY2V0M3JKS0FmYjcwdnQ1SnVsa1JwSnJDVllMVEJiQ25OTjl2YWhpbDF4dUZHcURFIiwiZXhwIjoxNzkzMzg0MzkwLCJpYXQiOjE3OTMzODA3OTAsImlzcyI6ImdpdGh1YiIsImp0aSI6IjE0ZWQ3YzI0LWRhZGQtNGNlNy04MzA2LWQ2YjQyODA0MDEyOSIsInZlciI6M30.GMAoSkoAxe1hJneUtRZrZuN9hBXon3SneQX08FMPi1AqLJQvbTgPgKtVAEpHM6FiNYOI2aInbvLS7yUcXUyw9A@github.com/webgpu-demos/procedural-sanjuan /mnt/sim/from
+++ node tools/sim/network.mjs --area=sanjuan
+   0.2s 16 expressway stretches narrowed to the lanes beyond them
+   0.3s 7072 joins: 42907 edges
+   0.4s 82 acceleration lanes (of 83 the client paves)
+   0.4s 1030 junctions joined from 2382 nodes
+   0.7s plain network: 17524 nodes (427 with lights, 116 zippers), 40573 directed edges from 36830 roads
+Success.
+   8.6s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.0 MB)
+++ mkdir -p /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning public/tiles/sanjuan/sim
+++ cp -r /mnt/sim/from/sim/buses.json /mnt/sim/from/sim/ferries.json /mnt/sim/from/sim/morning public/tiles/sanjuan/sim/
+++ cp /mnt/sim/from/carry/state_20700.xml.gz /mnt/sim/from/carry/taz.add.xml /mnt/sim/from/carry/busstops.add.xml /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/
+++ gunzip -c /mnt/sim/from/carry/routes.rou.xml.gz
+++ gunzip -c /mnt/sim/from/carry/trips.json.gz
++++ python3 -c 'import json; print(json.load(open('\''public/tiles/sanjuan/sim/morning/index.json'\''))['\''share'\''])'
+++ SHARE=0.7
+++ timeout 320m .venv-sim/bin/python tools/sim/run.py --area=sanjuan --scenario=apagon --demand=morning --end=8.5 --share=0.7 --reroute=1 --reroute-period=300
+    3.1s sumo apagon: 5.75 h to 8.50 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/allway.net.xml.gz' ... done (3719ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/outputs.add.xml' ... done (41ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (9ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (4ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/apagon/apagon.add.xml' ... done (3ms).
+Loading state from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/state_20700.xml.gz' ... done (2067ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 20700.00.
+Step #20700.00 (1768ms ~= 0.57*RT, ~2267.53UPS, vehicles TOT 15836 ACT 4009 BUF 1)        Step #21600.00 (189ms ~= 5.29*RT, ~26624.34UPS, vehicles TOT 21530 ACT 5032 BUF 80)       Step #22500.00 (327ms ~= 3.06*RT, ~22954.13UPS, vehicles TOT 30061 ACT 7506 BUF 856)      Step #23400.00 (464ms ~= 2.16*RT, ~20060.34UPS, vehicles TOT 39621 ACT 9308 BUF 2241)     Step #24300.00 (646ms ~= 1.55*RT, ~16020.12UPS, vehicles TOT 49417 ACT 10349 BUF 2963)    Step #25200.00 (691ms ~= 1.45*RT, ~19287.99UPS, vehicles TOT 62420 ACT 13328 BUF 3082)    Step #26100.00 (1158ms ~= 0.86*RT, ~18122.63UPS, vehicles TOT 83580 ACT 20986 BUF 4073)   Step #27000.00 (1336ms ~= 0.75*RT, ~21904.94UPS, vehicles TOT 108341 ACT 29265 BUF 4529)  Step #27900.00 (1385ms ~= 0.72*RT, ~22932.85UPS, vehicles TOT 127346 ACT 31762 BUF 3920)  Step #28800.00 (1362ms ~= 0.73*RT, ~22144.64UPS, vehicles TOT 140544 ACT 30161 BUF 2989)  Step #29700.00 (1323ms ~= 0.76*RT, ~21792.89UPS, vehicles TOT 152311 ACT 28832 BUF 2934)  Step #30600.00 (1860ms ~= 0.54*RT, ~14528.49UPS, vehicles TOT 163792 ACT 27023 BUF 2849)  
+Simulation ended at time: 30600.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 9120.02s
+ Real time factor: 1.08552
+ UPS: 19983.336762
+Vehicles:
+ Inserted: 163792 (Loaded: 183020)
+ Running: 27023
+ Waiting: 2849
+ Teleports: 896 (Collisions: 55, Jam: 167, Yield: 507, Wrong Lane: 167)
+ Emergency Braking: 487
+Statistics (avg of 151970):
+ RouteLength: 8527.39
+ Speed: 8.86
+ Duration: 1212.13
+ WaitingTime: 271.25
+ TimeLoss: 678.28
+ DepartDelay: 73.44
+ DepartDelayWaiting: 433.31
+AStarRouter answered 294173 queries and explored 11102.93 edges on average.
+AStarRouter spent 5034.56s answering queries (17.11ms on average).
+AStarRouter answered 289305 queries and explored 11081.70 edges on average.
+AStarRouter spent 4960.99s answering queries (17.15ms on average).
+AStarRouter answered 284219 queries and explored 11102.23 edges on average.
+AStarRouter spent 4898.28s answering queries (17.23ms on average).
+AStarRouter answered 278267 queries and explored 11172.52 edges on average.
+AStarRouter spent 4837.60s answering queries (17.38ms on average).
+ 9129.5s sumo done
+ 9159.8s tracks: 21 M samples read, up to 6.61 h, 22460 tracks, 9536 on the road
+ 9183.1s tracks: 40 M samples read, up to 7.08 h, 40683 tracks, 15610 on the road
+ 9205.6s tracks: 62 M samples read, up to 7.37 h, 58515 tracks, 25244 on the road
+ 9224.2s tracks: 81 M samples read, up to 7.56 h, 71134 tracks, 30390 on the road
+ 9243.7s tracks: 102 M samples read, up to 7.74 h, 83311 tracks, 31849 on the road
+ 9261.4s tracks: 121 M samples read, up to 7.91 h, 93848 tracks, 30651 on the road
+ 9280.9s tracks: 141 M samples read, up to 8.10 h, 104515 tracks, 29436 on the road
+ 9298.8s tracks: 160 M samples read, up to 8.28 h, 113820 tracks, 28785 on the road
+ 9317.7s tracks: 181 M samples read, up to 8.49 h, 124980 tracks, 27135 on the road
+ 9318.9s 152587 tracks from 182 M samples; peak 32001 cars on the road at once
+ 9481.0s 96 windows, 209.9 MB (gzipped)
+ 9483.9s speeds: 48 intervals x 46546 edges
+ 9485.8s done: {"total": "896", "jam": "167", "yield": "507", "wrongLane": "167"}
+++ .venv-sim/bin/python tools/sim/validate.py --area=sanjuan --scenario=apagon
+1219 counted roads matched; simulated/counted 0.40; GEH<5 10%, GEH<10 19%, r² 0.36
+  other                  n    4  ratio 3.15  GEH<5    0%  GEH<10    0%
+  interstate / freeway   n  321  ratio 0.33  GEH<5    6%  GEH<10   12%
+  arterials              n  791  ratio 0.48  GEH<5   10%  GEH<10   21%
+  collectors             n   81  ratio 0.56  GEH<5   21%  GEH<10   32%
+  local                  n   22  ratio 0.34  GEH<5    9%  GEH<10   18%
+worst: [('PR-18', 19472, 1631), ('PR-18', 19472, 1638), ('PR-22', 15976, 340), ('PR-22', 19072, 1763), ('PR-22', 19072, 1982), ('PR-22', 19072, 2102)]
