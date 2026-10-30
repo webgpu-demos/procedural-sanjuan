@@ -122,10 +122,15 @@ function person() {
   return g;
 }
 
+// The water's edge for one on foot or on a bike at p (the sea, a lagoon, a river: streamer.wet), unless a deck
+// crosses it there at their height; set down in the water, they come out of it
+const water = (p, x, z) => p.wet(x, z) && !p.wet(p.x, p.z) && p.decks?.at(x, z, p.y + 0.3, 2.4) == null;
+
 export class Walker {
-  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null }) {
+  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null, wet = () => false }) {
     this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
     this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
+    this.wet = wet; // (water no road crosses, and beyond the city: streamer.wet)
     this.on = false; this.label = 'A pie'; this.unit = 'km/h';
     this.model = new THREE.Group(); this.figure = person(); this.model.add(this.figure); this.model.visible = false; scene.add(this.model);
     loadPerson().then((g) => { if (!g) return; this.rig = new Rig(g); this.model.remove(this.figure); this.model.add(this.rig.turn); });
@@ -151,7 +156,7 @@ export class Walker {
     this.speed += (fwd * top - this.speed) * Math.min(1, dt * 10);
     const nx = this.x + Math.sin(this.heading) * this.speed * dt, nz = this.z + Math.cos(this.heading) * this.speed * dt;
     // a wall, a pole, a tree, a car (collide.js) in the way: slide along it (one axis at a time), or stop
-    const free = (x, z) => !this.walls.blocked(x, z) && !this.collider?.blocked([this.x, this.z, this.x, this.z], [x, z, x, z], 0.28, this.y);
+    const free = (x, z) => !this.walls.blocked(x, z) && !water(this, x, z) && !this.collider?.blocked([this.x, this.z, this.x, this.z], [x, z, x, z], 0.28, this.y);
     if (free(nx, nz)) { this.x = nx; this.z = nz; }
     else if (free(nx, this.z)) this.x = nx;
     else if (free(this.x, nz)) this.z = nz;
@@ -227,9 +232,10 @@ function bicycle() {
 }
 
 export class Cyclist {
-  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null }) {
+  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null, wet = () => false }) {
     this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
     this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
+    this.wet = wet; // (water no road crosses, and beyond the city: streamer.wet)
     this.on = false; this.label = 'Bicicleta'; this.unit = 'km/h';
     this.model = bicycle(); this.model.visible = false; scene.add(this.model);
     // the Rocketbox man in the saddle, when he has come (seated, his feet and hands put on the pedals and the bars)
@@ -287,7 +293,7 @@ export class Cyclist {
     const nx = this.x + Math.sin(this.heading) * v * dt, nz = this.z + Math.cos(this.heading) * v * dt;
     // the walls, and the street's things and the vehicles (collide.js: the bike a capsule its length): slide or stop
     const hs = Math.sin(this.heading) * 0.55, hc = Math.cos(this.heading) * 0.55, from = [this.x - hs, this.z - hc, this.x + hs, this.z + hc];
-    const free = (x, z) => !this.walls.blocked(x + hs, z + hc) && !this.collider?.blocked(from, [x - hs, z - hc, x + hs, z + hc], 0.3, this.y);
+    const free = (x, z) => !this.walls.blocked(x + hs, z + hc) && !water(this, x + hs, z + hc) && !this.collider?.blocked(from, [x - hs, z - hc, x + hs, z + hc], 0.3, this.y);
     if (free(nx, nz)) { this.x = nx; this.z = nz; }
     else if (free(nx, this.z)) this.x = nx;
     else if (free(this.x, nz)) this.z = nz;

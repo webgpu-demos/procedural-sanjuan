@@ -4,8 +4,8 @@
 // Arcade physics on a bicycle model: the engine pulls less as the speed rises, the steering lock closes with
 // speed, the car's course follows where it points with grip (little under the handbrake: a slide). It rides
 // the ground, or a deck it drove onto (a flyover, a ramp: it stays up there; driving under one, it stays under).
-// It stops against the walls of the buildings (their wall faces, rasterized into a grid as the tiles come near)
-// and against the simulated cars, which cannot swerve (they keep to their recorded way): one that would drive
+// It stops against the walls of the buildings (their wall faces, rasterized into a grid as the tiles come near), at
+// the water's edge (no driving out to sea), and against the simulated cars, which cannot swerve (they keep to their recorded way): one that would drive
 // through it fades out instead (simtraffic.js, probe).
 import * as THREE from 'three';
 import { vehicleCapsule } from './collide.js';
@@ -118,8 +118,9 @@ export class Roofs {
 export class Driver {
   // scene; surface(x, z, -2): the terrain; sim(): the simulated traffic (decks, the cars round about), or null;
   // tiles(): the scene's tile groups (for the walls)
-  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null }) {
+  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null, wet = () => false }) {
     this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
+    this.wet = wet; // (water no road crosses, and beyond the city: streamer.wet)
     this.surface = surface; this.sim = sim; this.tiles = tiles; this.lift = lift; // (lift: the paving's height over the terrain)
     this.on = false; this.label = 'Sedán';
     this.spec = TYPES[1]; // a sedan: the lofted body (carbodies.js), in a clear-coated paint
@@ -187,7 +188,10 @@ export class Driver {
     // walls: the nose (or the tail, backing up) and its corners
     const half = this.spec.L * 0.5, side = this.spec.spec.W * 0.5, s = Math.sin(this.heading), c = Math.cos(this.heading), dir = v >= 0 ? 1 : -1;
     const probes = [[0, half * dir], [side, half * dir * 0.85], [-side, half * dir * 0.85]];
-    let hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => this.walls.blocked(nx + c * a + s * b, nz - s * a + c * b));
+    // (and the water's edge: the sea, a lagoon, a river, unless a deck crosses it there at the car's height; set
+    // down in the water, it drives out of it)
+    const water = (x, z) => this.wet(x, z) && !this.wet(this.x, this.z) && this.decks?.at(x, z, this.y + 0.5, 2.4) == null;
+    let hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => { const x = nx + c * a + s * b, z = nz - s * a + c * b; return this.walls.blocked(x, z) || water(x, z); });
     // the street's things and the vehicles round about (collide.js: the simulated cars, the traffic, the car
     // parked): one met from outside stops it; one it is already inside of it drives out of (set down in a queue,
     // the first seconds it may drive through the cars at all: ghost)
