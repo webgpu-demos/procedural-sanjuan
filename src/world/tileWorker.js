@@ -2,6 +2,7 @@
 import { decodeTile } from '../shared/tileformat.js';
 import { buildTile, blockMesh } from './meshing.js';
 import { makeSurface } from '../shared/decks.js';
+import { padField } from '../shared/terrain.js';
 import { mergeArrows, accelTile, accelLookup } from '../shared/roadway.js';
 import { prepareChannels } from './channels.js';
 
@@ -70,6 +71,7 @@ self.onmessage = async ({ data: m }) => {
     return;
   }
   if (m.type === 'merges') { merging = mergeArrows(new Float32Array(m.segs)); return; }
+  if (m.type === 'pads') { grid.pads = padField(m.pads); return; }
   if (m.type === 'accel') { const pave = new Float32Array(m.pave); accel = { pave, line: new Float32Array(m.line), on: accelLookup(pave) }; return; }
   if (m.type === 'tile' || m.type === 'blocks') {
     try {

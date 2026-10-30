@@ -12,7 +12,7 @@ import { Streamer } from './world/streamer.js';
 import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
-import { buildFlyovers, overDecks, landDecks } from './world/flyovers.js';
+import { buildFlyovers, overDecks, landDecks, deckPads } from './world/flyovers.js';
 import { DrawnDecks, mergeDecks } from './world/roadlevel.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
@@ -184,6 +184,7 @@ const accel = accelQuads(accelLanes(roads, lanes?.edges ?? null));
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
 landDecks(roads, (x, z) => streamer.ground(x, z)); // (decks flush with the streets they meet: world/flyovers.js)
 mergeDecks(roads, (x, z) => streamer.ground(x, z)); // (a ramp at the expressway's level where their decks overlap: world/roadlevel.js)
+streamer.pads(deckPads(roads, (x, z) => streamer.ground(x, z))); // (and the ground level with a deck where it lands on it)
 // the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
 const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
@@ -195,6 +196,10 @@ scene.add(railways);
   const flyovers = await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint }, drawnDecks);
   scene.add(flyovers);
   streamer.under = overDecks(flyovers.userData.footprints, PROP); // (nothing on the ground standing up through a deck)
+  // (the street lights on the decks: flyovers.js; the tiles light the roads up to them)
+  const lights = flyovers.userData.lights, rows = new Float32Array(lights.length * 6), level = new Map();
+  lights.forEach(([x, z, rot, y], k) => { rows.set([PROP.LIGHT, 0, rot, x, z, 1], k * 6); level.set(Math.fround(x) + ',' + Math.fround(z), y); });
+  if (lights.length) scene.add(Object.assign(props.build(rows, [], (x, z) => level.get(x + ',' + z) ?? streamer.ground(x, z)).group, { name: 'deck lights' }));
 }
 if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));
 if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
