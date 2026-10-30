@@ -44,6 +44,7 @@ class GroundRoads {
     for (const [x, z, half] of at.values()) { const r = half + 1.5; file([x, z, x, z, r], x, z, x, z, r); }
   }
   on(x, z) {
+    if (this.accel?.(x, z)) return true; // (an acceleration lane: main.js, roadway.js accelLanes)
     for (const [x0, z0, x1, z1, r] of this.cells.get(key(x, z)) ?? []) {
       const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, t = l2 ? Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2)) : 0;
       if (Math.hypot(x0 + dx * t - x, z0 + dz * t - z) <= r) return true;

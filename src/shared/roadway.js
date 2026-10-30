@@ -310,3 +310,58 @@ export function accelPaving(lane, step = 4) {
   }
   return { pave, line: lines };
 }
+
+// The acceleration lanes' paving and lines as the tiles take them: { pave, line } flat Float32Arrays of quads (8 numbers
+// each), for the tile workers (accelTiles), and a test of whether (x, z) lies on one (onAccel: GroundRoads, guard rails).
+export function accelQuads(lanes) {
+  const pave = [], line = [];
+  for (const l of lanes) { const q = accelPaving(l); for (const v of q.pave) pave.push(...v); for (const v of q.line) line.push(...v); }
+  return { pave: Float32Array.from(pave), line: Float32Array.from(line) };
+}
+const inQuad = (q, o, x, z, pad = 0) => {
+  // (convex, in either winding: the point on the same side of all four edges, within pad)
+  let pos = 0, neg = 0;
+  for (let k = 0; k < 4; k++) {
+    const ax = q[o + k * 2], az = q[o + k * 2 + 1], bx = q[o + ((k + 1) % 4) * 2], bz = q[o + ((k + 1) % 4) * 2 + 1];
+    const l = Math.hypot(bx - ax, bz - az) || 1, c = ((bx - ax) * (z - az) - (bz - az) * (x - ax)) / l;
+    if (c > -pad) pos++; if (c < pad) neg++;
+  }
+  return pos === 4 || neg === 4;
+};
+// quads: accelQuads().pave. Returns (x, z, pad) => whether (x, z) is on one (within pad metres)
+export function accelLookup(quads, cell = 32) {
+  const grid = new Map();
+  for (let o = 0; o < quads.length; o += 8) {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let k = 0; k < 4; k++) { x0 = Math.min(x0, quads[o + k * 2]); x1 = Math.max(x1, quads[o + k * 2]); z0 = Math.min(z0, quads[o + k * 2 + 1]); z1 = Math.max(z1, quads[o + k * 2 + 1]); }
+    for (let a = Math.floor((x0 - 1) / cell); a <= Math.floor((x1 + 1) / cell); a++) for (let b = Math.floor((z0 - 1) / cell); b <= Math.floor((z1 + 1) / cell); b++)
+      (grid.get(a * 100003 + b) ?? grid.set(a * 100003 + b, []).get(a * 100003 + b)).push(o);
+  }
+  return (x, z, pad = 0) => (grid.get(Math.floor(x / cell) * 100003 + Math.floor(z / cell)) ?? []).some((o) => inQuad(quads, o, x, z, pad));
+}
+// A tile's share of them (the quads whose middle is in it) as areas, as decodeTile gives them: the paving a
+// carriageway, its line paint; and the tile's guard rails along the expressway's old edge, where the lane runs, gone.
+export function accelTile(tile, quads, tileSize, on = null) {
+  const x0 = tile.tx * tileSize, z0 = tile.tz * tileSize, mine = (q, o) => {
+    const mx = (q[o] + q[o + 2] + q[o + 4] + q[o + 6]) / 4, mz = (q[o + 1] + q[o + 3] + q[o + 5] + q[o + 7]) / 4;
+    return mx >= x0 && mx < x0 + tileSize && mz >= z0 && mz < z0 + tileSize;
+  };
+  // (wound as the compiler winds its rings, or the meshes face down and are not drawn)
+  const wound = (r) => { let a = 0; for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; a += r[i * 2] * r[j * 2 + 1] - r[j * 2] * r[i * 2 + 1]; } return a > 0 ? [r[6], r[7], r[4], r[5], r[2], r[3], r[0], r[1]] : r; };
+  const rings = (q) => { const out = []; for (let o = 0; o < q.length; o += 8) if (mine(q, o)) out.push([wound(Array.from(q.subarray(o, o + 8)))]); return out; };
+  const pave = rings(quads.pave), line = rings(quads.line);
+  if (!pave.length && !line.length && !on) return tile;
+  const areas = [...tile.areas];
+  if (pave.length) areas.push({ kind: AREA.CARRIAGEWAY, code: 0, polygons: pave });
+  if (line.length) areas.push({ kind: AREA.MARK_WHITE, code: 0, polygons: line });
+  let walls = tile.walls;
+  if (on && walls?.length) {
+    const keep = [];
+    for (let i = 0; i < walls.length; i += 5) {
+      if (walls[i + 4] < 0 && on((walls[i] + walls[i + 2]) / 2, (walls[i + 1] + walls[i + 3]) / 2, 0.6)) continue; // (a barrier across the lane)
+      for (let k = 0; k < 5; k++) keep.push(walls[i + k]);
+    }
+    if (keep.length !== walls.length) walls = Float32Array.from(keep);
+  }
+  return { ...tile, areas, walls };
+}
