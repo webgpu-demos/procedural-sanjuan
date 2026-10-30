@@ -4,7 +4,7 @@ import earcut from 'earcut';
 import { clearRoadway } from '../shared/roadway.js';
 import { AREA, SPORT, BARRIER, MATERIAL, BFLAG } from '../shared/tileformat.js';
 import { sampleGrid } from '../shared/terrain.js';
-import { KIND, CAT, WALL, GROUND } from './constants.js';
+import { KIND, CAT, WALL, GROUND, WET } from './constants.js';
 import { buildTower } from './tower.js';
 import { createDraper } from './drape.js';
 import { decalMesh } from './decals.js';
@@ -642,30 +642,36 @@ export function buildingMesh(buildings, tx, tz) {
 
 // How high each kind of ground surface stands over the terrain, in a 1 m raster of the tile (centimetres, the
 // highest where they overlap): a sidewalk 20 cm, a carriageway 6, an island 22. What walks or drives on the
-// ground stands on it (streamer.lift), not sunk into it.
+// ground stands on it (streamer.lift), not sunk into it. The top bit (WET) marks water no paving crosses (the sea, a
+// lagoon, a river, a pool; not a bridge's road over it, a pier): the visitor's car, bike and walker stop at its
+// edge (streamer.wet).
 const LIFT_CELL = 1;
+const PAVED = new Set([AREA.CARRIAGEWAY, AREA.ROAD, AREA.SIDEWALK, AREA.ISLAND, AREA.PARKING, AREA.PLAZA, AREA.PATH, AREA.STEPS, AREA.TACTILE, AREA.OTHER]);
 function liftRaster(areas, tx, tz, tileSize) {
-  const n = Math.ceil(tileSize / LIFT_CELL), x0 = tx * tileSize, z0 = tz * tileSize, data = new Uint8Array(n * n), xs = [];
-  for (const a of areas) {
-    const cm = Math.round(styleOf(a).lift * 100);
-    if (!cm) continue;
-    for (const rings of a.polygons) {
-      for (let j = 0; j < n; j++) {
-        const z = z0 + (j + 0.5) * LIFT_CELL;
-        xs.length = 0;
-        for (const r of rings) for (let i = 0, k = r.length - 2; i < r.length; k = i, i += 2) {
-          const za = r[k + 1], zb = r[i + 1];
-          if ((za > z) !== (zb > z)) xs.push(r[k] + ((z - za) / (zb - za)) * (r[i] - r[k]));
-        }
-        if (xs.length < 2) continue;
-        xs.sort((p, q) => p - q);
-        for (let s = 0; s + 1 < xs.length; s += 2) {
-          const i0 = Math.max(0, Math.ceil((xs[s] - x0) / LIFT_CELL - 0.5)), i1 = Math.min(n - 1, Math.floor((xs[s + 1] - x0) / LIFT_CELL - 0.5));
-          for (let i = i0; i <= i1; i++) if (data[j * n + i] < cm) data[j * n + i] = cm;
-        }
+  const n = Math.ceil(tileSize / LIFT_CELL), x0 = tx * tileSize, z0 = tz * tileSize, data = new Uint8Array(n * n), flag = new Uint8Array(n * n), xs = [];
+  // (each cell whose middle the polygon covers)
+  const fill = (rings, f) => {
+    for (let j = 0; j < n; j++) {
+      const z = z0 + (j + 0.5) * LIFT_CELL;
+      xs.length = 0;
+      for (const r of rings) for (let i = 0, k = r.length - 2; i < r.length; k = i, i += 2) {
+        const za = r[k + 1], zb = r[i + 1];
+        if ((za > z) !== (zb > z)) xs.push(r[k] + ((z - za) / (zb - za)) * (r[i] - r[k]));
+      }
+      if (xs.length < 2) continue;
+      xs.sort((p, q) => p - q);
+      for (let s = 0; s + 1 < xs.length; s += 2) {
+        const i0 = Math.max(0, Math.ceil((xs[s] - x0) / LIFT_CELL - 0.5)), i1 = Math.min(n - 1, Math.floor((xs[s + 1] - x0) / LIFT_CELL - 0.5));
+        for (let i = i0; i <= i1; i++) f(j * n + i);
       }
     }
+  };
+  for (const a of areas) {
+    const style = styleOf(a), cm = Math.round(style.lift * 100), wet = style.layer === GROUND.WATER, paved = PAVED.has(a.kind);
+    if (!cm && !wet && !paved) continue;
+    for (const rings of a.polygons) fill(rings, (c) => { if (data[c] < cm) data[c] = cm; if (wet) flag[c] |= 1; if (paved) flag[c] |= 2; });
   }
+  for (let c = 0; c < data.length; c++) if (flag[c] === 1) data[c] |= WET;
   return { data, n, x0, z0, cell: LIFT_CELL };
 }
 

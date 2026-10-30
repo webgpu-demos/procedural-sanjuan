@@ -7,3 +7,5 @@ export const CAT = { HOUSE: 0, APARTMENT: 1, MIXED: 2, COMMERCIAL: 3, PUBLIC: 4,
 // Texture array layers (see textures.js).
 export const WALL = { TILE: 0, CONCRETE: 1, PLASTER: 2, BRICK: 3, SIDING: 4, ROOF: 5 };
 export const GROUND = { ASPHALT: 0, PAVERS: 1, GRASS: 2, CONCRETE: 3, SAND: 4, COBBLE: 5, WATER: 6 }; // WATER has no texture
+// the lift raster's top bit (meshing.js liftRaster): water no paving crosses, where the visitor cannot go (streamer.wet)
+export const WET = 128;

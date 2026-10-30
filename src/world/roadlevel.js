@@ -35,7 +35,9 @@ class GroundRoads {
     };
     for (const e of roads.edges) {
       if (e.tunnel || leftOut(e) || !DRIVEN.test(e.highway)) continue;
-      const half = pavedHalf(e, lanesOf(e)).carriage / 2 + 0.05, p = e.pts; // (to the kerb: the corners are inside the body, 0.45 of its width out)
+      // (to the kerb: the corners are inside the body, 0.45 of its width out; an expressway's lanes are painted across its
+      // shoulders, roadway.js paintOf: to the edge of its paving)
+      const w = pavedHalf(e, lanesOf(e)), half = (e.highway.startsWith('motorway') ? w.half : w.carriage / 2) + 0.05, p = e.pts;
       for (let k = 3; k < p.length; k += 3) file([p[k - 3], p[k - 1], p[k], p[k + 2], half], p[k - 3], p[k - 1], p[k], p[k + 2], half);
       for (const [n, x, z] of [[e.a, p[0], p[2]], [e.b, p.at(-3), p.at(-1)]]) { const r = at.get(n); if (!r || r[2] < half) at.set(n, [x, z, half]); }
     }

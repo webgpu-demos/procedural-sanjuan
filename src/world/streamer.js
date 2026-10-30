@@ -10,6 +10,7 @@ import { tileKey } from '../shared/geo.js';
 import { meshHeight } from '../shared/terrain.js';
 import { makeSurface, makeCover } from '../shared/decks.js';
 import { SIGN_LOD_DISTANCE } from './signs.js';
+import { WET } from './constants.js';
 import { shared } from './materials.js';
 
 const WORKERS = Math.min(4, Math.max(2, (navigator.hardwareConcurrency || 4) >> 1));
@@ -84,7 +85,17 @@ export class Streamer {
     const size = this.manifest.tileSize, t = this.tiles.get(tileKey(Math.floor(x / size), Math.floor(z / size)))?.lifts;
     if (!t) return 0;
     const i = Math.floor((x - t.x0) / t.cell), j = Math.floor((z - t.z0) / t.cell);
-    return i < 0 || j < 0 || i >= t.n || j >= t.n ? 0 : t.data[j * t.n + i] / 100;
+    return i < 0 || j < 0 || i >= t.n || j >= t.n ? 0 : (t.data[j * t.n + i] & ~WET) / 100;
+  }
+  // Is (x, z) water no paving crosses (the sea, a lagoon, a river, a pool: meshing.js liftRaster), where its tile is
+  // loaded? Beyond the area's extent too (the open sea round it, or the end of the city drawn).
+  wet(x, z) {
+    const e = this.manifest.extent;
+    if (e && (x < e.minX || x > e.maxX || z < e.minZ || z > e.maxZ)) return true;
+    const size = this.manifest.tileSize, t = this.tiles.get(tileKey(Math.floor(x / size), Math.floor(z / size)))?.lifts;
+    if (!t) return false;
+    const i = Math.floor((x - t.x0) / t.cell), j = Math.floor((z - t.z0) / t.cell);
+    return i >= 0 && j >= 0 && i < t.n && j < t.n && (t.data[j * t.n + i] & WET) !== 0;
   }
 
   // focus: the point tiles are streamed around; eye: the camera position, for level of detail.

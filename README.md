@@ -222,8 +222,9 @@ against the buildings' walls and the simulated cars, which fade rather than driv
 centre, and the rush is simulated without them, every dark signal an all-way stop as the law has it; it plays as a
 scene of its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two
 hours on), riding with any car (click it: where it comes from, why it drives, its delay), the jam map, the lancha
-crossing to Cataño on its timetable, and plenas on the radio ("Callejón de Panderetas", "Fiesta de la Memoria" and
-"Romanoctubre", made for the project with Suno, one after the other; in the apagón the radio dies with the power,
+crossing to Cataño on its timetable, and plenas and more on the radio ("Callejón de Panderetas", "Fiesta de la
+Memoria", "Romanoctubre", "Island Call and Response", "Bounce Playful" and "Perdona mi vida", made for the project
+with Suno, one after the other, round again; in the apagón the radio dies with the power,
 and comes back faint, a battery radio somewhere down the street). The frame rate is kept up by stepping quality down
 and back up as needed (`?quality=high` keeps it all). `G` brings back the settings panel; `?xp=0` skips the
 experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
@@ -243,8 +244,10 @@ npm run sim:all                      # demand, buses, routes, the morning and th
   as several nodes within 20 m are one node (netconvert cut the pieces between them to nothing: 2,907 edges under
   a metre, and a car that could not stop on one waited across the junction behind it); driveways and car parks
   (OSM's unnamed service ways) are left out, where a signal had given a car park a phase of its own. Signals
-  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper; ramps get acceleration
-  lanes; an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
+  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper, and where a ramp joins it in
+  fewer, a zipper too, in the lanes OSM gives the road (netconvert's guessed acceleration lanes, `--ramps`, widened
+  roads past what the tiles pave);
+  an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
 - **Demand** (`demand.py`): a cordon model. Homes, jobs, schools and shops are the floor area of the city's
   buildings, by use and municipio; the ACS municipio-to-municipio commuting flows say who drives where; a
   commuter from beyond the area leaves by whichever of the roads towards their municipio the routes favour (a
@@ -268,10 +271,14 @@ npm run sim:all                      # demand, buses, routes, the morning and th
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
   direction is matched to the counted line (which runs down the median of a divided road). The published run, at
-  seven tenths of the demand, carried 0.48 of the counted traffic (freeways 0.40, arterials 0.59; r² 0.40), about
-  seven tenths of it scaled to the whole demand, and teleported 1,286 of its 228,000 cars; at half the demand 0.42
-  (328 teleported), at six tenths 0.45 (676), at 0.85 0.49 (3,119, and trips half as long again): past seven
-  tenths the rush hour mostly queues longer.
+  seven tenths of the demand, on the network without guessed ramp lanes (the ramps zipped in),
+  carried 0.45 of the counted traffic (freeways 0.35, arterials 0.56; r² 0.30) and teleported 1,338 of its
+  227,000 cars; with netconvert's guessed acceleration lanes it had carried 0.48 (freeways 0.40; r² 0.40, 1,286
+  teleported), its trips an eighth shorter, but those lanes lay past the paving the tiles draw (73 km of lanes in
+  San Juan where a car stood off the road, 25 km without), and with the ramps giving way instead of zipped, 0.45
+  and 2,280 teleported. Earlier, with the guessed lanes: at half the demand 0.42 (328 teleported), at six tenths
+  0.45 (676), at 0.85 0.49 (3,119, and trips half as long again): past seven tenths the rush hour mostly queues
+  longer.
   The figures for the published run are in the experience (¿Qué tan real?).
 - **Experiments** run on GitHub Actions (the `simlab` branch: `simlab/jobs.json` lists the jobs, each pushes what
   it found to a branch `simres/<job>`); `hotspots.py` lists where a run teleports cars and why.
