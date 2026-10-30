@@ -782,6 +782,16 @@ export class People {
     this.stats.moves[name] = (this.stats.moves[name] ?? 0) + 1;
     return true;
   }
+  // The seat nearest (x, z) within r (a bench, a shelter's), where one sits on it, facing out: the visitor's walker
+  seatNear(x, z, r = 2.5) {
+    let best = null, bd = r;
+    for (const s of this.walks.spots) {
+      if (s.kind !== SPOT.BENCH && s.kind !== SPOT.SHELTER) continue;
+      const d = Math.hypot(s.x - x, s.z - z);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best && { x: best.x + Math.sin(best.heading) * 0.12, z: best.z + Math.cos(best.heading) * 0.12, heading: best.heading };
+  }
   travelAt(c, t) {
     const f = THREE.MathUtils.clamp(t / c.duration, 0, 1) * (c.frames - 1), i = Math.floor(f), w = f - i;
     return c.travel[i] * (1 - w) + c.travel[Math.min(i + 1, c.frames - 1)] * w;

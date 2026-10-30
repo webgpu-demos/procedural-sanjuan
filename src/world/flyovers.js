@@ -193,15 +193,23 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null, 
       const sd = decks?.sideOf(e, i), med = (s) => sd?.[s > 0 ? 1 : 0] ?? null, line = (s) => med(s)?.m ?? null;
       const cut = (s) => Math.min(c, line(s) ?? Infinity), outer = (s) => line(s) ?? width.half;
       const painted = (l) => (!l.dashed || dashed) && !(line(l.o >= 0 ? 1 : -1) != null && Math.abs(l.o) > line(l.o >= 0 ? 1 : -1) - 0.3);
+      // (a sidewalk over another deck's carriageway, the same way at its level, where a ramp joins the avenue on the
+      // bridge: carriageway, no kerb; the cars on the ramp had driven along the avenue's sidewalk)
+      const merging = (s) => {
+        if (!decks || side !== 'sidewalk') return false;
+        const o = s * (c + outer(s)) / 2, p = at(a, o, 0), q = at(b, o, 0), L = Math.hypot(q[0] - p[0], q[2] - p[2]) || 1;
+        return decks.paved((p[0] + q[0]) / 2, (p[2] + q[2]) / 2, (p[1] + q[1]) / 2, e, (q[0] - p[0]) / L, (q[2] - p[2]) / L);
+      };
+      const walk = [-1, 1].map((s) => side === 'sidewalk' && line(s) == null && !merging(s)), walks = (s) => walk[s > 0 ? 1 : 0];
       if (paving) {
         // the carriageway and (a street's) sidewalks, as the tiles pave them either side, in their materials
         pave(a, b, -cut(-1), cut(1), 'asphalt');
-        for (const s of [-1, 1]) if (outer(s) > c) pave(a, b, s * c, s * outer(s), line(s) != null ? 'asphalt' : side);
-        if (side === 'sidewalk') for (const s of [-1, 1]) if (line(s) == null) sweep(a, b, [[s * c, 0.06], [s * c, 0.2]], sidewalk); // (the kerb)
+        for (const s of [-1, 1]) if (outer(s) > c) pave(a, b, s * c, s * outer(s), walks(s) ? 'sidewalk' : 'asphalt');
+        for (const s of [-1, 1]) if (walks(s)) sweep(a, b, [[s * c, 0.06], [s * c, 0.2]], sidewalk); // (the kerb)
         for (const l of lines) if (painted(l)) pave(a, b, l.o - 0.075, l.o + 0.075, l.yellow ? 'yellow' : 'paint');
       } else {
         sweep(a, b, [[-cut(-1), 0], [cut(1), 0]], asphalt);
-        for (const s of [-1, 1]) if (outer(s) > c) sweep(a, b, [[s * c, 0], [s * outer(s), 0]], side === 'sidewalk' && line(s) == null ? sidewalk : asphalt);
+        for (const s of [-1, 1]) if (outer(s) > c) sweep(a, b, [[s * c, 0], [s * outer(s), 0]], walks(s) ? sidewalk : asphalt);
         for (const l of lines) if (painted(l)) sweep(a, b, [[l.o - 0.075, 0.015], [l.o + 0.075, 0.015]], l.yellow ? [0.88, 0.66, 0.12] : paint);
       }
       // parapets, with a taller noise barrier on the expressway's flyovers; none on a side that lies on the paving

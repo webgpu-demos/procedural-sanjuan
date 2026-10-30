@@ -1,7 +1,8 @@
 // On foot and in the air: the other ways round the city besides the car (drive.js), with the same face to the
 // rest of the page: start(x, z, heading, y), stop(), update(dt, keys), view { x, y, z, heading, speed, kmh }.
-//   walking    W / S walk on and back, A / D turn, Shift run, Space jump; stopped by the buildings' walls, on the
-//              ground or the deck walked onto (a person on a flyover stays on it)
+//   walking    W / S walk on and back, A / D turn, Shift run, Space jump, F sit on the seat beside him (and get up);
+//              he sets off, stops from the foot he is on and turns on the spot as the crowd does (MotionBricks: MOVES);
+//              stopped by the buildings' walls and the water's edge, on the ground or the deck walked onto
 //   cycling    a bicycle: W pedal, S brake (and back a little), A / D steer, Shift a sprint, Space the brakes; it
 //              leans into its turns; stopped by the walls like the walker
 //   flying     a helicopter: W / S pitch forward and back, A / D yaw, Space / E climb, C / Q come down, Shift a
@@ -52,6 +53,62 @@ function strideSpeed(g, name) {
   for (let k = 0; k < n; k++) { const f = (track.times[k] - t0) / span; for (let c = 0; c < 3; c++) v[k * 3 + c] -= d[c] * f; }
   return speed;
 }
+// His moves, made by NVIDIA's MotionBricks (tools/motion: transitions.py the crowd's, walker.py his own) on the rig of
+// the crowd's man, whose bones rest as his do: setting off (start), stopping from either foot (stopL, stopR),
+// standing up from a seat (standup), sitting down on one behind him (sitdown), turning where he stands (turnL,
+// turnR, turnB). Each carries him as it goes: the pelvis's travel and turn, key by key, taken out of its track and
+// kept (travel: metres forward of where it began; yaw: radians turned, about the vertical as the walker's heading
+// counts), for the walker to be carried along and round by.
+let MOVES = null;
+function loadMoves() {
+  const loader = new GLTFLoader();
+  return (MOVES ??= Promise.all(['models/people/crowd/m-moves.glb', 'models/people/crowd/m-turns.glb'].map((u) => loader.loadAsync(u)))
+    .then((gs) => Object.assign({}, ...gs.map(prepareMoves)))
+    .catch((e) => { console.warn('the walker keeps to his blends:', e); return null; }));
+}
+function prepareMoves(g) {
+  const Q = () => new THREE.Quaternion(), out = {};
+  g.scene.updateMatrixWorld(true);
+  const pelvis = g.scene.getObjectByName('Bip01_Pelvis'), ahead = V();
+  for (const s of ['L', 'R']) {
+    const f = g.scene.getObjectByName(`Bip01_${s}_Foot`), t = g.scene.getObjectByName(`Bip01_${s}_Toe0`);
+    if (f && t) ahead.add(t.getWorldPosition(V()).sub(f.getWorldPosition(V())));
+  }
+  ahead.y = 0; ahead.normalize();
+  const parentQ = pelvis.parent.getWorldQuaternion(Q()), toParent = parentQ.clone().invert(), m3 = new THREE.Matrix3().setFromMatrix4(pelvis.parent.matrixWorld).invert();
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(toParent); // (the vertical, in the pelvis's parent's frame)
+  const mixer = new THREE.AnimationMixer(g.scene);
+  for (const clip of g.animations) {
+    clip.tracks = clip.tracks.filter((t) => t.name.endsWith('.quaternion') || t.name === 'Bip01_Pelvis.position');
+    const pos = clip.tracks.find((t) => t.name === 'Bip01_Pelvis.position'), rot = clip.tracks.find((t) => t.name === 'Bip01_Pelvis.quaternion');
+    if (!pos || !rot || pos.times.length !== rot.times.length) continue;
+    const a = mixer.clipAction(clip); a.play();
+    const end = clip.duration - 1e-4, at = (t) => { mixer.setTime(Math.min(t, end)); g.scene.updateMatrixWorld(true); return [pelvis.getWorldPosition(V()), pelvis.getWorldQuaternion(Q())]; };
+    const n = pos.times.length, [p0, q0] = at(pos.times[0]), q0i = q0.clone().invert(), travel = new Float32Array(n), yaw = new Float32Array(n), shifts = [];
+    for (let i = 0; i < n; i++) {
+      const [p, q] = at(pos.times[i]), d = p.sub(p0); d.y = 0;
+      travel[i] = d.dot(ahead); shifts.push(d.applyMatrix3(m3));
+      const f = ahead.clone().applyQuaternion(q.multiply(q0i)); yaw[i] = Math.atan2(f.x * ahead.z - f.z * ahead.x, f.x * ahead.x + f.z * ahead.z);
+    }
+    a.stop(); mixer.uncacheClip(clip);
+    // (out of the tracks: the travel, and the turn, about the vertical in the pelvis's parent's frame)
+    const v = pos.values, r = rot.values, k = Q(), yq = Q();
+    for (let i = 0; i < n; i++) {
+      v[i * 3] -= shifts[i].x; v[i * 3 + 1] -= shifts[i].y; v[i * 3 + 2] -= shifts[i].z;
+      yq.setFromAxisAngle(up, -yaw[i]); k.fromArray(r, i * 4).premultiply(yq).toArray(r, i * 4);
+    }
+    out[clip.name] = { clip, times: Float32Array.from(pos.times), travel, yaw, duration: clip.duration, reach: travel[n - 1], turn: yaw[n - 1] };
+  }
+  return out;
+}
+// (a move's travel and turn at time t)
+const moveAt = (c, t) => {
+  const T = c.times, n = T.length;
+  let i = 0; while (i < n - 2 && T[i + 1] < t) i++;
+  const w = Math.max(0, Math.min(1, (t - T[i]) / ((T[i + 1] - T[i]) || 1)));
+  return [c.travel[i] + (c.travel[i + 1] - c.travel[i]) * w, c.yaw[i] + (c.yaw[i + 1] - c.yaw[i]) * w];
+};
+
 // A copy of him: his skeleton, his clips; turned to face +z (the way the walker goes)
 class Rig {
   constructor(g) {
@@ -127,20 +184,89 @@ function person() {
 const water = (p, x, z) => p.wet(x, z) && !p.wet(p.x, p.z) && p.decks?.at(x, z, p.y + 0.3, 2.4) == null;
 
 export class Walker {
-  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null, wet = () => false }) {
+  // seats(x, z): the seat nearest (x, z) within reach, { x, z, heading } (facing out), or null (main.js: the crowd's)
+  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null, wet = () => false, seats = () => null }) {
     this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
     this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
     this.wet = wet; // (water no road crosses, and beyond the city: streamer.wet)
+    this.seats = seats;
     this.on = false; this.label = 'A pie'; this.unit = 'km/h';
     this.model = new THREE.Group(); this.figure = person(); this.model.add(this.figure); this.model.visible = false; scene.add(this.model);
-    loadPerson().then((g) => { if (!g) return; this.rig = new Rig(g); this.model.remove(this.figure); this.model.add(this.rig.turn); });
+    loadPerson().then((g) => {
+      if (!g) return;
+      this.rig = new Rig(g); this.model.remove(this.figure); this.model.add(this.rig.turn);
+      loadMoves().then((m) => { if (!m || !this.rig) return; this.moves = m; for (const [n, c] of Object.entries(m)) this.rig.clip[n] = this.rig.mixer.clipAction(c.clip); });
+    });
     this.view = null;
   }
   start(x, z, heading, y = null) {
-    Object.assign(this, { x, z, heading, speed: 0, vy: 0, phase: 0, y: y ?? streetAt(this.surface, x, z, this.surface(x, z, -2)) + this.lift(x, z), on: true });
+    Object.assign(this, { x, z, heading, speed: 0, vy: 0, phase: 0, y: y ?? streetAt(this.surface, x, z, this.surface(x, z, -2)) + this.lift(x, z), on: true, move: null, seated: false, fWas: false, base: { idle: 1 } });
     this.model.visible = true;
   }
-  stop() { this.on = false; this.model.visible = false; this.view = null; }
+  // A move begun (MOVES): from where he stands, the way he faces; `then`: what he is doing at its end (idle, walk,
+  // sit), blended out of the move into it
+  begin(name, then, k = 1) {
+    const c = this.moves?.[name];
+    if (!c) return false;
+    this.move = { name, c, t: 0, x0: this.x, z0: this.z, h0: this.heading, then, k };
+    const a = this.rig.clip[name]; a.reset(); a.timeScale = 0; a.play();
+    return true;
+  }
+  // a turn on the spot the way asked (+1: the heading growing, A), whichever of the clips turns that way
+  turnClip(sign) { for (const n of ['turnL', 'turnR']) if (this.moves?.[n] && Math.sign(this.moves[n].turn) === sign) return n; return null; }
+  // the stop that starts nearest the walk's step (its clips begin at 30% and 78% of the walk's cycle)
+  stopClip() {
+    const w = this.rig.clip.walk, f = w.isRunning() ? (w.time / w.getClip().duration) % 1 : 0, d = (x) => Math.min(Math.abs(f - x), 1 - Math.abs(f - x));
+    return d(0.3) <= d(0.78) ? 'stopL' : 'stopR';
+  }
+  stop() { this.on = false; this.model.visible = false; this.view = null; this.move = null; this.seated = false; }
+  // The rig's weights: the base blend (this.base: idle, walk, run, sit) under a move weighing m (0 to 1), any other clip
+  // let go
+  pose(dt, m, move = null) {
+    const r = this.rig, w = {};
+    for (const n of Object.keys(r.clip)) w[n] = 0;
+    for (const [n, b] of Object.entries(this.base)) w[n] = b * (1 - m);
+    if (move) w[move] = m;
+    r.play(w);
+  }
+  // A move's frame: carried along and round by its travel and turn (stopped short by a wall or the water's edge),
+  // blended in over its first fifth of a second and out into what comes after over its last; at its end, that.
+  // seated: held in the seat, nothing moving
+  moving(dt, k, seated = false) {
+    const r = this.rig, mv = this.move;
+    // (a stop or a turn let go of, W pressed again: walking on, or setting off, from where he is)
+    if (mv && k('KeyW', 'ArrowUp') && (mv.name.startsWith('stop') || mv.name.startsWith('turn'))) {
+      this.move = null; r.clip[mv.name].stop();
+      if (mv.name.startsWith('stop')) { this.speed = r.speeds.walk; this.base = { walk: 1 }; } else this.base = { idle: 1 };
+      return this.moving(dt, k);
+    }
+    if (mv) {
+      const c = mv.c, B = 0.18;
+      mv.t = Math.min(c.duration, mv.t + dt);
+      const [d, yaw] = moveAt(c, mv.t), x = mv.x0 + Math.sin(mv.h0) * d * mv.k, z = mv.z0 + Math.cos(mv.h0) * d * mv.k;
+      const free = (x, z) => !this.walls.blocked(x, z) && !water(this, x, z) && !this.collider?.blocked([this.x, this.z, this.x, this.z], [x, z, x, z], 0.28, this.y);
+      if (mv.then === 'sit' || free(x, z)) { this.x = x; this.z = z; } else mv.t = c.duration; // (into a wall: done)
+      this.heading = mv.h0 + yaw;
+      const W = r.speeds.walk;
+      // (blending out into what comes after: walking on at the walk's pace, standing, seated)
+      if (mv.then === 'walk') { this.base = { walk: 1 }; r.clip.walk.timeScale = 1; } else if (mv.then === 'sit') this.base = { sit: 1 }; else this.base = { idle: 1 };
+      const m = Math.min(1, mv.t / B, (c.duration - mv.t) / B + (mv.t >= c.duration ? 0 : 0.0001));
+      r.clip[mv.name].time = mv.t;
+      this.pose(dt, Math.max(0, m), mv.name);
+      if (mv.t >= c.duration) {
+        this.move = null;
+        this.speed = mv.then === 'walk' ? W : 0; this.seated = mv.then === 'sit';
+        if (mv.then === 'walk') r.clip.walk.time = 0;
+      } else this.speed = 0;
+    }
+    const floor = this.floor(this.x, this.z);
+    this.y += (floor - this.y) * Math.min(1, dt * 12); this.vy = 0;
+    this.model.rotation.y = this.heading;
+    r.mixer.update(dt);
+    this.model.position.set(this.x, this.y, this.z);
+    const v = mv && !seated ? Math.abs(moveAt(mv.c, Math.min(mv.c.duration, mv.t + 0.05))[0] - moveAt(mv.c, mv.t)[0]) / 0.05 : 0;
+    this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: v, kmh: v * 3.6, bump: 0, reversing: false, height: this.seated ? 1.25 : 1.7 };
+  }
   // the ground under (x, z), or the deck at about this height (a walkway, a flyover)
   floor(x, z) {
     // (the street as drawn, a bridge's deck at street level included; on the sidewalk, not in it)
@@ -152,6 +278,29 @@ export class Walker {
     dt = Math.min(dt, 0.05);
     const k = keyOf(keys), run = k('ShiftLeft', 'ShiftRight'), top = run ? 4.2 : 1.4;
     const fwd = (k('KeyW', 'ArrowUp') ? 1 : 0) - (k('KeyS', 'ArrowDown') ? 0.65 : 0), turn = (k('KeyA', 'ArrowLeft') ? 1 : 0) - (k('KeyD', 'ArrowRight') ? 1 : 0);
+    const sit = k('KeyF') && !this.fWas; this.fWas = k('KeyF');
+    // his moves (MOVES), where he has them: setting off and stopping at a walk, turning where he stands, sitting on a
+    // seat (F, beside one) and getting up (F or W); running, backing up and jumping as before
+    if (this.moves && this.rig && this.y <= this.floor(this.x, this.z) + 0.03) {
+      const W = this.rig.speeds.walk, still = Math.abs(this.speed) < 0.15;
+      if (this.move) return this.moving(dt, k);
+      if (this.seated) {
+        if (sit || fwd > 0) this.begin('standup', 'idle');
+        else { this.base = { sit: 1 }; this.pose(dt, 0); }
+        return this.moving(dt, k, true);
+      }
+      if (sit && still) {
+        const s = this.seats(this.x, this.z), c = this.moves.sitdown;
+        if (s && c) {
+          // stood where the sitting down ends on the seat, facing out, then down
+          this.x = s.x - Math.sin(s.heading) * c.reach; this.z = s.z - Math.cos(s.heading) * c.reach; this.heading = s.heading;
+          if (this.begin('sitdown', 'sit')) return this.moving(dt, k);
+        }
+      }
+      if (still && fwd > 0 && !run && this.begin('start', 'walk')) return this.moving(dt, k);
+      if (still && !fwd && turn) { const n = this.turnClip(turn); if (n && this.begin(n, 'idle')) return this.moving(dt, k); }
+      if (fwd === 0 && !run && this.speed > W * 0.6 && this.speed < W * 1.3 && this.begin(this.stopClip(), 'idle')) return this.moving(dt, k);
+    }
     this.heading += turn * 2.6 * dt;
     this.speed += (fwd * top - this.speed) * Math.min(1, dt * 10);
     const nx = this.x + Math.sin(this.heading) * this.speed * dt, nz = this.z + Math.cos(this.heading) * this.speed * dt;
@@ -175,7 +324,8 @@ export class Walker {
       // his own steps: standing, walking, running by the speed, each clip played at the pace that keeps the
       // planted foot where it is (backing up, the walk played backwards)
       const r = this.rig, W = r.speeds.walk, R = r.speeds.run, still = 1 - THREE.MathUtils.smoothstep(v, 0.05, 0.45), ran = THREE.MathUtils.smoothstep(v, W * 1.3, R * 0.85);
-      r.play({ idle: still, walk: (1 - still) * (1 - ran), run: (1 - still) * ran });
+      this.base = { idle: still, walk: (1 - still) * (1 - ran), run: (1 - still) * ran };
+      this.pose(dt, 0);
       r.clip.walk.timeScale = (this.speed < -0.05 ? -1 : 1) * Math.max(0.5, v / W); r.clip.run.timeScale = Math.max(0.7, v / R);
       r.mixer.update(dt);
       this.model.position.set(this.x, this.y, this.z);

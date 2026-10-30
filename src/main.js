@@ -601,7 +601,7 @@ function loadPeople() {
 }
 const wet = (x, z) => streamer.wet(x, z); // (the water's edge, and the city's: no driving out to sea)
 const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet });
-const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
+const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet, seats: (x, z) => people?.seatNear(x, z) ?? null }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
 // What you run into (collide.js): the street's things come with the tiles; the vehicles round you are gathered
 // each frame (the simulated cars near you, the traffic, the car you left). And what you are, to them: the
