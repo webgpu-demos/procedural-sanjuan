@@ -1,0 +1,99 @@
+++ set -e
+++ node tools/sim/network.mjs --area=sanjuan --zip-ramps
+   0.1s 16 expressway stretches narrowed to the lanes beyond them
+   0.2s 7072 joins: 42907 edges
+   0.3s 1030 junctions joined from 2382 nodes
+   0.5s plain network: 17442 nodes (427 with lights, 196 zippers), 40491 directed edges from 36830 roads
+Success.
+   8.7s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.0 MB)
+++ .venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=0.7 --spread=15
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39024 of 39685 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+233988 trips: {'work': 151939, 'through': 9756, 'school': 29334, 'errand': 27911, 'airport': 7023, 'delivery': 10146} (scale 0.7)
+departures by half hour: 4.5h 2937 5.0h 8132 5.5h 10467 6.0h 20357 6.5h 26220 7.0h 51604 7.5h 36060 8.0h 25979 8.5h 18635 9.0h 16084 9.5h 17513
+-> data/sim/sanjuan/morning
+++ .venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+++ rm -f /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz
+++ .venv-sim/bin/python tools/sim/route.py --area=sanjuan
+Success.
+routes in 43s -> data/sim/sanjuan/morning/routes.rou.xml
+++ timeout 320m .venv-sim/bin/python tools/sim/run.py --area=sanjuan --scenario=morning --demand=morning --end=10.25 --share=0.7 --reroute=1 --reroute-period=300
+    2.3s sumo morning: 4.50 h to 10.25 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (3786ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml' ... done (49ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (8ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (4ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+
+Simulation ended at time: 36900.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 12131.19s
+ Real time factor: 1.70635
+ UPS: 23771.267617
+Vehicles:
+ Inserted: 226547 (Loaded: 234448)
+ Running: 1683
+ Waiting: 0
+ Teleports: 1338 (Collisions: 105, Jam: 183, Yield: 907, Wrong Lane: 143)
+ Emergency Stops: 4
+ Emergency Braking: 1258
+Statistics (avg of 226547):
+ RouteLength: 9538.89
+ Speed: 9.54
+ Duration: 1272.91
+ WaitingTime: 384.04
+ TimeLoss: 679.81
+ DepartDelay: 68.45
+ DepartDelayWaiting: 0.00
+AStarRouter answered 389086 queries and explored 9710.47 edges on average.
+AStarRouter spent 5861.72s answering queries (15.07ms on average).
+AStarRouter answered 375912 queries and explored 9763.93 edges on average.
+AStarRouter spent 5718.87s answering queries (15.21ms on average).
+AStarRouter answered 365271 queries and explored 9797.24 edges on average.
+AStarRouter spent 5601.68s answering queries (15.34ms on average).
+AStarRouter answered 356158 queries and explored 9778.88 edges on average.
+AStarRouter spent 5459.61s answering queries (15.33ms on average).
+12139.9s sumo done
+12173.6s tracks: 21 M samples read, up to 6.31 h, 24836 tracks, 8461 on the road
+12197.8s tracks: 41 M samples read, up to 6.84 h, 44686 tracks, 11811 on the road
+12219.8s tracks: 60 M samples read, up to 7.19 h, 62803 tracks, 20327 on the road
+12241.4s tracks: 81 M samples read, up to 7.43 h, 79179 tracks, 28499 on the road
+12260.0s tracks: 100 M samples read, up to 7.61 h, 91637 tracks, 32060 on the road
+12279.0s tracks: 121 M samples read, up to 7.78 h, 104025 tracks, 32100 on the road
+12296.3s tracks: 140 M samples read, up to 7.95 h, 114841 tracks, 30778 on the road
+12315.8s tracks: 161 M samples read, up to 8.15 h, 126707 tracks, 28797 on the road
+12335.3s tracks: 181 M samples read, up to 8.35 h, 138862 tracks, 27055 on the road
+12353.2s tracks: 200 M samples read, up to 8.55 h, 149763 tracks, 25477 on the road
+12373.0s tracks: 221 M samples read, up to 8.79 h, 163064 tracks, 21903 on the road
+12391.6s tracks: 240 M samples read, up to 9.05 h, 175738 tracks, 18905 on the road
+12413.7s tracks: 261 M samples read, up to 9.39 h, 192102 tracks, 14197 on the road
+12436.8s tracks: 281 M samples read, up to 9.89 h, 214691 tracks, 9029 on the road
+12444.7s 227583 tracks from 288 M samples; peak 32456 cars on the road at once
+12704.5s 138 windows, 323.1 MB (gzipped)
+12711.1s speeds: 69 intervals x 46546 edges
+12715.6s done: {"total": "1338", "jam": "183", "yield": "907", "wrongLane": "143"}
+++ .venv-sim/bin/python tools/sim/validate.py --area=sanjuan --scenario=morning
+1194 counted roads matched; simulated/counted 0.45; GEH<5 12%, GEH<10 24%, r² 0.30
+  other                  n    4  ratio 3.37  GEH<5    0%  GEH<10    0%
+  interstate / freeway   n  301  ratio 0.35  GEH<5    6%  GEH<10   15%
+  arterials              n  786  ratio 0.56  GEH<5   13%  GEH<10   27%
+  collectors             n   81  ratio 0.67  GEH<5   28%  GEH<10   38%
+  local                  n   22  ratio 0.36  GEH<5    5%  GEH<10   18%
+worst: [('PR-18', 19472, 1260), ('PR-22', 15976, 282), ('PR-22', 19072, 2105), ('PR-22', 19072, 2252), ('PR-22', 15728, 1079), ('PR-22', 15976, 1216)]
