@@ -12,15 +12,15 @@
 // junctions' shapes, and a piece between two close ones was left a metre or none long: a car could not stop on it,
 // so it waited across the junction behind, and the streets locked one another.)
 //
-// Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, merged.json, lanes.json, inside.json} and runs netconvert to
+// Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, plain.con.xml, merged.json, lanes.json, inside.json} and runs netconvert to
 // data/sim/<area>/<area>.net.xml.gz.
-// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--ramps] [--no-zip-ramps] [--join=18]
+// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--ramps] [--no-zip-ramps] [--no-accel] [--join=18]
 //        [--cluster=20] [--reach=45] [--netconvert=--opt,value,...]
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { resolveArea, ROOT } from '../pipeline/config.mjs';
-import { roadLanes, paintOf } from '../../src/shared/roadway.js';
+import { roadLanes, paintOf, accelLanes } from '../../src/shared/roadway.js';
 
 const area = resolveArea();
 const flag = (k) => !process.argv.includes(`--no-${k}`);
@@ -160,6 +160,51 @@ if (flag('merge')) {
   log(`${edges.length - mergedEdges.length} joins: ${mergedEdges.length} edges`);
 }
 
+// Acceleration lanes (src/shared/roadway.js accelLanes, which the client paves): where a ramp of one lane joins the
+// expressway, its first ACCEL metres a lane wider, that lane to the outside of the main lanes (which stay where they
+// are painted: the edge's line moved over by half a lane), the ramp into it and the main lanes on into theirs; at
+// its end the lane stops, and its cars change lanes before (as netconvert's own guessed ones do, --ramps).
+const extraNodes = new Map(), connections = [];
+let accels = 0;
+if (flag('accel')) {
+  const byStart = new Map();
+  for (const e of mergedEdges) if (e.fast && e.spread === 'center' && !e.link) byStart.set(`${e.from}|${e.src}`, e);
+  const byId = new Map(mergedEdges.map((e) => [e.id, e]));
+  const len2 = (p, q) => Math.hypot(q[0] - p[0], q[1] - p[1]);
+  for (const a of accelLanes(roads, painted)) {
+    const me = byStart.get(`${a.node}|${a.edge}`);
+    const main = mergedEdges.find((e) => e.to === a.node && e.fast && !e.link && e.spread === 'center'), ramp = mergedEdges.find((e) => e.to === a.node && e.link);
+    if (!me || !main || !ramp) continue;
+    // where the lane ends, along the edge's line (SUMO's frame: x, -z, y)
+    const P = me.pts; let s = 0, k = 1;
+    for (; k < P.length; k++) { const d = len2(P[k - 1], P[k]); if (s + d >= a.len) break; s += d; }
+    if (k >= P.length - 0) { if (s < 60) continue; k = P.length - 1; }
+    const f = Math.min(1, (a.len - s) / (len2(P[k - 1], P[k]) || 1));
+    const X = P[k - 1].map((v, c) => v + (P[k][c] - v) * f);
+    if (len2(X, P.at(-1)) < 5) continue; // (nothing of the road left after it)
+    const head = [...P.slice(0, k), X], tail = [X, ...P.slice(k)];
+    // (the wider stretch's line, moved to the right of the way so that its main lanes stay where they were: the new
+    // lane centred a lane past the painted ones, a.n of them a.sw wide)
+    const lanes = me.lanes + 1, shift = (a.n / 2 + 0.5) * a.sw - ((lanes - 1) / 2) * me.width;
+    const off = head.map((p, i) => {
+      const q0 = head[Math.max(0, i - 1)], q1 = head[Math.min(head.length - 1, i + 1)], dx = q1[0] - q0[0], dy = q1[1] - q0[1], l = Math.hypot(dx, dy) || 1;
+      return [p[0] + (dy / l) * shift, p[1] - (dx / l) * shift, p[2]];
+    });
+    const node = `x${a.node}`;
+    extraNodes.set(node, X);
+    const piece = { ...me, id: `${me.id}-acc`, to: node, lanes, pts: off };
+    Object.assign(me, { from: node, pts: tail });
+    mergedEdges.push(piece);
+    if (merged[me.id]) merged[piece.id] = merged[me.id]; else merged[piece.id] = [me.id];
+    // the ramp into the new lane, the main lanes on into theirs; at the end, the main lanes on, the new one stopping
+    connections.push([ramp.id, piece.id, 0, 0]);
+    for (let j = 0; j < Math.min(main.lanes, lanes - 1); j++) connections.push([main.id, piece.id, j, j + 1]);
+    for (let j = 0; j < me.lanes; j++) connections.push([piece.id, me.id, j + 1, j]);
+    accels++;
+  }
+  log(`${accels} acceleration lanes (of ${accelLanes(roads, painted).length} the client paves)`);
+}
+
 // Nodes: lights (right on red, as Puerto Rico drives: after a stop, unless a sign says otherwise), and where two
 // expressway carriageways join into fewer lanes than they bring, a zipper (each lane's drivers in turn: a priority
 // junction made one of them wait for a gap that, at the rush hour, never came). (A ramp is not a zipper: the
@@ -237,7 +282,7 @@ const zipRamps = flag('zip-ramps');
 const nodeXml = ['<nodes>'];
 for (const [k, [ins, outs]] of used) {
   if (nodeId.has(k)) continue;
-  const [x, y, z] = roads.nodes[k];
+  const [x, y, z] = roads.nodes[k] ?? (() => { const [sx, sy, sz] = extraNodes.get(k); return [sx, sz, -sy]; })();
   let type = '';
   if (signals.has(k)) { type = lightType; lights++; }
   else if (flag('zipper') && ins.length >= 2 && outs.length === 1 && [...ins, ...outs].every((e) => e.fast && e.spread === 'center') &&
@@ -263,6 +308,7 @@ for (const e of mergedEdges) {
 edgeXml.push('</edges>');
 fs.writeFileSync(path.join(out, 'net/plain.nod.xml'), nodeXml.join('\n'));
 fs.writeFileSync(path.join(out, 'net/plain.edg.xml'), edgeXml.join('\n'));
+fs.writeFileSync(path.join(out, 'net/plain.con.xml'), ['<connections>', ...connections.map(([a, b, i, j]) => `  <connection from="${a}" to="${b}" fromLane="${i}" toLane="${j}"/>`), '</connections>'].join('\n'));
 fs.writeFileSync(path.join(out, 'net/merged.json'), JSON.stringify(merged));
 fs.writeFileSync(path.join(out, 'net/lanes.json'), JSON.stringify(laneTable));
 fs.writeFileSync(path.join(out, 'net/inside.json'), JSON.stringify(inside));
@@ -273,6 +319,7 @@ const bin = path.join(ROOT, '.venv-sim/bin/netconvert');
 const netFile = path.join(out, `${area.id}.net.xml.gz`);
 execFileSync(bin, [
   '--node-files', path.join(out, 'net/plain.nod.xml'), '--edge-files', path.join(out, 'net/plain.edg.xml'),
+  '--connection-files', path.join(out, 'net/plain.con.xml'),
   '--output-file', netFile,
   '--offset.disable-normalization',                 // SUMO's frame is the world's
   '--junctions.join', '--junctions.join-dist', opt('join', '18'), // a crossing OSM draws as several nodes is one junction
