@@ -170,9 +170,11 @@ levels lagoons and ponds at their lowest shore, and keeps dry land above the sea
 "Explorar libremente", or the end of the opening, leaves you in the city with a game's heads-up display, after
 mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
 
-- **Ways round** (`1`–`5`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump: the
-  walker is a man of Microsoft's [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) avatars, MIT, with
-  his own idle, walk and run, each played at the pace that keeps his planted foot still; see
+- **Ways round** (`1`–`5`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump, F sit
+  on the bench beside you and get up: the walker is a man of Microsoft's
+  [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) avatars, MIT, with his own idle, walk and run, each
+  played at the pace that keeps his planted foot still, and NVIDIA's MotionBricks between them: he sets off, stops
+  from the foot he is on and turns on the spot as the crowd does, sits down and gets up; see
   `public/models/people/README.md`);
   Bici (W pedal, S brake, A D steer, Shift sprint: it leans into the turns; the same man rides it, seated, his
   feet and hands put on the pedals and the bars by inverse kinematics);
@@ -244,9 +246,10 @@ npm run sim:all                      # demand, buses, routes, the morning and th
   as several nodes within 20 m are one node (netconvert cut the pieces between them to nothing: 2,907 edges under
   a metre, and a car that could not stop on one waited across the junction behind it); driveways and car parks
   (OSM's unnamed service ways) are left out, where a signal had given a car park a phase of its own. Signals
-  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper, and where a ramp joins it in
-  fewer, a zipper too, in the lanes OSM gives the road (netconvert's guessed acceleration lanes, `--ramps`, widened
-  roads past what the tiles pave);
+  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper; where a ramp of one lane
+  joins it at grade, an acceleration lane, 140 m alongside and a taper (`src/shared/roadway.js` accelLanes: 82 in San
+  Juan, the client paves them where the simulation drives them), and where any other ramp joins it in fewer lanes,
+  a zipper (netconvert's own guessed acceleration lanes, `--ramps`, widened roads past what the tiles pave);
   an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
 - **Demand** (`demand.py`): a cordon model. Homes, jobs, schools and shops are the floor area of the city's
   buildings, by use and municipio; the ACS municipio-to-municipio commuting flows say who drives where; a
@@ -271,12 +274,13 @@ npm run sim:all                      # demand, buses, routes, the morning and th
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
   direction is matched to the counted line (which runs down the median of a divided road). The published run, at
-  seven tenths of the demand, on the network without guessed ramp lanes (the ramps zipped in),
-  carried 0.45 of the counted traffic (freeways 0.35, arterials 0.56; r² 0.30) and teleported 1,338 of its
-  227,000 cars; with netconvert's guessed acceleration lanes it had carried 0.48 (freeways 0.40; r² 0.40, 1,286
+  seven tenths of the demand, on the network with the acceleration lanes the client paves (and other ramps zipped
+  in), carried 0.45 of the counted traffic (freeways 0.35, arterials 0.57; r² 0.30) and teleported 1,570 of its
+  227,000 cars (1,388 still on the road at 10:15); with the ramps zipped and no acceleration lanes, 0.45 and 1,338
+  (1,683); with netconvert's guessed acceleration lanes it had carried 0.48 (freeways 0.40; r² 0.40, 1,286
   teleported), its trips an eighth shorter, but those lanes lay past the paving the tiles draw (73 km of lanes in
-  San Juan where a car stood off the road, 25 km without), and with the ramps giving way instead of zipped, 0.45
-  and 2,280 teleported. Earlier, with the guessed lanes: at half the demand 0.42 (328 teleported), at six tenths
+  San Juan where a car stood off the road, 25 km without), and with the ramps giving way, 0.45 and 2,280
+  teleported. Earlier, with the guessed lanes: at half the demand 0.42 (328 teleported), at six tenths
   0.45 (676), at 0.85 0.49 (3,119, and trips half as long again): past seven tenths the rush hour mostly queues
   longer.
   The figures for the published run are in the experience (¿Qué tan real?).

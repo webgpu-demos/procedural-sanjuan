@@ -17,7 +17,7 @@ import { DrawnDecks, mergeDecks } from './world/roadlevel.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
-import { laneDepth, mergeApproaches } from './shared/roadway.js';
+import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad } from './world/drive.js';
@@ -176,6 +176,9 @@ const [roads, rails, lanes] = await Promise.all([
   fetch(`tiles/${AREA}/lanes.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
 ]);
 roads.lanes = lanes;
+// the acceleration lanes where ramps join the expressway (src/shared/roadway.js, on the roads as compiled: the
+// simulation's network has them in the same places, tools/sim/network.mjs): paved in the tiles, driven by the cars
+const accel = accelQuads(accelLanes(roads, lanes?.edges ?? null));
 // (the expressway's height without the humps the elevation model's overpass ridges put in it, and the bridges that
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
@@ -184,6 +187,7 @@ mergeDecks(roads, (x, z) => streamer.ground(x, z)); // (a ramp at the expressway
 // the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
 const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
+streamer.accel(accel); drawnDecks.ground.accel = accelLookup(accel.pave); // (and the acceleration lanes paved, and stood on)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
 scene.add(railways);
@@ -597,7 +601,7 @@ function loadPeople() {
 }
 const wet = (x, z) => streamer.wet(x, z); // (the water's edge, and the city's: no driving out to sea)
 const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet });
-const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
+const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet, seats: (x, z) => people?.seatNear(x, z) ?? null }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
 // What you run into (collide.js): the street's things come with the tiles; the vehicles round you are gathered
 // each frame (the simulated cars near you, the traffic, the car you left). And what you are, to them: the
@@ -984,7 +988,7 @@ function frame(_, manual) {
 }
 requestAnimationFrame(frame);
 
-window.__app = { THREE, scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, get people() { return people; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
+window.__app = { THREE, scene, camera, controls, streamer, accel, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, get people() { return people; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
   proj, manifest,
   // synthetic drone images with labels (src/synth/synth.js; tools/synth/export.mjs), made on first use
   get synth() { return (synthApi ??= import('./synth/synth.js').then(({ Synth }) => new Synth(window.__app))); } };

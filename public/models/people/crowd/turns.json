@@ -1,0 +1,46 @@
+{
+ "turnL": {
+  "frames": 50,
+  "seconds": 1.67,
+  "travel_m": 0.0,
+  "slide": [
+   0.11,
+   0.17,
+   0.14,
+   0.22
+  ]
+ },
+ "turnR": {
+  "frames": 50,
+  "seconds": 1.67,
+  "travel_m": 0.0,
+  "slide": [
+   0.1,
+   0.16,
+   0.14,
+   0.23
+  ]
+ },
+ "turnB": {
+  "frames": 50,
+  "seconds": 1.67,
+  "travel_m": 0.0,
+  "slide": [
+   0.13,
+   0.23,
+   0.23,
+   0.42
+  ]
+ },
+ "sitdown": {
+  "frames": 50,
+  "seconds": 1.67,
+  "travel_m": 0.31,
+  "slide": [
+   0.16,
+   0.18,
+   0.18,
+   0.19
+  ]
+ }
+}

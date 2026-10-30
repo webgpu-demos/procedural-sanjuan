@@ -2,10 +2,11 @@
 import { decodeTile } from '../shared/tileformat.js';
 import { buildTile, blockMesh } from './meshing.js';
 import { makeSurface } from '../shared/decks.js';
-import { mergeArrows } from '../shared/roadway.js';
+import { mergeArrows, accelTile, accelLookup } from '../shared/roadway.js';
 import { prepareChannels } from './channels.js';
 
 let grid = null, surface = null, merging = null, channels = null; // merging: the turn arrows painted where nothing turns (roadway.js)
+let accel = null; // the acceleration lanes' quads (roadway.js accelLanes): paved in the tiles they cross
 
 // All typed arrays in a result, so they are transferred rather than copied.
 function buffers(o, out = []) {
@@ -69,6 +70,7 @@ self.onmessage = async ({ data: m }) => {
     return;
   }
   if (m.type === 'merges') { merging = mergeArrows(new Float32Array(m.segs)); return; }
+  if (m.type === 'accel') { const pave = new Float32Array(m.pave); accel = { pave, line: new Float32Array(m.line), on: accelLookup(pave) }; return; }
   if (m.type === 'tile' || m.type === 'blocks') {
     try {
       const res = await fetch(m.url);
@@ -76,7 +78,8 @@ self.onmessage = async ({ data: m }) => {
       if (m.type === 'blocks') { const mesh = blockChunk(await res.arrayBuffer()); self.postMessage({ type: 'blocks', key: m.key, mesh }, buffers(mesh)); return; }
       const tile = decodeTile(await res.arrayBuffer());
       if (merging) tile.props = tile.props.filter((p) => !merging(p));
-      const mesh = buildTile(tile, grid, m.tileSize, surface, channels);
+      const paved = accel ? accelTile(tile, accel, m.tileSize, accel.on) : tile;
+      const mesh = buildTile(paved, grid, m.tileSize, surface, channels);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
       self.postMessage({ type: 'tile', key: m.key, mesh }, buffers(mesh));
     } catch (e) {

@@ -15,6 +15,9 @@ retargeted onto the women's and the men's skeletons (`f-*.glb`, `m-*.glb`); pack
 between those clips (setting off, stopping from either foot, standing up) generated with NVIDIA's MotionBricks
 (github.com/NVlabs/motionbricks; the model under the NVIDIA Open Model Agreement, which claims no ownership of its
 outputs) from the clips' own poses, on the same skeletons (`tools/motion/transitions.py`; `moves.json`: their lengths).
+`m-turns.glb`: the visitor's walker (`m01.glb`, whose bones rest as the men's do) turning on the spot a quarter
+either way and about, and sitting down, made the same way (`tools/motion/walker.py`; `turns.json`); he plays
+`m-moves.glb` too.
 
 Used under the MIT License:
 

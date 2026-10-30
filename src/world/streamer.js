@@ -76,6 +76,8 @@ export class Streamer {
   // segs: the approaches to the expressway's merges and forks, whose turn arrows the workers leave out (roadway.js
   // mergeApproaches); before the first tile.
   merges(segs) { for (const w of this.workers) w.postMessage({ type: 'merges', segs: segs.buffer.slice(0) }); }
+  // quads: the acceleration lanes' paving and lines (roadway.js accelQuads), paved in the tiles; before the first tile.
+  accel(quads) { for (const w of this.workers) w.postMessage({ type: 'accel', pave: quads.pave.buffer.slice(0), line: quads.line.buffer.slice(0) }); }
 
   // Terrain height, and the height of whatever one stands on (the terrain, or a bridge deck).
   ground(x, z) { return meshHeight(this.grid, x, z); } // (the terrain as its mesh draws it: src/shared/terrain.js)

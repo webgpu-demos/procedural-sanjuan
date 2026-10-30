@@ -221,3 +221,147 @@ export function paintOf(e, lanes, width = pavedHalf(e, lanes)) {
   if (hw !== 'tertiary' && median > 6) for (const s of [-1, 1]) lines.push({ o: s * (median / 2 - 0.35), dashed: false, yellow: e.oneway && s < 0 && (hw === 'motorway' || hw === 'trunk') });
   return Object.assign(lines, { lanes: n, lw, median });
 }
+
+// ---------------------------------------------------------------- acceleration lanes
+// Where a ramp joins the expressway in fewer lanes than they bring (OSM draws most so: the expressway goes on in
+// its own lanes), the ramp's lane carries on alongside for ACCEL metres before it ends, as it does on the road: the
+// simulation drives it (tools/sim/network.mjs, the expressway's first stretch a lane wider, that lane to the
+// outside, the main lanes where the tiles paint them) and the client paves it (meshing.js, past the expressway's
+// paved edge, narrowing to nothing over TAPER metres after). Only at grade (a deck is drawn as wide as its road),
+// and where the ramp brings one lane. Without it a ramp had to give way to the outer lane, or take turns with it.
+//   roads: roads.json; painted: lanes.json's edges (or null). SUMO's lanes on a one-way expressway are the painted
+//   ones (network.mjs): n of them, sw wide each (WIDEST at most), the main carriageway's paving `half` either side.
+// Returns [{ node, edge, n, sw, half, len, line: [[x, y, z, s], ...] }]: the expressway's centreline from the merge
+// (s = 0) to the end of the taper, in the way travelled; len: where the lane ends (the taper after it).
+export const ACCEL = 140, TAPER = 40;
+const WIDEST = 4.5;
+export function accelLanes(roads, painted = null) {
+  const E = roads.edges, lanesOf = roadLanes(E), signals = new Set(roads.signals ?? []);
+  const fast = (e) => /^(motorway|trunk)(_link)?$/.test(e.highway), link = (e) => e.highway.endsWith('_link');
+  const sumo = (i) => { const e = E[i], p = painted?.[i] ?? paintOf(e, Math.max(1, lanesOf(e) || e.lanes || 1)); return { n: p.lanes, sw: Math.min(WIDEST, p.lw) }; };
+  const ins = new Map(), outs = new Map(), at = new Map();
+  E.forEach((e, i) => {
+    for (const n of [e.a, e.b]) at.set(n, (at.get(n) ?? 0) + 1);
+    if (!e.oneway || !fast(e)) return;
+    const [a, b] = e.oneway === -1 ? [e.b, e.a] : [e.a, e.b];
+    (ins.get(b) ?? ins.set(b, []).get(b)).push(i); (outs.get(a) ?? outs.set(a, []).get(a)).push(i);
+  });
+  const grade = (e) => !e.bridge && !e.tunnel && !e.flyover && !e.span;
+  // (an edge's centreline in the way travelled, [x, y, z] each)
+  const line = (i) => { const e = E[i], p = []; for (let k = 0; k < e.pts.length; k += 3) p.push([e.pts[k], e.pts[k + 1], e.pts[k + 2]]); return e.oneway === -1 ? p.reverse() : p; };
+  const out = [];
+  for (const [node, I] of ins) {
+    const O = outs.get(node) ?? [];
+    if (O.length !== 1 || I.length !== 2 || signals.has(node) || at.get(node) !== 3) continue;
+    const o = O[0], eo = E[o], mains = I.filter((i) => !link(E[i])), ramps = I.filter((i) => link(E[i]));
+    if (link(eo) || mains.length !== 1 || ramps.length !== 1 || !grade(eo)) continue;
+    const { n, sw } = sumo(o), m = sumo(mains[0]), r = sumo(ramps[0]);
+    if (r.n !== 1 || m.n + r.n !== n + 1) continue;
+    // along the expressway from the merge, on through nodes where nothing else meets, at grade, as many lanes
+    const pts = [];
+    let s = 0, i = o, from = node;
+    for (;;) {
+      for (const p of line(i)) {
+        if (pts.length) { const q = pts.at(-1); s += Math.hypot(p[0] - q[0], p[2] - q[2]); if (Math.hypot(p[0] - q[0], p[2] - q[2]) < 0.01) continue; }
+        pts.push([p[0], p[1], p[2], s]);
+      }
+      if (s >= ACCEL + TAPER) break;
+      const end = E[i].oneway === -1 ? E[i].a : E[i].b, next = outs.get(end) ?? [];
+      if (signals.has(end) || at.get(end) !== 2 || next.length !== 1 || (ins.get(end) ?? []).length !== 1) break;
+      const j = next[0];
+      if (!grade(E[j]) || link(E[j]) || sumo(j).n !== n) break;
+      from = end; i = j;
+    }
+    if (s < 70) continue;
+    const len = Math.min(ACCEL, s - 10), stop = Math.min(s, len + TAPER);
+    const cut = [];
+    for (const p of pts) {
+      if (p[3] <= stop) { cut.push(p); continue; }
+      const q = cut.at(-1), f = (stop - q[3]) / (p[3] - q[3]);
+      cut.push([q[0] + (p[0] - q[0]) * f, q[1] + (p[1] - q[1]) * f, q[2] + (p[2] - q[2]) * f, stop]);
+      break;
+    }
+    out.push({ node, edge: o, n, sw, half: pavedHalf(eo, lanesOf(eo)).half, len, line: cut });
+  }
+  return out;
+}
+// The paving of an acceleration lane: quads [x0, z0, x1, z1, x2, z2, x3, z3] (in the order round), from the
+// expressway's paved edge (a little inside it) out to its outer edge, narrowing over the taper. And its outer
+// edge line, as thin quads: { pave, line }
+export function accelPaving(lane, step = 4) {
+  const { line: L, len, n, sw, half } = lane, inner = Math.min(half, (n / 2) * sw) - 0.15, outer = (n / 2 + 1) * sw;
+  // (the lane's outer edge, by how far along: full to len, then narrowing)
+  const edge = (s) => (s <= len ? outer : outer - (outer - inner - 0.15) * Math.min(1, (s - len) / TAPER));
+  const at = (s) => {
+    let k = 1; while (k < L.length - 1 && L[k][3] < s) k++;
+    const a = L[k - 1], b = L[k], f = Math.max(0, Math.min(1, (s - a[3]) / ((b[3] - a[3]) || 1)));
+    const dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1;
+    return [a[0] + dx * f, a[2] + dz * f, -dz / l, dx / l]; // (x, z, and the normal to the right of the way: x east, z south)
+  };
+  const total = L.at(-1)[3], pave = [], lines = [];
+  for (let s = 0; s < total - 0.01; s += step) {
+    const t = Math.min(total, s + step), [x0, z0, nx0, nz0] = at(s), [x1, z1, nx1, nz1] = at(t);
+    const o0 = edge(s), o1 = edge(t);
+    pave.push([x0 + nx0 * inner, z0 + nz0 * inner, x1 + nx1 * inner, z1 + nz1 * inner, x1 + nx1 * o1, z1 + nz1 * o1, x0 + nx0 * o0, z0 + nz0 * o0]);
+    if (s < len + TAPER) {
+      const a0 = o0 - 0.35, a1 = o1 - 0.35, b0 = a0 - 0.15, b1 = a1 - 0.15;
+      if (a0 > inner + 0.3 && a1 > inner + 0.3) lines.push([x0 + nx0 * b0, z0 + nz0 * b0, x1 + nx1 * b1, z1 + nz1 * b1, x1 + nx1 * a1, z1 + nz1 * a1, x0 + nx0 * a0, z0 + nz0 * a0]);
+    }
+  }
+  return { pave, line: lines };
+}
+
+// The acceleration lanes' paving and lines as the tiles take them: { pave, line } flat Float32Arrays of quads (8 numbers
+// each), for the tile workers (accelTiles), and a test of whether (x, z) lies on one (onAccel: GroundRoads, guard rails).
+export function accelQuads(lanes) {
+  const pave = [], line = [];
+  for (const l of lanes) { const q = accelPaving(l); for (const v of q.pave) pave.push(...v); for (const v of q.line) line.push(...v); }
+  return { pave: Float32Array.from(pave), line: Float32Array.from(line) };
+}
+const inQuad = (q, o, x, z, pad = 0) => {
+  // (convex, in either winding: the point on the same side of all four edges, within pad)
+  let pos = 0, neg = 0;
+  for (let k = 0; k < 4; k++) {
+    const ax = q[o + k * 2], az = q[o + k * 2 + 1], bx = q[o + ((k + 1) % 4) * 2], bz = q[o + ((k + 1) % 4) * 2 + 1];
+    const l = Math.hypot(bx - ax, bz - az) || 1, c = ((bx - ax) * (z - az) - (bz - az) * (x - ax)) / l;
+    if (c > -pad) pos++; if (c < pad) neg++;
+  }
+  return pos === 4 || neg === 4;
+};
+// quads: accelQuads().pave. Returns (x, z, pad) => whether (x, z) is on one (within pad metres)
+export function accelLookup(quads, cell = 32) {
+  const grid = new Map();
+  for (let o = 0; o < quads.length; o += 8) {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let k = 0; k < 4; k++) { x0 = Math.min(x0, quads[o + k * 2]); x1 = Math.max(x1, quads[o + k * 2]); z0 = Math.min(z0, quads[o + k * 2 + 1]); z1 = Math.max(z1, quads[o + k * 2 + 1]); }
+    for (let a = Math.floor((x0 - 1) / cell); a <= Math.floor((x1 + 1) / cell); a++) for (let b = Math.floor((z0 - 1) / cell); b <= Math.floor((z1 + 1) / cell); b++)
+      (grid.get(a * 100003 + b) ?? grid.set(a * 100003 + b, []).get(a * 100003 + b)).push(o);
+  }
+  return (x, z, pad = 0) => (grid.get(Math.floor(x / cell) * 100003 + Math.floor(z / cell)) ?? []).some((o) => inQuad(quads, o, x, z, pad));
+}
+// A tile's share of them (the quads whose middle is in it) as areas, as decodeTile gives them: the paving a
+// carriageway, its line paint; and the tile's guard rails along the expressway's old edge, where the lane runs, gone.
+export function accelTile(tile, quads, tileSize, on = null) {
+  const x0 = tile.tx * tileSize, z0 = tile.tz * tileSize, mine = (q, o) => {
+    const mx = (q[o] + q[o + 2] + q[o + 4] + q[o + 6]) / 4, mz = (q[o + 1] + q[o + 3] + q[o + 5] + q[o + 7]) / 4;
+    return mx >= x0 && mx < x0 + tileSize && mz >= z0 && mz < z0 + tileSize;
+  };
+  // (wound as the compiler winds its rings, or the meshes face down and are not drawn)
+  const wound = (r) => { let a = 0; for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; a += r[i * 2] * r[j * 2 + 1] - r[j * 2] * r[i * 2 + 1]; } return a > 0 ? [r[6], r[7], r[4], r[5], r[2], r[3], r[0], r[1]] : r; };
+  const rings = (q) => { const out = []; for (let o = 0; o < q.length; o += 8) if (mine(q, o)) out.push([wound(Array.from(q.subarray(o, o + 8)))]); return out; };
+  const pave = rings(quads.pave), line = rings(quads.line);
+  if (!pave.length && !line.length && !on) return tile;
+  const areas = [...tile.areas];
+  if (pave.length) areas.push({ kind: AREA.CARRIAGEWAY, code: 0, polygons: pave });
+  if (line.length) areas.push({ kind: AREA.MARK_WHITE, code: 0, polygons: line });
+  let walls = tile.walls;
+  if (on && walls?.length) {
+    const keep = [];
+    for (let i = 0; i < walls.length; i += 5) {
+      if (walls[i + 4] < 0 && on((walls[i] + walls[i + 2]) / 2, (walls[i + 1] + walls[i + 3]) / 2, 0.6)) continue; // (a barrier across the lane)
+      for (let k = 0; k < 5; k++) keep.push(walls[i + k]);
+    }
+    if (keep.length !== walls.length) walls = Float32Array.from(keep);
+  }
+  return { ...tile, areas, walls };
+}

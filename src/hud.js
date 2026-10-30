@@ -127,7 +127,7 @@ const icon = (k) => `<svg class="icon" viewBox="0 0 24 24">${ICON[k]}</svg>`;
 
 export const MODES = [
   { id: 'explore', label: 'Explorar', key: '1', icon: 'explore', hints: [['Arrastra', 'Mover'], ['Clic der.', 'Girar'], ['Rueda', 'Acercar'], ['W A S D', 'Desplazar']] },
-  { id: 'walk', label: 'Caminar', key: '2', icon: 'walk', hints: [['W S', 'Caminar'], ['A D', 'Girar'], ['Shift', 'Correr'], ['Espacio', 'Saltar'], ['E', 'Al carro']] },
+  { id: 'walk', label: 'Caminar', key: '2', icon: 'walk', hints: [['W S', 'Caminar'], ['A D', 'Girar'], ['Shift', 'Correr'], ['Espacio', 'Saltar'], ['F', 'Sentarse'], ['E', 'Al carro']] },
   { id: 'bike', label: 'Bici', key: '3', icon: 'bike', hints: [['W', 'Pedalear'], ['S', 'Frenar'], ['A D', 'Dobla'], ['Shift', 'Rápido'], ['E', 'Al carro']] },
   { id: 'car', label: 'Manejar', key: '4', icon: 'car', hints: [['W S', 'Acelerar / Frenar'], ['A D', 'Dobla'], ['Espacio', 'Freno de mano'], ['Shift', 'Turbo'], ['E', 'Bajarse']] },
   { id: 'fly', label: 'Volar', key: '5', icon: 'fly', hints: [['W S', 'Avanzar'], ['A D', 'Girar'], ['Espacio', 'Subir'], ['C', 'Bajar'], ['Shift', 'Turbo']] },
@@ -295,7 +295,7 @@ export class Hud {
     this.padButtons(this.app.mode);
   }
   padButtons(mode) {
-    const B = { car: [['Freno', 'Space'], ['Turbo', 'ShiftLeft'], ['Bajarse', 'KeyE', true]], walk: [['Saltar', 'Space'], ['Correr', 'ShiftLeft'], ['Carro', 'KeyE', true]], bike: [['Freno', 'Space'], ['Rápido', 'ShiftLeft'], ['Carro', 'KeyE', true]],
+    const B = { car: [['Freno', 'Space'], ['Turbo', 'ShiftLeft'], ['Bajarse', 'KeyE', true]], walk: [['Saltar', 'Space'], ['Correr', 'ShiftLeft'], ['Sentarse', 'KeyF', true], ['Carro', 'KeyE', true]], bike: [['Freno', 'Space'], ['Rápido', 'ShiftLeft'], ['Carro', 'KeyE', true]],
       fly: [['Subir', 'Space'], ['Bajar', 'KeyC'], ['Turbo', 'ShiftLeft']] }[mode] ?? [];
     const box = this.pad.querySelector('.btns');
     box.innerHTML = B.map(([l, c, tap]) => `<button data-code="${c}" data-tap="${tap ? 1 : ''}">${l}</button>`).join('');

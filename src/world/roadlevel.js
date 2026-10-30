@@ -44,6 +44,7 @@ class GroundRoads {
     for (const [x, z, half] of at.values()) { const r = half + 1.5; file([x, z, x, z, r], x, z, x, z, r); }
   }
   on(x, z) {
+    if (this.accel?.(x, z)) return true; // (an acceleration lane: main.js, roadway.js accelLanes)
     for (const [x0, z0, x1, z1, r] of this.cells.get(key(x, z)) ?? []) {
       const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, t = l2 ? Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2)) : 0;
       if (Math.hypot(x0 + dx * t - x, z0 + dz * t - z) <= r) return true;
@@ -149,7 +150,8 @@ export class DrawnDecks {
     return on;
   }
 
-  // Is (x, z) in under the side of a deck a little over the street (0.3 to 2 m over y), not the car's own road? A ramp
+  // Is (x, z) in under the side of a deck a little over the street (0.3 to 2 m over y), or in its parapet where it
+  // lands at about the street's level, not the car's own road? A ramp
   // come down beside the expressway, at grade a step below its deck: the cars on it had driven half in under the
   // expressway's edge. (Under its side only: one coming up to its own ramp's start meets the deck end on.)
   beneath(x, z, y, road) {
@@ -158,9 +160,11 @@ export class DrawnDecks {
       const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < 0 || t > 1) continue;
       const h = y0 + (y1 - y0) * t - y;
-      if (h < 0.3 || h > 2) continue;
+      if (h < -0.5 || h > 2) continue;
       const ao = Math.abs(((x - x0) * -dz + (z - z0) * dx) / Math.sqrt(l2));
-      if (ao <= w + 0.05 && ao > w - 1.5) return true;
+      // (in under its side; or, the deck about at the street's level where it lands, against its parapet, where one is
+      // drawn: paved())
+      if (h >= 0.3 ? ao <= w + 0.05 && ao > w - 1.5 : ao <= w + 0.05 && ao > w - 0.3 && !this.paved(x, z, h + y, e, dx / Math.sqrt(l2), dz / Math.sqrt(l2))) return true;
     }
     return false;
   }
