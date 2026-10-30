@@ -243,8 +243,9 @@ npm run sim:all                      # demand, buses, routes, the morning and th
   as several nodes within 20 m are one node (netconvert cut the pieces between them to nothing: 2,907 edges under
   a metre, and a car that could not stop on one waited across the junction behind it); driveways and car parks
   (OSM's unnamed service ways) are left out, where a signal had given a car park a phase of its own. Signals
-  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper; ramps get acceleration
-  lanes; an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
+  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper; a ramp joins in the lanes
+  OSM gives the road (netconvert's guessed acceleration lanes, `--ramps`, widened roads past what the tiles pave);
+  an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
 - **Demand** (`demand.py`): a cordon model. Homes, jobs, schools and shops are the floor area of the city's
   buildings, by use and municipio; the ACS municipio-to-municipio commuting flows say who drives where; a
   commuter from beyond the area leaves by whichever of the roads towards their municipio the routes favour (a

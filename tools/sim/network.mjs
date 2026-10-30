@@ -14,7 +14,7 @@
 //
 // Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, merged.json, lanes.json, inside.json} and runs netconvert to
 // data/sim/<area>/<area>.net.xml.gz.
-// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--join=18]
+// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--ramps] [--join=18]
 //        [--cluster=20] [--reach=45] [--netconvert=--opt,value,...]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -162,8 +162,11 @@ if (flag('merge')) {
 
 // Nodes: lights (right on red, as Puerto Rico drives: after a stop, unless a sign says otherwise), and where two
 // expressway carriageways join into fewer lanes than they bring, a zipper (each lane's drivers in turn: a priority
-// junction made one of them wait for a gap that, at the rush hour, never came). (A ramp is not: netconvert gives
-// it an acceleration lane, --ramps.guess; as a zipper, the expressway's own lanes took turns with the ramp's.)
+// junction made one of them wait for a gap that, at the rush hour, never came). (A ramp is not a zipper: the
+// expressway's own lanes took turns with the ramp's. Nor does netconvert guess it a lane of its own, --ramps.guess:
+// it widened the road beyond what the tiles pave, a lane or two for 100 m where any ramp met one, Avenida Piñero
+// included, and moved the road's lanes over to make room: 73 km of lanes in San Juan where a car stood past the
+// paving, off a deck's edge or on the sidewalk, 25 km without. --ramps brings the guessing back.)
 const used = new Map(); // node -> [in, out]
 for (const e of mergedEdges) {
   (used.get(e.from) ?? used.set(e.from, [[], []]).get(e.from))[1].push(e);
@@ -268,7 +271,7 @@ execFileSync(bin, [
   '--output-file', netFile,
   '--offset.disable-normalization',                 // SUMO's frame is the world's
   '--junctions.join', '--junctions.join-dist', opt('join', '18'), // a crossing OSM draws as several nodes is one junction
-  '--ramps.guess',                                   // acceleration and deceleration lanes on the expressway ramps
+  ...(process.argv.includes('--ramps') ? ['--ramps.guess'] : []), // (acceleration and deceleration lanes: see the zippers above)
   '--tls.join', '--tls.default-type', 'actuated',    // (the heads show what the run recorded: simsignals.js)
   '--default.junctions.type', 'priority',            // (not right-before-left: Puerto Rico's side streets give way to the main road)
   '--no-turnarounds.except-deadend',
