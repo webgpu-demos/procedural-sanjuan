@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { clearLanes } from '../shared/roadway.js';
 import { solidsOf } from './collide.js';
 import { tileKey } from '../shared/geo.js';
-import { meshHeight } from '../shared/terrain.js';
+import { meshHeight, settlePads } from '../shared/terrain.js';
 import { makeSurface, makeCover } from '../shared/decks.js';
 import { SIGN_LOD_DISTANCE } from './signs.js';
 import { WET } from './constants.js';
@@ -78,6 +78,9 @@ export class Streamer {
   merges(segs) { for (const w of this.workers) w.postMessage({ type: 'merges', segs: segs.buffer.slice(0) }); }
   // quads: the acceleration lanes' paving and lines (roadway.js accelQuads), paved in the tiles; before the first tile.
   accel(quads) { for (const w of this.workers) w.postMessage({ type: 'accel', pave: quads.pave.buffer.slice(0), line: quads.line.buffer.slice(0) }); }
+  // pads: where the decks land on the ground, the ground held level with them (src/shared/terrain.js padField); before
+  // the first tile, and before anything stands on the ground
+  pads(pads) { const keep = settlePads(this.grid, pads); for (const w of this.workers) w.postMessage({ type: 'pads', pads: keep }); return keep; }
 
   // Terrain height, and the height of whatever one stands on (the terrain, or a bridge deck).
   ground(x, z) { return meshHeight(this.grid, x, z); } // (the terrain as its mesh draws it: src/shared/terrain.js)
