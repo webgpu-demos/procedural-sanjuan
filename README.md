@@ -274,12 +274,13 @@ npm run sim:all                      # demand, buses, routes, the morning and th
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
   direction is matched to the counted line (which runs down the median of a divided road). The published run, at
-  seven tenths of the demand, on the network without guessed ramp lanes (the ramps zipped in),
-  carried 0.45 of the counted traffic (freeways 0.35, arterials 0.56; r² 0.30) and teleported 1,338 of its
-  227,000 cars; with netconvert's guessed acceleration lanes it had carried 0.48 (freeways 0.40; r² 0.40, 1,286
+  seven tenths of the demand, on the network with the acceleration lanes the client paves (and other ramps zipped
+  in), carried 0.45 of the counted traffic (freeways 0.35, arterials 0.57; r² 0.30) and teleported 1,570 of its
+  227,000 cars (1,388 still on the road at 10:15); with the ramps zipped and no acceleration lanes, 0.45 and 1,338
+  (1,683); with netconvert's guessed acceleration lanes it had carried 0.48 (freeways 0.40; r² 0.40, 1,286
   teleported), its trips an eighth shorter, but those lanes lay past the paving the tiles draw (73 km of lanes in
-  San Juan where a car stood off the road, 25 km without), and with the ramps giving way instead of zipped, 0.45
-  and 2,280 teleported. Earlier, with the guessed lanes: at half the demand 0.42 (328 teleported), at six tenths
+  San Juan where a car stood off the road, 25 km without), and with the ramps giving way, 0.45 and 2,280
+  teleported. Earlier, with the guessed lanes: at half the demand 0.42 (328 teleported), at six tenths
   0.45 (676), at 0.85 0.49 (3,119, and trips half as long again): past seven tenths the rush hour mostly queues
   longer.
   The figures for the published run are in the experience (¿Qué tan real?).
