@@ -14,7 +14,7 @@
 //
 // Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, merged.json, lanes.json, inside.json} and runs netconvert to
 // data/sim/<area>/<area>.net.xml.gz.
-// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--ramps] [--zip-ramps] [--join=18]
+// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--ramps] [--no-zip-ramps] [--join=18]
 //        [--cluster=20] [--reach=45] [--netconvert=--opt,value,...]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -229,10 +229,11 @@ const nodeId = new Map(); // roads node -> SUMO node id
 for (const m of clusters) for (const k of m) nodeId.set(k, `c${Math.min(...m)}`);
 const idOf = (k) => nodeId.get(k) ?? `n${k}`;
 let zips = 0, lights = 0;
-// (--zip-ramps: a ramp that joins the expressway in fewer lanes than they bring, a zipper too: the ramp and the
-// outer lane take turns, the other lanes drive on; without its guessed acceleration lane it gave way to the outer
-// lane, waiting for a gap)
-const zipRamps = process.argv.includes('--zip-ramps');
+// (a ramp that joins the expressway in fewer lanes than they bring, a zipper too: the ramp and the outer lane take
+// turns, the other lanes drive on; without its guessed acceleration lane it gave way to the outer lane, waiting for
+// a gap that at the rush hour seldom came: 2,280 cars teleported at seven tenths of the demand where 1,338 zipped.
+// --no-zip-ramps: they give way)
+const zipRamps = flag('zip-ramps');
 const nodeXml = ['<nodes>'];
 for (const [k, [ins, outs]] of used) {
   if (nodeId.has(k)) continue;
