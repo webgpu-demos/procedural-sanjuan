@@ -3,6 +3,7 @@
 #   MODE=all (default): tools/sim/all.sh with SCALE, ITER, RUNARGS, DEMANDARGS
 #   MODE=morning: the morning only, and what the apagón starts from (its state, routes, gates, buses) in $RES/carry
 #   MODE=apagon FROM=<job>: the apagón from that job's morning
+#   NETARGS: network.mjs options (--zip-ramps, --ramps)
 set -x
 cd "$ROOT"
 S=$ROOT/data/sim/sanjuan
@@ -17,7 +18,7 @@ all)
   cp -r $T/* $RES/sim/ ;;
 morning)
   ( set -e
-    node tools/sim/network.mjs --area=sanjuan
+    node tools/sim/network.mjs --area=sanjuan $NETARGS
     $PY tools/sim/demand.py --area=sanjuan --scale=${SCALE:-1} $DEMANDARGS
     $PY tools/sim/gtfs.py --area=sanjuan
     rm -f $S/morning/assigned.rou.alt.xml.gz; $PY tools/sim/route.py --area=sanjuan
@@ -31,7 +32,7 @@ morning)
 apagon)
   ( set -e
     git clone -q --depth 1 -b simres/$FROM "https://x-access-token:$GH_TOKEN@github.com/$REPO" $W/from
-    node tools/sim/network.mjs --area=sanjuan
+    node tools/sim/network.mjs --area=sanjuan $NETARGS
     mkdir -p $S/morning $T && cp -r $W/from/sim/* $T/
     cp $W/from/carry/state_20700.xml.gz $W/from/carry/taz.add.xml $W/from/carry/busstops.add.xml $S/morning/
     gunzip -c $W/from/carry/routes.rou.xml.gz > $S/morning/routes.rou.xml; gunzip -c $W/from/carry/trips.json.gz > $S/morning/trips.json
