@@ -135,7 +135,7 @@ export class SimTraffic {
     this.solids = [];      // what the cars must not drive through: the visitor and the car parked, as capsules
                            // [ax, az, bx, bz, r] (collide.js); a car that would, fades out instead
     this.nearby = [];      // [x, z] of the cars within 320 m of the camera (the minimap's dots)
-    this.heights = new Map(); this.turns = new Map(); this.shifts = new Map(); this.frameNo = 0; // (each seen car's eased height, and the frame it was set)
+    this.heights = new Map(); this.turns = new Map(); this.shifts = new Map(); this.placed = new Map(); this.frameNo = 0; // (each seen car's eased height, and the frame it was set)
     this.rate = 1;         // the clock's speed: a car's arrival and departure fade over about half a second of it
     this.followed = null;  // vehicle id the camera rides with
     this.view = null;      // the followed car's place this frame: { x, y, z, heading, speed }
@@ -400,6 +400,7 @@ export class SimTraffic {
     if (frame % 120 === 0) {
       for (const map of [this.heights, this.turns]) for (const [k, v] of map) if (frame - v[1] > 60) map.delete(k);
       for (const [k, v] of this.shifts) if (frame - v[2] > 60) this.shifts.delete(k);
+      for (const [k, v] of this.placed) if (frame - v[4] > 60) this.placed.delete(k);
     }
     for (let i = 0; i < W.n; i++) {
       if (!SimTraffic.at(W, i, T, p)) continue;
@@ -452,47 +453,61 @@ export class SimTraffic {
         }
         SimTraffic.at(W, i, T, p);
       }
-      // (in the lane the tiles paint, on the expressway: relane; where the lanes change in number, at a node, the move
-      // changes, and the car drifts across to its new place over half a second, as in a lane change, not in a jump)
-      if ((d2 < MID * MID || followed) && this.laneCells) {
-        const m = this.relane(p, heading) ?? [0, 0], was = this.shifts.get(vid);
-        if (was && was[2] === frame - 1) { m[0] = was[0] + (m[0] - was[0]) * drift; m[1] = was[1] + (m[1] - was[1]) * drift; }
-        if (was) { was[0] = m[0]; was[1] = m[1]; was[2] = frame; } else this.shifts.set(vid, [m[0], m[1], frame]);
-        p[0] += m[0]; p[2] += m[1];
-      }
       const sin = Math.sin(heading), cos = Math.cos(heading);
-      // On what the city draws there: the street (the tiles' surface, flat across the triangles they draw it with:
-      // src/shared/terrain.js meshHeight), or a deck or a ramp the flyovers draw (roadlevel.js), the one of the two
-      // nearer the level the simulation has the car at. Never at a height nothing is drawn at: the simulation drove the levels the
-      // compiler gave the roads, humps of the elevation model in them here and there, and a car following them
-      // sank into the street where the street ran over a hump the levels did not have, or rose off it where the
-      // levels had one the street did not. For a car seen only as its lamps, the simulation's own height is near
-      // enough (and the ground is not looked up for tens of thousands).
       const seen = d2 < MID * MID || followed;
-      // (the simulation's height for it, put on the corrected levels: fixAt)
-      const fixed = seen && this.fixes?.size ? this.fixAt(p[0], p[2], p[1], heading) : null, sy = fixed ?? p[1], road = fixed == null ? null : this.fixEdge;
-      // its road's deck drawn under it, or the street (roadlevel.js)
-      let stood = seen ? this.drawn.stand(this.surface, p[0], p[2], sy, heading, road) : null;
-      if (stood?.push) { p[0] += stood.push[0]; p[2] += stood.push[1]; } // (onto the deck drawn, from just beyond its edge)
-      // and its whole body on what is drawn (roadlevel.js fit): across its way, as far as it takes (up to 4 m),
-      // eased in and out as relane's shift is (a car with nothing drawn near it is left where it is). (SUMO's lanes are
-      // not always the city's: netconvert's --ramps.guess gave Avenida Piñero a third lane for the 94 m before a ramp,
-      // 5 m out from its middle where the tiles pave 3.5)
-      if (seen && (d2 < this.near * this.near || followed)) {
-        const spec = TYPES[W.type[i]], f = this.drawn.fit(this.surface, p[0], p[2], stood.y, heading, stood.deck, spec.spec.W, spec.L, road) ?? [0, 0], was = this.fits.get(vid);
-        // (quickly out of a parapet, in a fifth of a second; back over half a second)
-        if (was && was[2] === frame - 1) { const k = f[0] * f[0] + f[1] * f[1] > was[0] * was[0] + was[1] * was[1] ? fast : drift; f[0] = was[0] + (f[0] - was[0]) * k; f[1] = was[1] + (f[1] - was[1]) * k; }
-        if (f[0] || f[1] || was) {
-          if (was) { was[0] = f[0]; was[1] = f[1]; was[2] = frame; } else this.fits.set(vid, [f[0], f[1], frame]);
-          if (Math.abs(f[0]) + Math.abs(f[1]) > 0.01) { p[0] += f[0]; p[2] += f[1]; stood = this.drawn.stand(this.surface, p[0], p[2], sy, heading, road); }
+      // A box beyond the models (past sim.near): its place on what is drawn (its painted lane, the corrected level, the
+      // deck or the street under it) is worked out every 4th frame, a quarter of them each frame, and it keeps the
+      // move and the height over its track it had in between. Out there a car moves a few pixels a frame; worked out
+      // every frame for the thousand or so of them it was over half the frame's time on an M3 in the opening's ride.
+      const boxOnly = seen && !followed && d2 > this.near * this.near, px0 = p[0], pz0 = p[2], py0 = p[1];
+      let y, raised, sy, road = null, placed = boxOnly ? this.placed.get(vid) : null;
+      if (placed && placed[4] >= frame - 4 && (frame + vid) % 4 !== 0) {
+        p[0] += placed[0]; p[2] += placed[1]; y = sy = py0 + placed[2]; raised = placed[3];
+      } else {
+        // (in the lane the tiles paint, on the expressway: relane; where the lanes change in number, at a node, the move
+        // changes, and the car drifts across to its new place over half a second, as in a lane change, not in a jump)
+        if ((d2 < MID * MID || followed) && this.laneCells) {
+          const m = this.relane(p, heading) ?? [0, 0], was = this.shifts.get(vid);
+          if (was && was[2] === frame - 1) { m[0] = was[0] + (m[0] - was[0]) * drift; m[1] = was[1] + (m[1] - was[1]) * drift; }
+          if (was) { was[0] = m[0]; was[1] = m[1]; was[2] = frame; } else this.shifts.set(vid, [m[0], m[1], frame]);
+          p[0] += m[0]; p[2] += m[1];
         }
-      }
-      const raised = !!stood?.deck;
-      let y = seen ? stood.y : sy;
-      if (seen) {
-        const h = this.heights.get(vid);
-        if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12 && Math.abs(y - h[0]) > 0.5) y = h[0] + (y - h[0]) * ease; // (a step: onto a deck, off it)
-        if (h) { h[0] = y; h[1] = frame; } else this.heights.set(vid, [y, frame]);
+        // On what the city draws there: the street (the tiles' surface, flat across the triangles they draw it with:
+        // src/shared/terrain.js meshHeight), or a deck or a ramp the flyovers draw (roadlevel.js), the one of the two
+        // nearer the level the simulation has the car at. Never at a height nothing is drawn at: the simulation drove the levels the
+        // compiler gave the roads, humps of the elevation model in them here and there, and a car following them
+        // sank into the street where the street ran over a hump the levels did not have, or rose off it where the
+        // levels had one the street did not. For a car seen only as its lamps, the simulation's own height is near
+        // enough (and the ground is not looked up for tens of thousands).
+        // (the simulation's height for it, put on the corrected levels: fixAt)
+        const fixed = seen && this.fixes?.size ? this.fixAt(p[0], p[2], p[1], heading) : null; sy = fixed ?? p[1]; road = fixed == null ? null : this.fixEdge;
+        // its road's deck drawn under it, or the street (roadlevel.js)
+        let stood = seen ? this.drawn.stand(this.surface, p[0], p[2], sy, heading, road) : null;
+        if (stood?.push) { p[0] += stood.push[0]; p[2] += stood.push[1]; } // (onto the deck drawn, from just beyond its edge)
+        // and its whole body on what is drawn (roadlevel.js fit): across its way, as far as it takes (up to 4 m),
+        // eased in and out as relane's shift is (a car with nothing drawn near it is left where it is). (SUMO's lanes are
+        // not always the city's: netconvert's --ramps.guess gave Avenida Piñero a third lane for the 94 m before a ramp,
+        // 5 m out from its middle where the tiles pave 3.5)
+        if (seen && (d2 < this.near * this.near || followed)) {
+          const spec = TYPES[W.type[i]], f = this.drawn.fit(this.surface, p[0], p[2], stood.y, heading, stood.deck, spec.spec.W, spec.L, road) ?? [0, 0], was = this.fits.get(vid);
+          // (quickly out of a parapet, in a fifth of a second; back over half a second)
+          if (was && was[2] === frame - 1) { const k = f[0] * f[0] + f[1] * f[1] > was[0] * was[0] + was[1] * was[1] ? fast : drift; f[0] = was[0] + (f[0] - was[0]) * k; f[1] = was[1] + (f[1] - was[1]) * k; }
+          if (f[0] || f[1] || was) {
+            if (was) { was[0] = f[0]; was[1] = f[1]; was[2] = frame; } else this.fits.set(vid, [f[0], f[1], frame]);
+            if (Math.abs(f[0]) + Math.abs(f[1]) > 0.01) { p[0] += f[0]; p[2] += f[1]; stood = this.drawn.stand(this.surface, p[0], p[2], sy, heading, road); }
+          }
+        }
+        raised = !!stood?.deck;
+        y = seen ? stood.y : sy;
+        if (seen) {
+          const h = this.heights.get(vid);
+          if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12 && Math.abs(y - h[0]) > 0.5) y = h[0] + (y - h[0]) * ease; // (a step: onto a deck, off it)
+          if (h) { h[0] = y; h[1] = frame; } else this.heights.set(vid, [y, frame]);
+        }
+        if (boxOnly) {
+          if (placed) { placed[0] = p[0] - px0; placed[1] = p[2] - pz0; placed[2] = y - py0; placed[3] = raised; placed[4] = frame; }
+          else this.placed.set(vid, [p[0] - px0, p[2] - pz0, y - py0, raised, frame]);
+        }
       }
       // A car setting off or arriving (or split where SUMO cleared a jam) fades in or out, over about half a
       // second as watched: its track starts or ends inside this window, not at its edge.
@@ -568,7 +583,9 @@ export class SimTraffic {
         m[8] = sin * L; m[9] = 0; m[10] = cos * L; m[11] = 0;
         m[12] = p[0]; m[13] = y + 0.15; m[14] = p[2]; m[15] = 1;
         this.boxes.setMatrixAt(mid, this.m);
-        const lk = this.looks.get(vid) ?? lookOf(spec.name, vid);
+        // (a box's look kept with its place: worked out afresh for every box every frame, a thousand of them)
+        let lk = this.looks.get(vid);
+        if (!lk) { const pl = this.placed.get(vid); lk = pl?.[5] ?? lookOf(spec.name, vid); if (pl) pl[5] = lk; }
         this.boxes.setColorAt(mid, this.color.setRGB(...lk.paint));
         this.boxHide.array[mid] = 1 - shown * (modelled ? handover : 1); // (no model drawn: the box is the car)
         mid++;
