@@ -19,6 +19,7 @@ const key = (x, z) => Math.floor(x / CELL) * 65536 + Math.floor(z / CELL);
 // one up to CLEAR over it, along its way: a car is 1.5 to 2 m tall, and a deck's girder 1.5 m deep
 const LOW = 1.5, CLEAR = 3.0;
 const CORNERS = [[1, 1], [-1, 1], [1, -1], [-1, -1]];
+const NONE = []; // (an empty cell: a lookup per car corner per frame that finds nothing makes no array; never added to. Not frozen: a frozen array is iterated the slow way, allocating)
 
 // The streets' carriageways as the tiles pave them (roadway.js pavedHalf: OSM's width, else the lanes), and the
 // junctions where they meet, as strips and discs: where a car on the street may be (DrawnDecks.fit)
@@ -45,9 +46,14 @@ class GroundRoads {
   }
   on(x, z) {
     if (this.accel?.(x, z)) return true; // (an acceleration lane: main.js, roadway.js accelLanes)
-    for (const [x0, z0, x1, z1, r] of this.cells.get(key(x, z)) ?? []) {
-      const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz, t = l2 ? Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2)) : 0;
-      if (Math.hypot(x0 + dx * t - x, z0 + dz * t - z) <= r) return true;
+    // (asked for every corner of every car near the view every frame: indexed, no destructuring, no Math.hypot, which
+    // both made garbage, half a megabyte a frame)
+    const list = this.cells.get(key(x, z));
+    if (!list) return false;
+    for (let i = 0; i < list.length; i++) {
+      const g = list[i], x0 = g[0], z0 = g[1], dx = g[2] - x0, dz = g[3] - z0, r = g[4], l2 = dx * dx + dz * dz, t = l2 ? Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2)) : 0;
+      const ex = x0 + dx * t - x, ez = z0 + dz * t - z;
+      if (ex * ex + ez * ez <= r * r) return true;
     }
     return false;
   }
@@ -131,7 +137,7 @@ export class DrawnDecks {
   // barrier)? A parapet another deck's paving covers at its level is not drawn (flyovers.js: paved())
   cornerOn(x, z, y) {
     let on = false, wall = null;
-    for (const seg of this.cells.get(key(x, z)) ?? []) {
+    for (const seg of this.cells.get(key(x, z)) ?? NONE) {
       const [x0, y0, z0, x1, y1, z1, w, e, sides] = seg;
       const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < -0.02 || t > 1.02) continue;
@@ -155,7 +161,7 @@ export class DrawnDecks {
   // come down beside the expressway, at grade a step below its deck: the cars on it had driven half in under the
   // expressway's edge. (Under its side only: one coming up to its own ramp's start meets the deck end on.)
   beneath(x, z, y, road) {
-    for (const [x0, y0, z0, x1, y1, z1, w, e] of this.cells.get(key(x, z)) ?? []) {
+    for (const [x0, y0, z0, x1, y1, z1, w, e] of this.cells.get(key(x, z)) ?? NONE) {
       if (e === road) continue;
       const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < 0 || t > 1) continue;
@@ -181,13 +187,13 @@ export class DrawnDecks {
     const ok = deck ? (px, pz) => this.cornerOn(px, pz, y) || street(px, pz) : (px, pz) => this.ground.on(px, pz) && !this.beneath(px, pz, y, road);
     const bad = (dx, dz) => {
       let n = 0;
-      for (const [u, v] of CORNERS) if (!ok(x + dx + rx * u * hw + s * v * hl, z + dz + rz * u * hw + c * v * hl)) n++;
+      for (let q = 0; q < 4; q++) { const u = CORNERS[q][0], v = CORNERS[q][1]; if (!ok(x + dx + rx * u * hw + s * v * hl, z + dz + rz * u * hw + c * v * hl)) n++; }
       return n;
     };
     const b0 = bad(0, 0);
     if (!b0) return null;
     let best = null, bestN = b0;
-    for (let k = 1; k <= 16; k++) for (const sg of [1, -1]) {
+    for (let k = 1; k <= 16; k++) for (let sg = 1; sg >= -1; sg -= 2) {
       const d = sg * k * 0.25, n = bad(rx * d, rz * d);
       if (n < bestN) { bestN = n; best = [rx * d, rz * d]; if (!n) return best; }
     }
@@ -202,7 +208,7 @@ export class DrawnDecks {
     const found = this.found, hx = heading == null ? 0 : Math.sin(heading), hz = heading == null ? 0 : Math.cos(heading);
     found.length = 0; this.push = null; this.pushY = null;
     let nearD = Infinity;
-    for (const seg of this.cells.get(key(x, z)) ?? []) {
+    for (const seg of this.cells.get(key(x, z)) ?? NONE) {
       const [x0, y0, z0, x1, y1, z1, w, e] = seg;
       const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < -0.15 || t > 1.15) continue;
@@ -221,7 +227,7 @@ export class DrawnDecks {
   // (a merge or a fork; flyovers.js draws no parapet there. Of a dual carriageway's two decks, each the other way,
   // the parapets stay.)
   paved(x, z, y, edge, ux, uz, tol = 0.5) {
-    for (const [x0, y0, z0, x1, y1, z1, w, e] of this.cells.get(key(x, z)) ?? []) {
+    for (const [x0, y0, z0, x1, y1, z1, w, e] of this.cells.get(key(x, z)) ?? NONE) {
       if (e === edge) continue;
       const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < 0 || t > 1 || (ux * dx + uz * dz) / Math.sqrt(l2) < 0.3) continue;

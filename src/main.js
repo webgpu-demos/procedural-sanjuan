@@ -889,8 +889,35 @@ function cullSmall() {
     for (const [o, far] of tile.userData.small) o.visible = d < far * governor.detail;
   }
 }
+// ?perf: a graph of the last four seconds of frames (the time from one to the next, with the 60 and 30 fps lines) and
+// what the main thread spent on each part of one (smoothed), for when the picture stutters
+const perf = params.has('perf') ? (() => {
+  const W = 240, H = 64, box = document.createElement('div'), cv = document.createElement('canvas'), txt = document.createElement('pre');
+  Object.assign(box.style, { position: 'fixed', left: '8px', bottom: '40px', zIndex: 50, background: 'rgba(0,0,0,0.65)', color: '#fff', font: '11px/1.35 ui-monospace,monospace', padding: '6px 8px', borderRadius: '6px', pointerEvents: 'none' });
+  cv.width = W; cv.height = H; txt.style.margin = '4px 0 0'; box.append(cv, txt); document.body.append(box);
+  const g = cv.getContext('2d'), gaps = new Float32Array(W), parts = {};
+  let n = 0, t = 0, last = 0, shadowDraw = 0, plainDraw = 0;
+  return {
+    start() { const now = performance.now(); if (last) gaps[n++ % W] = now - last; last = t = now; },
+    lap(name) { const now = performance.now(); parts[name] = (parts[name] ?? now - t) * 0.95 + (now - t) * 0.05; t = now; },
+    draw(shadow) {
+      const now = performance.now(), d = now - t; t = now;
+      if (shadow) shadowDraw = shadowDraw * 0.9 + d * 0.1; else plainDraw = plainDraw * 0.95 + d * 0.05;
+      if (n % 6) return;
+      g.clearRect(0, 0, W, H);
+      const y = (ms) => H - Math.min(H, (ms / 50) * H);
+      g.strokeStyle = 'rgba(255,255,255,0.35)'; for (const ms of [16.7, 33.3]) { g.beginPath(); g.moveTo(0, y(ms)); g.lineTo(W, y(ms)); g.stroke(); }
+      for (let i = 0; i < W; i++) { const v = gaps[(n + i) % W]; g.fillStyle = v > 34 ? '#f55' : v > 17.5 ? '#fc4' : '#5d5'; g.fillRect(i, y(v), 1, H - y(v)); }
+      const s = [...gaps].filter((v) => v > 0).sort((a, b) => a - b), q = (f) => (s[Math.floor(s.length * f)] ?? 0).toFixed(1);
+      txt.textContent = `frame ${q(0.5)} ms · 95% ${q(0.95)} · worst ${(s.at(-1) ?? 0).toFixed(0)}\n` +
+        Object.entries(parts).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ') + `\ndraw ${plainDraw.toFixed(1)} · with shadows ${shadowDraw.toFixed(1)} · level ${governor.level}`;
+    },
+  };
+})() : null;
+
 function frame(_, manual) {
   const dt = manual ?? Math.min(clock.getDelta(), 0.1); // (manual: a step driven from outside, for testing with the page hidden)
+  perf?.start();
   renderer.info.reset();
   clockTime.tick(sim && simOn() && !sim.ready(clockTime.hour * 3600) ? 0 : dt); // (the clock waits for the cars' next window)
   const directed = xp?.directing;
@@ -911,6 +938,7 @@ function frame(_, manual) {
   }
   streamer.update(streamFocus, camera.position);
   if (++detailFrame % 15 === 0) cullSmall();
+  perf?.lap('tiles');
   // the loading screen stays until the tiles around the view are in
   if (loading) {
     const size = manifest.tileSize, wanted = manifest.tiles.filter((t) => Math.hypot((t.x + 0.5) * size - controls.target.x, (t.z + 0.5) * size - controls.target.z) <= Math.min(streamer.radius, 900)).length || 1;
@@ -928,6 +956,7 @@ function frame(_, manual) {
   if (traffic.group.parent && !simulating) traffic.update(dt, controls.target);
   if (sim) { sim.rate = clockTime.rate; if (simulating) sim.update(clockTime.hour * 3600, camera, dt); else sim.hide(); }
   if (simSignals) { props.mats.lens.uniforms.uSigOn.value = simulating ? 1 : 0; if (simulating) simSignals.update(clockTime.hour * 3600); }
+  perf?.lap('cars');
   // people on foot, round what is looked at (the cars round them: for crossing the street)
   if (people) {
     if (simulating) peopleCars = sim.cars ?? [];
@@ -938,6 +967,7 @@ function frame(_, manual) {
     people.update(dt, { camera, focus: directed || chase.on ? null : controls.target, hour: clockTime.hour, T: clockTime.hour * 3600, cars: peopleCars, signals: simulating ? simSignals : null, detail: governor.detail,
       player: (mode === 'walk' || mode === 'bike') ? active()?.view : null });
   }
+  perf?.lap('people');
   // the one being played: on foot, in the car, in the air (the simulated cars round it fade rather than pass through)
   const player = active();
   aroundYou(player, simulating);
@@ -968,9 +998,13 @@ function frame(_, manual) {
     renderer.shadowMap.needsUpdate = !env.sun.shadow.map || (env.sun.shadow.intensity > 0 && (key !== shadowKey || ++shadowFrame % 3 === 0));
     shadowKey = key;
   }
+  perf?.lap('rest');
   lampLight.update(scene, controls.target, camera.position, env.night);
+  perf?.lap('lamps');
   atmosphere.bloom.intensity = guiState.bloom ? env.bloom * 3 : 0;
+  const shadowed = renderer.shadowMap.needsUpdate && env.sun.castShadow;
   atmosphere.render(dt);
+  perf?.draw(shadowed);
   if (manual == null) governor.update(dt, loading, xp?.directing && !xp.fading);
   if (!loading) updateViewLink(performance.now());
 
