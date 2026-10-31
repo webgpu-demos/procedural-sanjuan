@@ -17,6 +17,7 @@ import { shared } from './materials.js';
 import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
 
 const NEAR = 700, MID = 2800, LIGHTS = 12000;           // metres from the camera (near: the default; sim.near)
+const NONE = []; // (an empty cell: a lookup that finds nothing makes no array; never added to. Not frozen: a frozen array is iterated the slow way, allocating)
 const BAND = 110;                                       // a car hands over from its model to its box over this
 const DETAIL = 250;                                     // within this, the full model; beyond, a lighter one
 // a 24 m cell's number (the corrected levels by cell, fixAt): the cell east of it is +1, north +CELLS
@@ -224,7 +225,7 @@ export class SimTraffic {
   onExpressway(x, z, heading) {
     const c = cellKey(x, z), hx = Math.sin(heading), hz = Math.cos(heading);
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
-      for (const g of this.laneCells?.get(c + a * CELLS + b) ?? []) {
+      for (const g of this.laneCells?.get(c + a * CELLS + b) ?? NONE) {
         if (g.tx * hx + g.tz * hz < 0.9 || /_link$/.test(g.highway)) continue;
         const u = (x - g.x0) * g.tx + (z - g.z0) * g.tz, d = (x - g.x0) * -g.tz + (z - g.z0) * g.tx;
         if (u >= 0 && u <= g.len && Math.abs(d) <= g.sumo * g.sw / 2 + 1) return true;
@@ -235,20 +236,20 @@ export class SimTraffic {
   // p: a seen car's place; heading: the way it faces. The move across into its painted lane, [dx, dz], or null
   relane(p, heading) {
     const c = cellKey(p[0], p[2]), hx = Math.sin(heading), hz = Math.cos(heading);
-    let best = null, bd = Infinity;
+    let best = null, bd = Infinity, bu = 0, bdd = 0;
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
-      for (const g of this.laneCells.get(c + a * CELLS + b) ?? []) {
+      for (const g of this.laneCells.get(c + a * CELLS + b) ?? NONE) {
         if (g.tx * hx + g.tz * hz < 0.9) continue; // (driving along it)
         const u = (p[0] - g.x0) * g.tx + (p[2] - g.z0) * g.tz;
         if (u < -0.5 || u > g.len + 0.5) continue;
         const d = (p[0] - g.x0) * -g.tz + (p[2] - g.z0) * g.tx; // (to the right of the way)
         // (out of its lanes: on another road where two meet or part, a ramp alongside; left as SUMO drove it)
         if (Math.abs(d) > g.sumo * g.sw / 2 + 0.5 || Math.abs(d) >= bd) continue;
-        bd = Math.abs(d); best = [g, u, d];
+        bd = Math.abs(d); best = g; bu = u; bdd = d;
       }
     }
     if (!best) return null;
-    const [g, u, d] = best;
+    const g = best, u = bu, d = bdd;
     const fromRight = g.sumo / 2 - 0.5 - d / g.sw;                // SUMO's lane, counted from the right
     // (more lanes in SUMO than painted, where the paint is narrower than OSM's count: SUMO's lanes share the painted
     // width evenly, so that two cars side by side in SUMO do not ride in one painted lane, the one through the other)
@@ -265,7 +266,9 @@ export class SimTraffic {
     }
     // (one lane: kept as far off its middle as SUMO had it, in metres; a ramp seven metres wide does not spread it)
     const shift = g.painted === 1 && g.sumo === 1 ? centre : centre + (g.painted / 2 - 0.5 - lane) * g.lw - d;
-    return [-g.tz * shift, g.tx * shift];
+    const out = this.relaned ??= [0, 0]; // (one array, filled each call: the caller takes the numbers out)
+    out[0] = -g.tz * shift; out[1] = g.tx * shift;
+    return out;
   }
 
   raise(roads, ground, drawn) {
@@ -315,9 +318,12 @@ export class SimTraffic {
     let best = null, score = Infinity;
     this.fixEdge = null;
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
-      for (const [x0, y0, z0, x1, y1, z1, n0, n1, hw, oneway, e] of this.fixes?.get(c + a * CELLS + b) ?? []) {
-        const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
-        const d = Math.hypot(x0 + dx * f - x, z0 + dz * f - z), h = y0 + (y1 - y0) * f;
+      const list = this.fixes?.get(c + a * CELLS + b);
+      if (!list) continue;
+      for (let k = 0; k < list.length; k++) {
+        const sg = list[k], x0 = sg[0], y0 = sg[1], z0 = sg[2], n0 = sg[6], n1 = sg[7], hw = sg[8], oneway = sg[9], e = sg[10];
+        const dx = sg[3] - x0, dz = sg[5] - z0, y1 = sg[4], l2 = dx * dx + dz * dz || 1, f = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l2));
+        const ex = x0 + dx * f - x, ez = z0 + dz * f - z, d = Math.sqrt(ex * ex + ez * ez), h = y0 + (y1 - y0) * f;
         if (d > hw || Math.abs(h - y) >= 2.5) continue;
         if (heading != null) {
           const al = (hx * dx + hz * dz) / Math.sqrt(l2), along = oneway === 1 ? al : oneway === -1 ? -al : Math.abs(al);
@@ -410,7 +416,15 @@ export class SimTraffic {
       // (beyond the boxes only the lamps show, and only from dusk to dawn)
       if (!followed && (d2 > LIGHTS * LIGHTS || (d2 > MID * MID && night <= 0.02))) continue;
       let heading = W.heading[i], speed = 0, hadQ = false;
-      if (d2 > MID * MID && !followed) {
+      // A box beyond the models (past sim.near): its way, speed and brake lights, and its place on what is drawn (its
+      // painted lane, the corrected level, the deck or the street under it), worked out every 4th frame, a quarter of
+      // them each frame; in between it keeps its heading and the move and height over its track it had. Out there a
+      // car moves a few pixels a frame; worked out every frame for the thousand or so of them, they were over half the
+      // frame's time on an M3 in the opening's ride.
+      const box = !followed && d2 <= MID * MID && d2 > this.near * this.near, px0 = p[0], pz0 = p[2], py0 = p[1];
+      const placed = box ? this.placed.get(vid) : null, reuse = !!placed && placed[4] >= frame - 4 && (frame + vid) % 4 !== 0;
+      if (reuse) { heading = placed[6]; speed = placed[7]; }
+      else if (d2 > MID * MID && !followed) {
         // only its lamps show: the way along its stretch of track is near enough (tens of thousands of these)
         const a = (W.start[i] + W.cursor[i]) * 4, K = W.K, hx = K[a + 5] - K[a + 1], hz = K[a + 7] - K[a + 3];
         if (hx * hx + hz * hz > 0.01) heading = W.heading[i] = Math.atan2(hx, hz);
@@ -420,18 +434,18 @@ export class SimTraffic {
         hadQ = SimTraffic.at(W, i, T - 0.5, q); const hadR = SimTraffic.at(W, i, T + 0.5, r);
         SimTraffic.at(W, i, T, p); // (restore the cursor)
         const hx = (hadR ? r[0] : p[0]) - (hadQ ? q[0] : p[0]), hz = (hadR ? r[2] : p[2]) - (hadQ ? q[2] : p[2]);
-        const moved = Math.hypot(hx, hz); speed = moved / ((hadQ ? 0.5 : 0) + (hadR ? 0.5 : 0) || 1);
+        const moved = Math.sqrt(hx * hx + hz * hz); speed = moved / ((hadQ ? 0.5 : 0) + (hadR ? 0.5 : 0) || 1);
         let fx = hx, fz = hz;
         // (a slow car takes its heading over a longer stretch of its way: SUMO moves a car into the next lane in one
         // step of a second, and in a queue at walking pace that step was three metres sideways to one forward, the car
         // turned broadside across the lanes for that second)
         if (moved > 0.02 && moved < 8) {
           const back = this.back, on = this.on ??= [0, 0, 0];
-          for (const span of [1.5, 3]) {
+          for (let sp = 0; sp < 2; sp++) { const span = sp ? 3 : 1.5;
             const hb = SimTraffic.at(W, i, T - span, back), ho = SimTraffic.at(W, i, T + span, on);
             const gx = (ho ? on[0] : p[0]) - (hb ? back[0] : p[0]), gz = (ho ? on[2] : p[2]) - (hb ? back[2] : p[2]);
-            if (Math.hypot(gx, gz) > Math.hypot(fx, fz)) { fx = gx; fz = gz; }
-            if (Math.hypot(fx, fz) >= 8) break;
+            if (gx * gx + gz * gz > fx * fx + fz * fz) { fx = gx; fz = gz; }
+            if (fx * fx + fz * fz >= 64) break;
           }
           SimTraffic.at(W, i, T, p);
         }
@@ -444,30 +458,26 @@ export class SimTraffic {
         if (was) { was[0] = heading; was[1] = frame; } else this.turns.set(vid, [heading, frame]);
       }
       // braking: slower than half a second ago by more than ~1.2 m/s², or standing in a queue
-      let brake = 0;
-      if (hadQ && (d2 < this.near * this.near || followed || (night > 0.02 && d2 < 2000 * 2000))) { // (only where a brake light can be seen)
+      let brake = reuse ? placed[8] : 0;
+      if (!reuse && hadQ && (d2 < this.near * this.near || followed || (night > 0.02 && d2 < 2000 * 2000))) { // (only where a brake light can be seen)
         const back = this.back;
         if (SimTraffic.at(W, i, T - 1.0, back)) {
-          const before = Math.hypot(q[0] - back[0], q[2] - back[2]) / 0.5;
+          const bx = q[0] - back[0], bz = q[2] - back[2], before = Math.sqrt(bx * bx + bz * bz) / 0.5;
           brake = before - speed > 0.6 || speed < 0.4 ? 1 : 0;
         }
         SimTraffic.at(W, i, T, p);
       }
       const sin = Math.sin(heading), cos = Math.cos(heading);
       const seen = d2 < MID * MID || followed;
-      // A box beyond the models (past sim.near): its place on what is drawn (its painted lane, the corrected level, the
-      // deck or the street under it) is worked out every 4th frame, a quarter of them each frame, and it keeps the
-      // move and the height over its track it had in between. Out there a car moves a few pixels a frame; worked out
-      // every frame for the thousand or so of them it was over half the frame's time on an M3 in the opening's ride.
-      const boxOnly = seen && !followed && d2 > this.near * this.near, px0 = p[0], pz0 = p[2], py0 = p[1];
-      let y, raised, sy, road = null, placed = boxOnly ? this.placed.get(vid) : null;
-      if (placed && placed[4] >= frame - 4 && (frame + vid) % 4 !== 0) {
+      // (a box between its 4th frames: as it was, moved along its track)
+      let y, raised, sy, road = null;
+      if (reuse) {
         p[0] += placed[0]; p[2] += placed[1]; y = sy = py0 + placed[2]; raised = placed[3];
       } else {
         // (in the lane the tiles paint, on the expressway: relane; where the lanes change in number, at a node, the move
         // changes, and the car drifts across to its new place over half a second, as in a lane change, not in a jump)
         if ((d2 < MID * MID || followed) && this.laneCells) {
-          const m = this.relane(p, heading) ?? [0, 0], was = this.shifts.get(vid);
+          const m = this.relane(p, heading) ?? (this.unmoved ??= [0, 0]).fill(0), was = this.shifts.get(vid);
           if (was && was[2] === frame - 1) { m[0] = was[0] + (m[0] - was[0]) * drift; m[1] = was[1] + (m[1] - was[1]) * drift; }
           if (was) { was[0] = m[0]; was[1] = m[1]; was[2] = frame; } else this.shifts.set(vid, [m[0], m[1], frame]);
           p[0] += m[0]; p[2] += m[1];
@@ -504,9 +514,9 @@ export class SimTraffic {
           if (h && h[1] === frame - 1 && Math.abs(y - h[0]) < 12 && Math.abs(y - h[0]) > 0.5) y = h[0] + (y - h[0]) * ease; // (a step: onto a deck, off it)
           if (h) { h[0] = y; h[1] = frame; } else this.heights.set(vid, [y, frame]);
         }
-        if (boxOnly) {
-          if (placed) { placed[0] = p[0] - px0; placed[1] = p[2] - pz0; placed[2] = y - py0; placed[3] = raised; placed[4] = frame; }
-          else this.placed.set(vid, [p[0] - px0, p[2] - pz0, y - py0, raised, frame]);
+        if (box) {
+          if (placed) { placed[0] = p[0] - px0; placed[1] = p[2] - pz0; placed[2] = y - py0; placed[3] = raised; placed[4] = frame; placed[6] = heading; placed[7] = speed; placed[8] = brake; }
+          else this.placed.set(vid, [p[0] - px0, p[2] - pz0, y - py0, raised, frame, null, heading, speed, brake]);
         }
       }
       // A car setting off or arriving (or split where SUMO cleared a jam) fades in or out, over about half a

@@ -54,6 +54,7 @@ export class Streamer {
     this.blocks = new Map(); // chunk key -> { state, mesh }: the distant buildings, BLOCK x BLOCK tiles a mesh
     this.blockRadius = blockRadius;
     this.inFlight = 0;
+    this.arrived = []; // what the workers have finished and the main thread has not yet taken in
     this.stats = { loaded: 0, buildings: 0, triangles: 0 };
   }
 
@@ -79,7 +80,7 @@ export class Streamer {
     this.workers = Array.from({ length: WORKERS }, () => {
       const w = new Worker(new URL('./tileWorker.js', import.meta.url), { type: 'module' });
       w.postMessage({ type: 'init', decks, channels, tileSize: this.manifest.tileSize, grid: { ...this.grid, data: data.slice().buffer } });
-      w.onmessage = (e) => this.onResult(e.data);
+      w.onmessage = (e) => this.arrived.push(e.data); // (taken in update(), a few at a time)
       return w;
     });
     this.nextWorker = 0;
@@ -119,6 +120,9 @@ export class Streamer {
   // focus: the point tiles are streamed around; eye: the camera position, for level of detail.
   update(focus, eye = focus) {
     const size = this.manifest.tileSize;
+    // The tiles the workers have finished, taken in a few milliseconds' worth a frame (at least one): taken in as they
+    // came, several arriving together held the picture for a tenth of a second, a stutter wherever the view moved on.
+    for (let t0 = performance.now(), first = true; this.arrived.length && (first || performance.now() - t0 < 4); first = false) { this.onResult(this.arrived.shift()); this.tookAny = true; }
     for (const [key, t] of this.tiles) {
       if (t.state !== 'ready' || (!t.trees && !t.signs && !t.atlases.length)) continue;
       // Distance from the eye to the nearest point of the tile, so things next to the camera are never the
@@ -157,13 +161,17 @@ export class Streamer {
     // ground under the camera was left out, the cars driving on the bare terrain in the foreground)
     const eyeScale = this.radius / Math.min(this.radius, NEAR_EYE);
     const dist = (tl) => {
-      const x = (tl.x + 0.5) * size, z = (tl.z + 0.5) * size;
-      return Math.min(Math.hypot(x - focus.x, z - focus.z), Math.hypot(x - eye.x, z - eye.z) * eyeScale);
+      const x = (tl.x + 0.5) * size, z = (tl.z + 0.5) * size, fx = x - focus.x, fz = z - focus.z, ex = x - eye.x, ez = z - eye.z;
+      return Math.min(Math.sqrt(fx * fx + fz * fz), Math.sqrt(ex * ex + ez * ez) * eyeScale);
     };
+    // (the scan of the area's tiles, four and a half thousand of them, for what to load and to drop: when the view has
+    // moved 16 m, a tile has come in, or every 20th frame; it was half a millisecond and a third of a megabyte of
+    // garbage every frame)
+    const moved = !this.scanAt || Math.abs(focus.x - this.scanAt[0]) + Math.abs(focus.z - this.scanAt[1]) + Math.abs(eye.x - this.scanAt[2]) + Math.abs(eye.z - this.scanAt[3]) > 16;
+    if (!moved && !this.tookAny && (this.scanFrame = (this.scanFrame ?? 0) + 1) % 20) return;
+    this.scanAt = [focus.x, focus.z, eye.x, eye.z]; this.tookAny = false;
     // unload
-    for (const [key, t] of this.tiles) {
-      if (t.state === 'ready' && dist(this.available.get(key)) > this.radius + this.hysteresis) this.unload(key);
-    }
+    this.tiles.forEach((t, key) => { if (t.state === 'ready' && dist(this.available.get(key)) > this.radius + this.hysteresis) this.unload(key); });
     // distant blocks: whole chunks of BLOCK x BLOCK tiles within the block radius (the loaded-tiles map hides
     // the buildings of the tiles that are in in full)
     const chunks = this.blockRadius > this.radius ? this.manifest.blocks?.chunks ?? [] : [], span = (this.manifest.blocks?.size ?? 4) * size;
@@ -172,11 +180,11 @@ export class Streamer {
     // load, nearest first: full tiles, then (with what is left of the workers) the distant blocks
     if (this.inFlight >= MAX_IN_FLIGHT) return;
     const wanted = [];
-    for (const [key, tl] of this.available) {
-      if (this.tiles.has(key)) continue;
+    this.available.forEach((tl, key) => {
+      if (this.tiles.has(key)) return;
       const d = dist(tl);
       if (d <= this.radius) wanted.push([d, key, tl]);
-    }
+    });
     // (nearest first, and those in front of the eye before those behind it: this.look, the way it looks)
     const [lx, lz] = this.look ?? [0, 0];
     for (const w of wanted) { const tl = w[2], vx = (tl.x + 0.5) * size - focus.x, vz = (tl.z + 0.5) * size - focus.z; w[0] *= 1 - 0.35 * ((vx * lx + vz * lz) / (Math.hypot(vx, vz) || 1)); }
