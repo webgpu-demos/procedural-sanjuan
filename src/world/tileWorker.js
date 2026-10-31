@@ -10,6 +10,25 @@ let grid = null, surface = null, merging = null, channels = null; // merging: th
 let accel = null; // the acceleration lanes' quads (roadway.js accelLanes): paved in the tiles they cross
 
 // All typed arrays in a result, so they are transferred rather than copied.
+// Every mesh's bounding box and sphere (positions -> [min xyz, max xyz, centre xyz, radius], as three works them out),
+// worked out here: on the main thread they were most of a tile's arrival, a hitch in the picture as the city streamed
+function bound(o) {
+  if (!o || typeof o !== 'object' || ArrayBuffer.isView(o)) return;
+  const p = o.position;
+  if (p instanceof Float32Array && p.length >= 3) {
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i < p.length; i += 3) {
+      const x = p[i], y = p[i + 1], z = p[i + 2];
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+    let r2 = 0;
+    for (let i = 0; i < p.length; i += 3) { const dx = p[i] - cx, dy = p[i + 1] - cy, dz = p[i + 2] - cz, d = dx * dx + dy * dy + dz * dz; if (d > r2) r2 = d; }
+    o.bounds = new Float32Array([x0, y0, z0, x1, y1, z1, cx, cy, cz, Math.sqrt(r2)]);
+  }
+  for (const v of Object.values(o)) if (v !== o.bounds) bound(v);
+}
+
 function buffers(o, out = []) {
   for (const v of Object.values(o)) {
     if (ArrayBuffer.isView(v)) out.push(v.buffer);
@@ -77,12 +96,13 @@ self.onmessage = async ({ data: m }) => {
     try {
       const res = await fetch(m.url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      if (m.type === 'blocks') { const mesh = blockChunk(await res.arrayBuffer()); self.postMessage({ type: 'blocks', key: m.key, mesh }, buffers(mesh)); return; }
+      if (m.type === 'blocks') { const mesh = blockChunk(await res.arrayBuffer()); bound(mesh); self.postMessage({ type: 'blocks', key: m.key, mesh }, buffers(mesh)); return; }
       const tile = decodeTile(await res.arrayBuffer());
       if (merging) tile.props = tile.props.filter((p) => !merging(p));
       const paved = accel ? accelTile(tile, accel, m.tileSize, accel.on) : tile;
       const mesh = buildTile(paved, grid, m.tileSize, surface, channels);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
+      bound(mesh);
       self.postMessage({ type: 'tile', key: m.key, mesh }, buffers(mesh));
     } catch (e) {
       self.postMessage({ type: m.type === 'blocks' ? 'blocks-error' : 'error', key: m.key, message: e.message });

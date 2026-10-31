@@ -665,13 +665,17 @@ export class Props {
       by.get(key).push(i);
     }
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3(), s = new THREE.Vector3();
+    // (the ground under each prop, looked up once: a tree is four instanced parts, a street light three, and the
+    // lookups were most of a tile's arrival on the main thread)
+    const under = new Float32Array(props.length / 6).fill(NaN);
+    const groundAt = (i) => { const k = i / 6; let y = under[k]; if (y !== y) y = under[k] = ground(props[i + 3], props[i + 4]); return y; };
     // An InstancedMesh with one matrix per prop: `local` offsets the part within the prop's frame.
     const instanced = (rows, geo, mat, { parent = group, shadow = true, lift = 0, local = null, scale = null } = {}) => {
       const mesh = new THREE.InstancedMesh(geo, mat, rows.length);
       rows.forEach((i, n) => {
         const x = props[i + 3], z = props[i + 4], k = scale ? scale(i) : props[i + 5];
         q.setFromAxisAngle(up, props[i + 2]);
-        v.set(x, ground(x, z) + lift, z);
+        v.set(x, groundAt(i) + lift, z);
         if (local) v.add(new THREE.Vector3(...local).multiplyScalar(props[i + 5]).applyQuaternion(q)); // (parts sit on a model of that size)
         if (Array.isArray(k)) s.set(...k); else s.setScalar(k);
         mesh.setMatrixAt(n, m.compose(v, q, s));

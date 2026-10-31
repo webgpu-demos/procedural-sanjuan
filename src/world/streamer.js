@@ -19,12 +19,25 @@ const NEAR_EYE = 600; // metres round the camera always streamed in full, howeve
 // Distance (m) from the eye within which a tile shows its full-size photo atlas instead of the small one.
 const ROOFS_FULL = 600, WALLS_FULL = 900;
 
+// A thing that never moves once built (a tile, its buildings and props; a deck): its matrices set once and left. The
+// renderer brings every object's matrix up to date on every render of the scene, four a frame (the lamps' light map,
+// the picture, its reflection, its depth), and for the four thousand objects of the tiles round the view that was
+// several milliseconds each on an M3. (Children added later, and anything moved, still update.)
+export function frozen(o) {
+  o.updateMatrixWorld(true);
+  o.traverse((c) => { c.matrixAutoUpdate = false; });
+  return o;
+}
+
 function geometry(arrays, attrs) {
   const g = new THREE.BufferGeometry();
   for (const [name, size] of attrs) if (arrays[name]?.length) g.setAttribute(name, new THREE.BufferAttribute(arrays[name], size));
   if (arrays.index) g.setIndex(new THREE.BufferAttribute(arrays.index, 1));
-  g.computeBoundingSphere();
-  g.computeBoundingBox();
+  const b = arrays.bounds; // (from the worker: tileWorker.js bound)
+  if (b) {
+    g.boundingBox = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(b[6], b[7], b[8]), b[9]);
+  } else { g.computeBoundingSphere(); g.computeBoundingBox(); }
   return g;
 }
 
@@ -198,7 +211,7 @@ export class Streamer {
     if (!msg.mesh.position.length) return;
     b.mesh = new THREE.Mesh(geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3], ['aTile', 2]]), this.materials.blocks);
     b.mesh.name = `blocks ${msg.key}`;
-    this.scene.add(b.mesh);
+    this.scene.add(frozen(b.mesh));
   }
 
   unloadBlocks(key) {
@@ -291,7 +304,7 @@ export class Streamer {
     }
     const tris = terrain.index.length / 3 + roads.position.length / 9 + buildings.triangles;
     Object.assign(t, { state: 'ready', group, trees, signs, atlases, signNear: false, buildings: info.length, tris });
-    this.scene.add(group);
+    this.scene.add(frozen(group));
     const tl = this.available.get(msg.key);
     this.setLoaded(tl.x, tl.z, true);
     this.stats.loaded++; this.stats.buildings += info.length; this.stats.triangles += tris;

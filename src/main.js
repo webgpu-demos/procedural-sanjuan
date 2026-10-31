@@ -8,7 +8,7 @@ import GUI from 'lil-gui';
 import { makeProjection } from './shared/geo.js';
 import { createMaterials, shared } from './world/materials.js';
 import { loadTextures } from './world/textures.js';
-import { Streamer } from './world/streamer.js';
+import { Streamer, frozen } from './world/streamer.js';
 import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
@@ -153,7 +153,7 @@ const FLOOD = parseSeaLevel(params.get('sea'), manifest.sea ?? 0);
   scene.add(plain);
 }
 // the ground of the tiles not loaded, and of the island around the area (far.js)
-buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj).then((far) => far && scene.add(far));
+buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj).then((far) => far && scene.add(frozen(far)));
 // how far the sea lies from the land, for its shallows and its surf (water.js)
 // (with the sea raised, its shore is where the ground meets the new level: the shallows and the surf follow it inland)
 buildShore(streamer.grid, FLOOD != null ? { ...manifest, sea: FLOOD } : manifest, `tiles/${AREA}`).catch((e) => console.warn('shore:', e.message));
@@ -194,14 +194,14 @@ const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), str
 scene.add(railways);
 {
   const flyovers = await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint }, drawnDecks);
-  scene.add(flyovers);
+  scene.add(frozen(flyovers));
   streamer.under = overDecks(flyovers.userData.footprints, PROP); // (nothing on the ground standing up through a deck)
   // (the street lights on the decks: flyovers.js; the tiles light the roads up to them)
   const lights = flyovers.userData.lights, rows = new Float32Array(lights.length * 6), level = new Map();
   lights.forEach(([x, z, rot, y], k) => { rows.set([PROP.LIGHT, 0, rot, x, z, 1], k * 6); level.set(Math.fround(x) + ',' + Math.fround(z), y); });
-  if (lights.length) scene.add(Object.assign(props.build(rows, [], (x, z) => level.get(x + ',' + z) ?? streamer.ground(x, z)).group, { name: 'deck lights' }));
+  if (lights.length) scene.add(frozen(Object.assign(props.build(rows, [], (x, z) => level.get(x + ',' + z) ?? streamer.ground(x, z)).group, { name: 'deck lights' })));
 }
-if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));
+if (manifest.structures) scene.add(frozen(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth)));
 if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
 const traffic = new Traffic(roads, streamer.surface, drawnDecks);
 traffic.eye = camera.position; // (the level of detail of its cars)
