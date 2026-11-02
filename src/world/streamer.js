@@ -80,7 +80,12 @@ export class Streamer {
     this.workers = Array.from({ length: WORKERS }, () => {
       const w = new Worker(new URL('./tileWorker.js', import.meta.url), { type: 'module' });
       w.postMessage({ type: 'init', decks, channels, tileSize: this.manifest.tileSize, grid: { ...this.grid, data: data.slice().buffer } });
-      w.onmessage = (e) => this.arrived.push(e.data); // (taken in update(), a few at a time)
+      w.onmessage = (e) => {
+        this.arrived.push(e.data); // (taken in update(), a few at a time)
+        // (and with no frames to take them in, the page hidden, after a moment all at once: a city loading in a
+        // background tab had stopped at its first eight tiles)
+        this.drain ??= setTimeout(() => { this.drain = null; if (performance.now() - (this.updated ?? 0) > 400) while (this.arrived.length) this.onResult(this.arrived.shift()); }, 500);
+      };
       return w;
     });
     this.nextWorker = 0;
@@ -120,6 +125,7 @@ export class Streamer {
   // focus: the point tiles are streamed around; eye: the camera position, for level of detail.
   update(focus, eye = focus) {
     const size = this.manifest.tileSize;
+    this.updated = performance.now();
     // The tiles the workers have finished, taken in a few milliseconds' worth a frame (at least one): taken in as they
     // came, several arriving together held the picture for a tenth of a second, a stutter wherever the view moved on.
     for (let t0 = performance.now(), first = true; this.arrived.length && (first || performance.now() - t0 < 4); first = false) { this.onResult(this.arrived.shift()); this.tookAny = true; }
