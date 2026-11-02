@@ -122,7 +122,9 @@ class Rig {
     for (const s of ['L', 'R']) ahead.add(this.bone(`Bip01_${s}_Toe0`).getWorldPosition(V()).sub(this.bone(`Bip01_${s}_Foot`).getWorldPosition(V())));
     this.turn = new THREE.Group(); this.turn.rotation.y = -Math.atan2(ahead.x, ahead.z); this.turn.add(this.root);
   }
-  play(weights) { for (const [n, w] of Object.entries(weights)) { const a = this.clip[n]; if (!a || (!w && !a.isRunning())) continue; if (!a.isRunning()) a.play(); a.setEffectiveWeight(w); } }
+  // (scheduled, not running: a move is played with its time set and timeScale 0, which three.js counts as not running,
+  // and a move let go of kept the weight of its last frame, its end pose blended into all he did after)
+  play(weights) { for (const [n, w] of Object.entries(weights)) { const a = this.clip[n]; if (!a || (!w && !a.isScheduled())) continue; if (!a.isScheduled()) a.play(); a.setEffectiveWeight(w); } }
 }
 // Bones turned in the world: so that the bone points from itself through its child at `target` (aim), or about an axis
 const _q = new THREE.Quaternion(), _p = new THREE.Quaternion(), _a = V(), _b = V(), _c = V();

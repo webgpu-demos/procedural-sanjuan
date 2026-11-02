@@ -1,6 +1,7 @@
 # The crowd's Rocketbox skeleton (22 Bip01 bones, as tools/assets/crowd.py exports it) and MotionBricks' SOMA skeleton,
 # and motion carried from either to the other: each Bip01 bone and the SOMA joint it stands for point the same way in
-# the world (the two rest poses' bones aligned once, bone by bone, then every frame turned as the other turns); the
+# the world (the two rest poses' bones aligned once, bone by bone, then each turned in the world as the other turns
+# from its rest); the
 # hips carried along scaled by the two skeletons' hip heights. SOMA joints with no Bip01 bone (the second neck joint,
 # the jaw, the eyes, the fingers) keep their rest pose.
 import json, struct
@@ -125,16 +126,23 @@ class Retarget:
         hs = self.sref[0][1, 3] - min(self.sref[self.j[f'{s}ToeEnd']][1, 3] for s in ('Left', 'Right'))
         self.scale = hs / hb
         self.ground_b = min(self.bw[bi[f'Bip01 {s} Toe0']][1, 3] for s in 'LR')
-        # each bone's rest aligned to its joint's: the turn that points it the joint's way, then the offset between them
+        # each bone's rest put to its joint's: A, the turn that points the arm's bones the joint's way at rest (SOMA
+        # rests in a T-pose, Rocketbox in an A-pose; the rest stand alike at rest, a level head, flat feet, however
+        # their bones' axes run), and O, what is left between them. A joint turns in the world as its bone turns from
+        # its rest, from the joint's rest turned by A back to the bone's way:
+        #   G_j = F (R_b R_b0^T) F^T A^T G_j0 = F R_b O,  O = R_b0^T F^T A^T G_j0
+        # (A applied after the bone's turn as well, as it was, swung every arm by the T-pose's 45 degrees from where it
+        # was: arms hanging at rest went in half raised, and the model's own came back out raised to the shoulders or
+        # behind the back; and every bone put to its joint's way tipped the head back 15 degrees)
         self.align, self.offset = [], []
         for k, b in enumerate(rb.bones):
             j = self.j[MAP[b]]
             d_s = self._soma_dir(j)
             d_b = self.F @ self._bone_dir(k)
-            A = self._swing(d_b, d_s)
+            A = self._swing(d_b, d_s) if b.split()[-1] in ('UpperArm', 'Forearm', 'Hand') else np.eye(3)
             Rb = A @ self.F @ unit(self.bw[k])
             self.align.append(A)
-            self.offset.append(Rb.T @ unit(self.sref[j]))       # SOMA joint = (F W_b) A' ... : G_j = A F R_b O
+            self.offset.append(Rb.T @ unit(self.sref[j]))
         self.align, self.offset = np.array(self.align), np.array(self.offset)
 
     def _soma_dir(self, j):
@@ -182,7 +190,7 @@ class Retarget:
         for f in range(F):
             G = {}
             for k, b in enumerate(self.rb.bones):
-                G[self.j[MAP[b]]] = H @ self.align[k] @ self.F @ unit(bones_world[f][k]) @ self.offset[k]
+                G[self.j[MAP[b]]] = H @ self.F @ unit(bones_world[f][k]) @ self.offset[k]
             hips = self.F @ bones_world[f][0][:3, 3]
             hips = H @ ((hips - p0) * [self.scale, 0, self.scale]) + [at[0], 0, at[1]]
             hips[1] = (bones_world[f][0][1, 3] - self.ground_b) * self.scale + self.ground_s()
@@ -222,7 +230,7 @@ class Retarget:
             Ws = self.soma_world(soma_local[f])
             Wb = {}
             for k, b in enumerate(rb.bones):
-                Rw = self.F.T @ self.align[k].T @ unit(Ws[self.j[MAP[b]]]) @ self.offset[k].T
+                Rw = self.F.T @ unit(Ws[self.j[MAP[b]]]) @ self.offset[k].T
                 Wb[rb.node[k]] = Rw
             for k, b in enumerate(rb.bones):
                 i = rb.node[k]; p = rb.parent[i]
