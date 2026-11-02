@@ -647,6 +647,9 @@ export class Props {
       wire: wireMaterial(),
     };
     this.mats.poolCool = lampMaterial(this.mats.pool.map, {}, { grid: true }); // white LED lamps on the back streets
+    // (a tree's shadow from afar: its simple crown, at its size in the tree's own units; drawn only into the shadow map)
+    this.mats.shadowPlain = new THREE.MeshBasicMaterial();
+    for (const t of this.trees) if (!t.palm) t.shadowCrown = this.models.blob.clone().scale(t.radius * 1.75, t.height, t.radius * 1.75);
     this.time = 0;
     this.signalSlot = null; // (x, z, rot) -> the head's slot in the simulated signals' texture (simsignals.js)
   }
@@ -702,14 +705,22 @@ export class Props {
       const kind = key >> 4, variant = key & 15;
       if (kind === PROP.TREE) {
         const t = this.trees[variant % this.trees.length];
-        const parts = [[t.branches, t.lite.branches, t.branchMat], [t.leaves, t.lite.leaves, t.leafMat], [t.solid, t.lite.solid, this.mats.metal]];
-        for (const [full, lite, mat] of parts) {
+        const parts = [[t.branches, t.lite.branches, t.branchMat, 'branches'], [t.leaves, t.lite.leaves, t.leafMat, 'leaves'], [t.solid, t.lite.solid, this.mats.metal, 'solid']];
+        for (const [full, lite, mat, part] of parts) {
           if (!full) continue;
           const a = instanced(rows, full, mat, { parent: near });
           // (the lighter tree in the same places: the same matrices)
           const b = new THREE.InstancedMesh(lite, mat, rows.length);
           b.instanceMatrix = a.instanceMatrix; b.castShadow = b.receiveShadow = true; b.computeBoundingSphere();
           mid.add(b);
+          // In the sun's shadow map (shadowShapes: main.js swaps them in for its redraw), a full tree is drawn as its
+          // lighter one, and a lighter one as its simple crown (its branches not at all): a shadow is a shape on the
+          // ground, a quarter of the triangles leafy enough, and at a hundred metres and more a crown's shape. Trees
+          // were most of what went into the shadow map, 4 of its 4.7 million triangles on the opening's ride at 9:30.
+          if (!t.palm) {
+            a.userData.shadowAs = [lite, null];
+            b.userData.shadowAs = part === 'leaves' ? [t.shadowCrown, this.mats.shadowPlain] : [null, null];
+          }
         }
         if (t.far) instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false });
         else instanced(rows, this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] });

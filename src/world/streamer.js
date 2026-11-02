@@ -232,6 +232,20 @@ export class Streamer {
     b.mesh = new THREE.Mesh(geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3], ['aTile', 2]]), this.materials.blocks);
     b.mesh.name = `blocks ${msg.key}`;
     this.scene.add(frozen(b.mesh));
+    this.coverBlocks(b);
+  }
+  // A chunk of distant blocks every tile of which is in in full is not drawn at all. The loaded-tiles map hides the
+  // blocks under the tiles that are in, but a pixel at a time: their triangles were still drawn and thrown away, the
+  // chunks round the view among the densest of the city.
+  coverBlocks(b) {
+    if (!b?.mesh) return;
+    const B = this.manifest.blocks?.size ?? 4, [cx, cz] = b.chunk;
+    let covered = true;
+    for (let x = cx * B; x < cx * B + B && covered; x++) for (let z = cz * B; z < cz * B + B; z++) {
+      const key = tileKey(x, z);
+      if (this.available.has(key) && this.tiles.get(key)?.state !== 'ready') { covered = false; break; }
+    }
+    b.mesh.visible = !covered;
   }
 
   unloadBlocks(key) {
@@ -368,6 +382,9 @@ export class Streamer {
     if (i < 0 || j < 0 || i >= this.mask.w || j >= this.mask.h) return;
     tex.image.data[j * this.mask.w + i] = on ? 255 : 0;
     tex.needsUpdate = true;
+    // (and the distant blocks of its chunk: drawn, or all under tiles in full)
+    const B = this.manifest.blocks?.size ?? 4, cx = Math.floor(tx / B), cz = Math.floor(tz / B);
+    for (const b of this.blocks.values()) if (b.chunk[0] === cx && b.chunk[1] === cz) this.coverBlocks(b);
   }
 
   // Building under a raycast hit on a facade mesh: { usage, storeys, height, base, tile, index } (index: in the tile).
