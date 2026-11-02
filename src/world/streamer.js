@@ -22,7 +22,8 @@ const ROOFS_FULL = 600, WALLS_FULL = 900;
 // A thing that never moves once built (a tile, its buildings and props; a deck): its matrices set once and left. The
 // renderer brings every object's matrix up to date on every render of the scene, four a frame (the lamps' light map,
 // the picture, its reflection, its depth), and for the four thousand objects of the tiles round the view that was
-// several milliseconds each on an M3. (Children added later, and anything moved, still update.)
+// several milliseconds each on an M3. (Children added later, and anything moved, still update; the scene's own matrix
+// is left too, main.js, or every world matrix under it is worked out again regardless.)
 export function frozen(o) {
   o.updateMatrixWorld(true);
   o.traverse((c) => { c.matrixAutoUpdate = false; });

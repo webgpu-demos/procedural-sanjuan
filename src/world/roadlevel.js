@@ -19,7 +19,6 @@ const key = (x, z) => Math.floor(x / CELL) * 65536 + Math.floor(z / CELL);
 // one up to CLEAR over it, along its way: a car is 1.5 to 2 m tall, and a deck's girder 1.5 m deep
 const LOW = 1.5, CLEAR = 3.0;
 const CORNERS = [[1, 1], [-1, 1], [1, -1], [-1, -1]];
-const NONE = []; // (an empty cell: a lookup per car corner per frame that finds nothing makes no array; never added to. Not frozen: a frozen array is iterated the slow way, allocating)
 
 // The streets' carriageways as the tiles pave them (roadway.js pavedHalf: OSM's width, else the lanes), and the
 // junctions where they meet, as strips and discs: where a car on the street may be (DrawnDecks.fit)
@@ -64,7 +63,7 @@ export class DrawnDecks {
   constructor(roads, ground) {
     this.cells = new Map();
     this.count = 0;
-    this.found = [];
+    this.found = new Float64Array(96); this.nFound = 0; // (under: level, own road 0/1, along 0/1 per deck; a fixed buffer, nothing made per call)
     const built = structureEdges(roads.edges, ground), lanesOf = roadLanes(roads.edges);
     this.segs = [];
     roads.edges.forEach((e, ei) => {
@@ -135,24 +134,28 @@ export class DrawnDecks {
 
   // Can a car's corner be at (x, z) on a deck at level y: on a deck's paving there, not in a parapet (or a median's
   // barrier)? A parapet another deck's paving covers at its level is not drawn (flyovers.js: paved())
+  // (these four asked for every corner of every car near the view every frame: indexed, no destructuring, nothing
+  // made per call; they and their kind were most of a megabyte of garbage a frame, the collector's pauses in the ride)
   cornerOn(x, z, y) {
-    let on = false, wall = null;
-    for (const seg of this.cells.get(key(x, z)) ?? NONE) {
-      const [x0, y0, z0, x1, y1, z1, w, e, sides] = seg;
-      const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
+    const list = this.cells.get(key(x, z));
+    if (!list) return false;
+    let on = false, wall = null, wallH = 0, wallX = 0, wallZ = 0;
+    for (let i = 0; i < list.length; i++) {
+      const seg = list[i], x0 = seg[0], y0 = seg[1], z0 = seg[2], w = seg[6], sides = seg[8];
+      const dx = seg[3] - x0, dz = seg[5] - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < -0.02 || t > 1.02) continue;
-      const f = Math.max(0, Math.min(1, t)), h = y0 + (y1 - y0) * f;
+      const f = Math.max(0, Math.min(1, t)), h = y0 + (seg[4] - y0) * f;
       if (Math.abs(h - y) > 0.6) continue;
-      const L = Math.sqrt(l2), o = ((x - x0) * -dz + (z - z0) * dx) / L, ao = Math.abs(o), md = sides?.[o >= 0 ? 1 : 0];
+      const L = Math.sqrt(l2), o = ((x - x0) * -dz + (z - z0) * dx) / L, ao = Math.abs(o), md = sides ? sides[o >= 0 ? 1 : 0] : null;
       if (md) {
         if (Math.abs(ao - md.m) < 0.25) return false; // (the median's barrier)
         if (ao < md.m && Math.abs(h - y) < 0.4) on = true;
         continue;
       }
       if (ao <= w - 0.25) { if (Math.abs(h - y) < 0.4) on = true; }
-      else if (ao <= w + 0.05) wall = [seg, h, dx / L, dz / L];
+      else if (ao <= w + 0.05) { wall = seg; wallH = h; wallX = dx / L; wallZ = dz / L; }
     }
-    if (wall && !this.paved(x, z, wall[1], wall[0][7], wall[2], wall[3])) return false;
+    if (wall && !this.paved(x, z, wallH, wall[7], wallX, wallZ)) return false;
     return on;
   }
 
@@ -161,11 +164,14 @@ export class DrawnDecks {
   // come down beside the expressway, at grade a step below its deck: the cars on it had driven half in under the
   // expressway's edge. (Under its side only: one coming up to its own ramp's start meets the deck end on.)
   beneath(x, z, y, road) {
-    for (const [x0, y0, z0, x1, y1, z1, w, e] of this.cells.get(key(x, z)) ?? NONE) {
+    const list = this.cells.get(key(x, z));
+    if (!list) return false;
+    for (let i = 0; i < list.length; i++) {
+      const seg = list[i], e = seg[7];
       if (e === road) continue;
-      const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
+      const x0 = seg[0], y0 = seg[1], z0 = seg[2], w = seg[6], dx = seg[3] - x0, dz = seg[5] - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < 0 || t > 1) continue;
-      const h = y0 + (y1 - y0) * t - y;
+      const h = y0 + (seg[4] - y0) * t - y;
       if (h < -0.5 || h > 2) continue;
       const ao = Math.abs(((x - x0) * -dz + (z - z0) * dx) / Math.sqrt(l2));
       // (in under its side; or, the deck about at the street's level where it lands, against its parapet, where one is
@@ -180,44 +186,54 @@ export class DrawnDecks {
   // the street's carriageway), the least of up to 4 m; null if it is there already, or no such shift is found.
   // SUMO's lanes are its own: an outer lane wider than the deck drawn, a car merging off a ramp's line into the
   // expressway's outer lane, the inner lane of a dual carriageway against the other's parapet.
+  // (the shift returned is one array, filled each call: the caller takes the numbers out)
   fit(surface, x, z, y, heading, deck, W, L, road = null) {
     const s = Math.sin(heading), c = Math.cos(heading), hw = W * 0.45, hl = L * 0.42, rx = c, rz = -s;
-    // (a corner of a car on a deck past the deck's end: on the street there, at about its level)
-    const street = (px, pz) => this.ground.on(px, pz) && Math.abs(streetAt(surface, px, pz, y) + (this.lift?.(px, pz) ?? 0) - y) < 0.4;
-    const ok = deck ? (px, pz) => this.cornerOn(px, pz, y) || street(px, pz) : (px, pz) => this.ground.on(px, pz) && !this.beneath(px, pz, y, road);
-    const bad = (dx, dz) => {
-      let n = 0;
-      for (let q = 0; q < 4; q++) { const u = CORNERS[q][0], v = CORNERS[q][1]; if (!ok(x + dx + rx * u * hw + s * v * hl, z + dz + rz * u * hw + c * v * hl)) n++; }
-      return n;
-    };
-    const b0 = bad(0, 0);
+    const b0 = this.offCorners(surface, x, z, y, deck, road, s, c, hw, hl);
     if (!b0) return null;
-    let best = null, bestN = b0;
+    let found = false, bestN = b0;
+    const best = this.fitted ??= [0, 0];
     for (let k = 1; k <= 16; k++) for (let sg = 1; sg >= -1; sg -= 2) {
-      const d = sg * k * 0.25, n = bad(rx * d, rz * d);
-      if (n < bestN) { bestN = n; best = [rx * d, rz * d]; if (!n) return best; }
+      const d = sg * k * 0.25, n = this.offCorners(surface, x + rx * d, z + rz * d, y, deck, road, s, c, hw, hl);
+      if (n < bestN) { bestN = n; best[0] = rx * d; best[1] = rz * d; found = true; if (!n) return best; }
     }
-    return best;
+    return found ? best : null;
+  }
+  // (fit: how many of the four corners of a car at (x, z) are off what is drawn)
+  offCorners(surface, x, z, y, deck, road, s, c, hw, hl) {
+    let n = 0;
+    for (let q = 0; q < 4; q++) {
+      const u = CORNERS[q][0] * hw, v = CORNERS[q][1] * hl, px = x + c * u + s * v, pz = z - s * u + c * v;
+      // (on a deck: on its paving, or past its end on the street at about its level; else on the street, not in under a deck's side)
+      const ok = deck
+        ? this.cornerOn(px, pz, y) || (this.ground.on(px, pz) && Math.abs(streetAt(surface, px, pz, y) + (this.lift ? this.lift(px, pz) ?? 0 : 0) - y) < 0.4)
+        : this.ground.on(px, pz) && !this.beneath(px, pz, y, road);
+      if (!ok) n++;
+    }
+    return n;
   }
 
-  // The decks drawn under (x, z), into this.found as [level, on the car's own road, along its heading]; this.push
+  // The decks drawn under (x, z), into this.found as [level, on the car's own road, along its heading] (this.nFound of
+  // its numbers in use); this.push
   // ([dx, dz], its level this.pushY): onto the nearest deck of its own road (or, its road not known, any at about its
   // level y) when the car is just beyond that deck's edge (a simulated car in an outer lane, a little wider than the
   // deck drawn)
   under(x, z, y, heading = null, edge = null) {
     const found = this.found, hx = heading == null ? 0 : Math.sin(heading), hz = heading == null ? 0 : Math.cos(heading);
-    found.length = 0; this.push = null; this.pushY = null;
+    let n = 0; this.nFound = 0; this.push = null; this.pushY = null;
     let nearD = Infinity;
-    for (const seg of this.cells.get(key(x, z)) ?? NONE) {
-      const [x0, y0, z0, x1, y1, z1, w, e] = seg;
-      const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
+    const list = this.cells.get(key(x, z));
+    if (!list) return found;
+    for (let i = 0; i < list.length; i++) {
+      const seg = list[i], x0 = seg[0], y0 = seg[1], z0 = seg[2], w = seg[6], e = seg[7];
+      const dx = seg[3] - x0, dz = seg[5] - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < -0.15 || t > 1.15) continue;
-      const f = Math.max(0, Math.min(1, t)), cx = x0 + dx * f, cz = z0 + dz * f, d = Math.hypot(cx - x, cz - z);
-      const h = y0 + (y1 - y0) * f, own = edge != null && e === edge;
-      if (d <= w) { found.push(h, own, heading == null || Math.abs(hx * dx + hz * dz) / Math.sqrt(l2) > 0.7); continue; }
-      // (just beyond its edge)
+      const f = Math.max(0, Math.min(1, t)), cx = x0 + dx * f, cz = z0 + dz * f, d = Math.sqrt((cx - x) * (cx - x) + (cz - z) * (cz - z));
+      const h = y0 + (seg[4] - y0) * f, own = edge != null && e === edge;
+      if (d <= w) { if (n + 3 <= found.length) { found[n] = h; found[n + 1] = own ? 1 : 0; found[n + 2] = heading == null || Math.abs(hx * dx + hz * dz) / Math.sqrt(l2) > 0.7 ? 1 : 0; n += 3; this.nFound = n; } continue; }
+      // (just beyond its edge; the move, one array filled each call)
       if (d < w + 3 && d < nearD && (edge == null ? Math.abs(h - y) < 1 : own)) {
-        nearD = d; this.pushY = h; this.push = [(cx - x) * (d - w + 1.1) / d, (cz - z) * (d - w + 1.1) / d];
+        nearD = d; this.pushY = h; const m = this.push = this.pushed ??= [0, 0]; m[0] = (cx - x) * (d - w + 1.1) / d; m[1] = (cz - z) * (d - w + 1.1) / d;
       }
     }
     return found;
@@ -227,12 +243,15 @@ export class DrawnDecks {
   // (a merge or a fork; flyovers.js draws no parapet there. Of a dual carriageway's two decks, each the other way,
   // the parapets stay.)
   paved(x, z, y, edge, ux, uz, tol = 0.5) {
-    for (const [x0, y0, z0, x1, y1, z1, w, e] of this.cells.get(key(x, z)) ?? NONE) {
-      if (e === edge) continue;
-      const dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
+    const list = this.cells.get(key(x, z));
+    if (!list) return false;
+    for (let i = 0; i < list.length; i++) {
+      const seg = list[i];
+      if (seg[7] === edge) continue;
+      const x0 = seg[0], z0 = seg[2], dx = seg[3] - x0, dz = seg[5] - z0, l2 = dx * dx + dz * dz || 1, t = ((x - x0) * dx + (z - z0) * dz) / l2;
       if (t < 0 || t > 1 || (ux * dx + uz * dz) / Math.sqrt(l2) < 0.3) continue;
-      const d = Math.hypot(x0 + dx * t - x, z0 + dz * t - z);
-      if (d <= w - 0.4 && Math.abs(y0 + (y1 - y0) * t - y) < tol) return true;
+      const ex = x0 + dx * t - x, ez = z0 + dz * t - z;
+      if (ex * ex + ez * ez <= (seg[6] - 0.4) * (seg[6] - 0.4) && seg[6] >= 0.4 && Math.abs(seg[1] + (seg[4] - seg[1]) * t - y) < tol) return true;
     }
     return false;
   }
@@ -240,9 +259,9 @@ export class DrawnDecks {
   // The level of the deck drawn under (x, z) for one at about level y, or null: of the decks under it whose level is
   // within `within` m below it or 2 m above, the topmost (the visitor's car, bike and walk: drive.js, player.js)
   at(x, z, y, within = 3) {
-    const found = this.under(x, z, y);
+    const found = this.under(x, z, y), nf = this.nFound;
     let best = null;
-    for (let i = 0; i < found.length; i += 3) {
+    for (let i = 0; i < nf; i += 3) {
       const dh = found[i] - y;
       if (dh <= 2 && dh >= -within && (best == null || found[i] > best)) best = found[i];
     }
@@ -251,19 +270,19 @@ export class DrawnDecks {
   }
 
   // Where a car stands at (x, z): { y, deck: on a deck, push: as under() } (the street: the terrain as drawn, and the
-  // paving on it, this.lift: main.js). y: the level of its road there; heading, edge: its way and its road, if known.
+  // paving on it, this.lift: main.js); the same object every call. y: the level of its road there; heading, edge: its way and its road, if known.
   stand(surface, x, z, y, heading = null, edge = null) {
-    const street = streetAt(surface, x, z, y) + (this.lift?.(x, z) ?? 0), found = this.under(x, z, y, heading, edge);
+    const street = streetAt(surface, x, z, y) + (this.lift?.(x, z) ?? 0), found = this.under(x, z, y, heading, edge), nf = this.nFound;
     let at = null, deck = false, push = null;
     // on its own road's deck, the one nearest its level
-    for (let i = 0; i < found.length; i += 3) if (found[i + 1] && (at == null || Math.abs(found[i] - y) < Math.abs(at - y))) at = found[i];
+    for (let i = 0; i < nf; i += 3) if (found[i + 1] && (at == null || Math.abs(found[i] - y) < Math.abs(at - y))) at = found[i];
     if (at != null) deck = true;
     else if (edge != null && this.push) { at = this.pushY; deck = true; push = this.push; } // (just off its deck's edge, onto it)
     else {
       // (its road not known, or no deck of its road here: the street or the deck nearest its level, and not one more
       // than 3 m under it or 2 over; a car just past the end of its road, at a junction, is on the next one's)
       at = street;
-      for (let i = 0; i < found.length; i += 3) {
+      for (let i = 0; i < nf; i += 3) {
         const dh = found[i] - y;
         if (dh <= 2 && dh >= -3 && Math.abs(dh) < Math.abs(at - y)) { at = found[i]; deck = true; }
       }
@@ -273,14 +292,17 @@ export class DrawnDecks {
     for (let up = true; up;) {
       up = false;
       let top = at;
-      for (let i = 0; i < found.length; i += 3) {
+      for (let i = 0; i < nf; i += 3) {
         const dh = found[i] - at;
         if (dh > 0.02 && (dh <= LOW || (dh <= CLEAR && found[i + 2])) && found[i] > top) top = found[i];
       }
       if (top > at) { at = top; deck = true; up = true; }
     }
     if (!deck) push = null;
-    return { y: at, deck, push };
+    // (one object, filled each call: the caller takes what it needs before asking again)
+    const out = this.stood ??= { y: 0, deck: false, push: null };
+    out.y = at; out.deck = deck; out.push = push;
+    return out;
   }
 }
 

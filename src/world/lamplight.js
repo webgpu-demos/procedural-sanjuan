@@ -15,7 +15,11 @@ const Y0 = 200, YSPAN = 1000; // heights are stored as (y + Y0) / YSPAN
 export function lampMaterial(map, params = {}, { grid = false } = {}) {
   const m = new THREE.MeshBasicMaterial({
     map, side: THREE.DoubleSide, depthTest: false, depthWrite: false, transparent: true,
-    blending: THREE.CustomBlending, blendEquation: THREE.MaxEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, ...params,
+    blending: THREE.CustomBlending, blendEquation: THREE.MaxEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+    // (in one pass: three draws a transparent two-sided material twice, back faces then front, marking it changed
+    // between them, and so worked its program out again twice on every quad drawn, ~150 times a frame; the brighter
+    // of two lights is the same whichever comes first)
+    forceSinglePass: true, ...params,
   });
   // The height the light lies at goes into the alpha channel, so that a lamp under a flyover does not light
   // the deck above it, nor a car on the deck the street below.
