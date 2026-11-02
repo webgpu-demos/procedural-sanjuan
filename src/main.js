@@ -893,7 +893,7 @@ function cullSmall() {
 // what the main thread spent on each part of one (smoothed), for when the picture stutters
 const perf = params.has('perf') ? (() => {
   const W = 240, H = 64, box = document.createElement('div'), cv = document.createElement('canvas'), txt = document.createElement('pre');
-  Object.assign(box.style, { position: 'fixed', left: '8px', bottom: '40px', zIndex: 50, background: 'rgba(0,0,0,0.65)', color: '#fff', font: '11px/1.35 ui-monospace,monospace', padding: '6px 8px', borderRadius: '6px', pointerEvents: 'none' });
+  Object.assign(box.style, { position: 'fixed', left: '8px', top: '8px', zIndex: 100000, background: 'rgba(0,0,0,0.65)', color: '#fff', font: '11px/1.35 ui-monospace,monospace', padding: '6px 8px', borderRadius: '6px', pointerEvents: 'none' });
   cv.width = W; cv.height = H; txt.style.margin = '4px 0 0'; box.append(cv, txt); document.body.append(box);
   const g = cv.getContext('2d'), gaps = new Float32Array(W), parts = {};
   let n = 0, t = 0, last = 0, shadowDraw = 0, plainDraw = 0;
