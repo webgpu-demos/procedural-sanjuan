@@ -408,8 +408,28 @@ export class SimTraffic {
       for (const [k, v] of this.shifts) if (frame - v[2] > 60) this.shifts.delete(k);
       for (const [k, v] of this.placed) if (frame - v[4] > 60) this.placed.delete(k);
     }
+    // (a car seen only as its lamps, past the boxes at night, kept as it was worked out on one of the last two frames:
+    // [x, y of its lamps, z, x and z from its middle to its front lamps, the frame, how far it is faded in] per track)
+    const far = W.far ??= new Float32Array(W.n * 7).fill(-1e9);
     for (let i = 0; i < W.n; i++) {
-      if (!SimTraffic.at(W, i, T, p)) continue;
+      // Far off at night a car is two points of light, eight thousand of them in the rush hour; each worked out
+      // every 3rd frame, a third of them each frame (its place moves less than a pixel in between), they were most
+      // of the cars' time on an M3.
+      const f7 = i * 7;
+      if (night > 0.02 && (i + frame) % 3 !== 0 && far[f7 + 5] >= frame - 2 && W.vid[i] !== this.followed) {
+        active++;
+        if (lights < MAX_LIGHTS) {
+          const x = far[f7], h = far[f7 + 1], z = far[f7 + 2], sx = far[f7 + 3], sz = far[f7 + 4], shown = far[f7 + 6], o = lights * 6;
+          this.lightPos[o] = x + sx; this.lightPos[o + 1] = h; this.lightPos[o + 2] = z + sz;
+          this.lightPos[o + 3] = x - sx; this.lightPos[o + 4] = h; this.lightPos[o + 5] = z - sz;
+          this.lightCol[o] = shown; this.lightCol[o + 1] = 0.9 * shown; this.lightCol[o + 2] = 0.72 * shown;
+          const red = 0.45 * shown;
+          this.lightCol[o + 3] = red; this.lightCol[o + 4] = 0.03 * red; this.lightCol[o + 5] = 0.02 * red;
+          lights++;
+        }
+        continue;
+      }
+      if (!SimTraffic.at(W, i, T, p)) { far[f7 + 5] = -1e9; continue; }
       active++;
       const dx = p[0] - cx, dz = p[2] - cz, d2 = dx * dx + dz * dz + (p[1] - cy) * (p[1] - cy);
       const vid = W.vid[i], followed = vid === this.followed;
@@ -609,6 +629,9 @@ export class SimTraffic {
         const red = (brake ? 1.0 : 0.45) * shown;
         this.lightCol[o + 3] = red; this.lightCol[o + 4] = 0.03 * red; this.lightCol[o + 5] = 0.02 * red;
         lights++;
+        // (kept for the next two frames, if it is one of the far ones)
+        if (d2 > MID * MID && !followed) { const f7 = i * 7; far[f7] = p[0]; far[f7 + 1] = h; far[f7 + 2] = p[2]; far[f7 + 3] = sin * L; far[f7 + 4] = cos * L; far[f7 + 5] = frame; far[f7 + 6] = shown; }
+        else far[i * 7 + 5] = -1e9;
       }
     }
     this.fleet.end();
