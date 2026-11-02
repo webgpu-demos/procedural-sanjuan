@@ -142,10 +142,12 @@ export class Streamer {
       if (t.trees) {
         // a tile full of trees (a wood) keeps its detailed ones closer: thousands of them are too much to draw. And
         // nearer still at the governor's lower steps: a full tree is thousands of triangles (one wooded tile in reach
-        // half a million), and on an M3 they kept the picture past a refresh, at 30 a second, at its lowest step
-        const limit = this.props.constructor.lodDistance * (t.trees.count > 120 ? 0.6 : 1) * this.detail;
-        const near = t.trees.near.visible ? d < limit * 1.25 : d < limit;
-        t.trees.near.visible = near; t.trees.far.visible = !near;
+        // half a million), and on an M3 they kept the picture past a refresh, at 30 a second, at its lowest step. The full
+        // trees within 40% of that, the lighter ones (props.js buildTree lite) out to it, the simple ones beyond.
+        const limit = this.props.constructor.lodDistance * (t.trees.count > 120 ? 0.6 : 1) * this.detail, tr = t.trees;
+        const was = tr.near.visible ? 0 : tr.mid.visible ? 1 : 2;
+        const level = d < limit * 0.4 * (was === 0 ? 1.25 : 1) ? 0 : d < limit * (was <= 1 ? 1.25 : 1) ? 1 : 2;
+        tr.near.visible = level === 0; tr.mid.visible = level === 1; tr.far.visible = level === 2;
         if (t.trees.lines) t.trees.lines.visible = d < this.props.constructor.wireDistance;
       }
       for (const a of t.atlases) {
@@ -279,7 +281,7 @@ export class Streamer {
     let trees = null;
     if (props.length || wires.length) {
       trees = this.props.build(props, wires, this.surface);
-      trees.near.visible = false; // update() picks the level of detail on the next frame
+      trees.near.visible = trees.mid.visible = false; // update() picks the level of detail on the next frame
       group.add(trees.group);
     }
     let signs = null;

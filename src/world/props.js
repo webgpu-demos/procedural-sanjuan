@@ -11,6 +11,7 @@ import { parkedVehicles } from './traffic.js';
 import { DECAL_COLS, DECAL_ROWS } from './decals.js';
 
 const TREE_LOD_DISTANCE = 300; // metres from the camera to the nearest point of a tile; beyond it trees are simple shapes
+                                // (within 40% of it the full ones, between the two the lighter ones: streamer.js)
 const WIRE_LOD_DISTANCE = 140; // and the power lines beyond this are left out
 
 // ---------------------------------------------------------------- geometry helpers
@@ -396,18 +397,26 @@ function leafMaterial(map, tint, recolor = false, crown = false) {
   return m;
 }
 
-function buildTree(def) {
+// lite: the same tree for the middle distance (TREE_LOD_DISTANCE: within it, past the full ones), about a third of the
+// triangles: no twigs, a third of the leaf cards, each larger, so that the crown keeps its size and fullness, and
+// coarser branches. The full ones (6,000 to 14,000 triangles each, leaves and branches) were most of the picture's triangles
+// and most of the sun's shadow map's in a view over the city (4.5 of its 6.6 million, on an M3 the frame it was
+// redrawn in, every third, a long one).
+function buildTree(def, lite = false) {
   if (def.palm) return buildPalm(def);
   const tree = new Tree();
   tree.loadPreset(def.preset);
   const o = tree.options;
   o.seed = def.seed;
   // fewer, larger leaf cards: thousands of trees are drawn, not one hero tree
-  o.leaves.count = Math.max(4, Math.round(o.leaves.count * 0.55));
-  o.leaves.size *= 1.45;
+  // (the middle distance's: no twigs, their leaves on the branches they grew from, about a third as many in all)
+  const twigs = lite && o.branch.levels >= 2 ? o.branch.children[o.branch.levels - 1] : 1;
+  if (twigs > 1) o.branch.levels -= 1;
+  o.leaves.count = Math.max(4, Math.round(o.leaves.count * (lite ? 0.55 * 0.35 * twigs : 0.55)));
+  o.leaves.size *= lite ? 2.3 : 1.45;
   // thinner meshes: the presets are tuned for a single hero tree, we draw thousands
-  for (const k of Object.keys(o.branch.sections)) o.branch.sections[k] = Math.max(3, Math.round(o.branch.sections[k] * 0.5));
-  for (const k of Object.keys(o.branch.segments)) o.branch.segments[k] = Math.max(3, Math.round(o.branch.segments[k] * 0.6));
+  for (const k of Object.keys(o.branch.sections)) o.branch.sections[k] = Math.max(3, Math.round(o.branch.sections[k] * (lite ? 0.3 : 0.5)));
+  for (const k of Object.keys(o.branch.segments)) o.branch.segments[k] = Math.max(3, Math.round(o.branch.segments[k] * (lite ? 0.4 : 0.6)));
   tree.generate();
   const size = new THREE.Box3().setFromObject(tree).getSize(new THREE.Vector3());
   const s = def.height / size.y, k = def.spread ?? 1; // spread: a wider, flatter crown
@@ -606,7 +615,9 @@ function blobTreeGeometry() {
 export class Props {
   constructor() {
     const std = (extra) => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.1, ...extra });
-    this.trees = TREES.map(buildTree);
+    this.trees = TREES.map((d) => buildTree(d));
+    // (the middle distance's, each drawn with its full tree's materials; a palm is light enough as it is)
+    this.trees.forEach((t, v) => { const m = TREES[v].palm ? t : buildTree(TREES[v], true); t.lite = { branches: m.branches, leaves: m.leaves, solid: m.solid }; });
     this.models = {
       pole: [poleGeometry(false), poleGeometry(true)], light: lightGeometry(), signal: signalGeometry(), vending: vendingGeometry(),
       blob: blobTreeGeometry(), lamp: new THREE.BoxGeometry(0.24, 0.03, 0.6), quad: new THREE.PlaneGeometry(1, 1),
@@ -653,10 +664,11 @@ export class Props {
   }
 
   // props: Float32Array of [kind, variant, rot, x, z, scale] rows; wires: Float32Array of [x1, z1, x2, z2] rows.
-  // Returns { group, near, far, count } — `near` holds the full trees, `far` the simple ones; count = trees.
+  // Returns { group, near, mid, far, count } — `near` holds the full trees, `mid` the lighter ones (buildTree lite),
+  // `far` the simple ones; count = trees.
   build(props, wires, ground) {
-    const group = new THREE.Group(), near = new THREE.Group(), far = new THREE.Group(), lines = new THREE.Group();
-    group.add(near, far, lines);
+    const group = new THREE.Group(), near = new THREE.Group(), mid = new THREE.Group(), far = new THREE.Group(), lines = new THREE.Group();
+    group.add(near, mid, far, lines);
     const by = new Map();
     for (let i = 0; i < props.length; i += 6) {
       // one instanced mesh per kind and model; parked cars share a model per vehicle type (their variant also carries the colour)
@@ -690,9 +702,15 @@ export class Props {
       const kind = key >> 4, variant = key & 15;
       if (kind === PROP.TREE) {
         const t = this.trees[variant % this.trees.length];
-        instanced(rows, t.branches, t.branchMat, { parent: near });
-        instanced(rows, t.leaves, t.leafMat, { parent: near });
-        if (t.solid) instanced(rows, t.solid, this.mats.metal, { parent: near });
+        const parts = [[t.branches, t.lite.branches, t.branchMat], [t.leaves, t.lite.leaves, t.leafMat], [t.solid, t.lite.solid, this.mats.metal]];
+        for (const [full, lite, mat] of parts) {
+          if (!full) continue;
+          const a = instanced(rows, full, mat, { parent: near });
+          // (the lighter tree in the same places: the same matrices)
+          const b = new THREE.InstancedMesh(lite, mat, rows.length);
+          b.instanceMatrix = a.instanceMatrix; b.castShadow = b.receiveShadow = true; b.computeBoundingSphere();
+          mid.add(b);
+        }
         if (t.far) instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false });
         else instanced(rows, this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] });
       } else if (kind === PROP.POLE) {
@@ -752,7 +770,7 @@ export class Props {
       g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
       lines.add(new THREE.LineSegments(g, this.mats.wire)); // hair-thin: only worth drawing close up (a line is a pixel wide however far: six of them a black band)
     }
-    return { group, near, far, lines, count: this.trees.reduce((n, _, v) => n + (by.get(PROP.TREE * 16 + v) ?? []).length, 0) };
+    return { group, near, mid, far, lines, count: this.trees.reduce((n, _, v) => n + (by.get(PROP.TREE * 16 + v) ?? []).length, 0) };
   }
 
   static lodDistance = TREE_LOD_DISTANCE;
