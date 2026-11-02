@@ -299,9 +299,13 @@ const governor = (() => {
     if (!g.auto || document.hidden || !(dt > 0)) return;
     g.times.push(dt); if (g.times.length > 45) g.times.shift();
     if ((g.settle -= dt) > 0 || busy || g.times.length < 45) return;
-    const typical = [...g.times].sort((a, b) => a - b)[22]; // (the median: a tile arriving is one slow frame, not a slow scene)
-    g.slow = typical > 1 / 45 ? g.slow + dt : 0;
-    g.fast = typical < 1 / 57 ? g.fast + dt : 0;
+    // (judged by its slow frames, not the median: on a 60 Hz screen a frame a little over 16.7 ms waits for the
+    // next refresh and shows for 33, and a median of 18 ms was half the frames at 30 a second, a stutter the median
+    // passed as smooth. Slow: one frame in ten past 22 ms (a tile arriving is one, not four). Room to spare: nineteen
+    // in twenty within 17.5 ms.)
+    const sorted = [...g.times].sort((a, b) => a - b), typical = sorted[22], p90 = sorted[40], p95 = sorted[42];
+    g.slow = p90 > 1 / 45 ? g.slow + dt : 0;
+    g.fast = p95 < 1 / 57 ? g.fast + dt : 0;
     const now = performance.now() / 1000;
     if (hold) return;
     if (g.slow > 1 && g.level < LEVELS.length - 1) {
