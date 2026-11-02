@@ -272,8 +272,8 @@ controls.update();
 // back up that does not hold is tried again only after longer. ?quality=high keeps everything, low starts lean.
 const governor = (() => {
   const top = Math.min(devicePixelRatio, 1.5), lean = { ao: false, reflect: false, dof: false }; // (2x costs a quarter more for little)
-  // (detail: how far off the small things are drawn, as a share of the full distance; reach: how far out the city
-  // is streamed in full, as a share of the area's radius: a machine that keeps up sees more of it)
+  // (detail: how far off the small things are drawn, and the full trees, as a share of the full distance; reach: how
+  // far out the city is streamed in full, as a share of the area's radius: a machine that keeps up sees more of it)
   const LEVELS = [
     { ratio: top, reach: 1.4 },
     { ratio: top, clouds: 'low', reach: 1.4 },
@@ -289,7 +289,7 @@ const governor = (() => {
   const g = { auto: q !== 'high', level: q === 'low' ? 5 : q === 'high' ? 0 : 2, times: [], settle: 2, slow: 0, fast: 0, upWait: 5, raisedAt: -1e9 };
   g.apply = () => {
     const L = LEVELS[g.level];
-    g.detail = L.detail ?? 1;
+    g.detail = L.detail ?? 1; streamer.detail = g.detail;
     if (!params.get('radius')) streamer.radius = baseRadius * (L.reach ?? 1);
     if (renderer.getPixelRatio() !== L.ratio) { renderer.setPixelRatio(L.ratio); renderer.setSize(innerWidth, innerHeight); atmosphere.setSize(innerWidth, innerHeight); }
     atmosphere.limit({ clouds: L.clouds ?? 'ultra', reflect: L.reflect !== false, dof: L.dof !== false });

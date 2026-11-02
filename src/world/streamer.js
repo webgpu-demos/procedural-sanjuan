@@ -50,6 +50,7 @@ export class Streamer {
     this.signs = signs;
     this.base = base;
     this.radius = radius;
+    this.detail = 1; // (the frame-rate governor's detail, main.js: the full trees drawn nearer on a machine that cannot keep up)
     this.hysteresis = hysteresis;
     this.tiles = new Map(); // key -> { state, group, info, ends, tris }
     this.blocks = new Map(); // chunk key -> { state, mesh }: the distant buildings, BLOCK x BLOCK tiles a mesh
@@ -139,8 +140,10 @@ export class Streamer {
       const dy = Math.max(0, eye.y - this.ground(x0 + size / 2, z0 + size / 2) - 25);
       const d = Math.hypot(dx, dy, dz);
       if (t.trees) {
-        // a tile full of trees (a wood) keeps its detailed ones closer: thousands of them are too much to draw
-        const limit = this.props.constructor.lodDistance * (t.trees.count > 120 ? 0.6 : 1);
+        // a tile full of trees (a wood) keeps its detailed ones closer: thousands of them are too much to draw. And
+        // nearer still at the governor's lower steps: a full tree is thousands of triangles (one wooded tile in reach
+        // half a million), and on an M3 they kept the picture past a refresh, at 30 a second, at its lowest step
+        const limit = this.props.constructor.lodDistance * (t.trees.count > 120 ? 0.6 : 1) * this.detail;
         const near = t.trees.near.visible ? d < limit * 1.25 : d < limit;
         t.trees.near.visible = near; t.trees.far.visible = !near;
         if (t.trees.lines) t.trees.lines.visible = d < this.props.constructor.wireDistance;
