@@ -125,6 +125,30 @@ const props = new Props();
 const signs = new Signs();
 const streamer = new Streamer(scene, materials, props, signs, { base: `tiles/${AREA}`, radius: Number(params.get('radius')) || 1e5 });
 let baseRadius = 1e5; // (the area's streaming radius, before the governor's reach)
+// The sun's shadow map drawn with the trees' lighter shapes (props.js shadowAs: a full tree as its lighter one, a
+// lighter one as its simple crown), swapped in for its redraw and back: three draws into it what the picture's camera
+// sees, as it is, and has no way to draw one thing for the shadow and another for the picture.
+{
+  const sm = renderer.shadowMap, render = sm.render.bind(sm), kept = [];
+  sm.render = (lights, scn, cam) => {
+    if (!sm.autoUpdate && !sm.needsUpdate) return render(lights, scn, cam);
+    for (const t of streamer.tiles.values()) {
+      for (const g of [t.trees?.near, t.trees?.mid]) {
+        if (!g?.visible) continue;
+        for (const m of g.children) {
+          const s = m.userData.shadowAs;
+          if (!s) continue;
+          kept.push(m, m.geometry, m.material, m.castShadow);
+          if (s[0]) { m.geometry = s[0]; if (s[1]) m.material = s[1]; } else m.castShadow = false;
+        }
+      }
+    }
+    try { render(lights, scn, cam); } finally {
+      for (let i = 0; i < kept.length; i += 4) { const m = kept[i]; m.geometry = kept[i + 1]; m.material = kept[i + 2]; m.castShadow = kept[i + 3]; }
+      kept.length = 0;
+    }
+  };
+}
 const VIEW_RADIUS = 1000; // metres: full tiles around the focus, when the whole city is not loaded at once
 loader.set(0.08, 'terrain');
 const manifest = await streamer.init();
