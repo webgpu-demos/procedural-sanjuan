@@ -515,7 +515,7 @@ function beamCone() {
   for (let i = 0; i < N; i++) { const v = 0.2 + 0.8 * (i / (N - 1)) ** 2; data.set([v * 255, v * 255, v * 255, 255], i * 4); }
   const ramp = new THREE.DataTexture(data, 1, N); ramp.magFilter = ramp.minFilter = THREE.LinearFilter; ramp.needsUpdate = true;
   const cone = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 28, 1, true).translate(0, -0.5, 0),
-    new THREE.MeshBasicMaterial({ color: 0xfff0d8, alphaMap: ramp, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    new THREE.MeshBasicMaterial({ color: 0xfff0d8, alphaMap: ramp, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, fog: false })); // (one pass: see lampMaterial)
   cone.frustumCulled = false; cone.visible = false;
   return cone;
 }

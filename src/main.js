@@ -81,6 +81,10 @@ renderer.shadowMap.autoUpdate = false; // (redrawn when needed: see the frame lo
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
+// (the scene itself never moves: left to update its own matrix, it marked itself changed on every render, four a frame,
+// and three then worked out the world matrix of every object in it again, the frozen tiles' thousands too: streamer.js
+// frozen. Now only what moves, or is new, is worked out.)
+scene.matrixAutoUpdate = false;
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight || 1, 1, 60000); // (a page opened without a size: fitView below)
 const controls = new MapControls(camera, renderer.domElement);
 controls.enableDamping = true;

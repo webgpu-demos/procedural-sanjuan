@@ -379,7 +379,8 @@ export class Hud {
     const sim = this.app.sim();
     if (sim?.nearby) {
       g.fillStyle = 'rgba(255,107,61,0.9)';
-      for (const [x, z] of sim.nearby) g.fillRect((x - at.x) * s - 1.5 * dpr, (z - at.z) * s - 1.5 * dpr, 3 * dpr, 3 * dpr);
+      const n = sim.nearby; // (x, z, x, z, ...)
+      for (let i = 0; i + 1 < n.length; i += 2) g.fillRect((n[i] - at.x) * s - 1.5 * dpr, (n[i + 1] - at.z) * s - 1.5 * dpr, 3 * dpr, 3 * dpr);
     }
     // you: an arrow along the heading (north up)
     g.rotate(-heading + Math.PI);
