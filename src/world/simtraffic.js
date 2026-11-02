@@ -418,9 +418,10 @@ export class SimTraffic {
     for (let i = 0; i < W.n; i++) {
       // Far off at night a car is two points of light, eight thousand of them in the rush hour; each worked out
       // every 3rd frame, a third of them each frame (its place moves less than a pixel in between), they were most
-      // of the cars' time on an M3.
-      const f7 = i * 7;
-      if (night > 0.02 && (i + frame) % 3 !== 0 && far[f7 + 5] >= frame - 2 && W.vid[i] !== this.followed) {
+      // of the cars' time on an M3. Past 5 km, every 6th (by where it was last worked out: half the lamps of a wide
+      // view are that far, and at dusk they were 2 of the cars' 4.6 ms on an M3).
+      const f7 = i * 7, fx = far[f7] - cx, fz = far[f7 + 2] - cz, lampEvery = fx * fx + fz * fz > 5000 * 5000 ? 6 : 3;
+      if (night > 0.02 && (i + frame) % lampEvery !== 0 && far[f7 + 5] >= frame - (lampEvery - 1) && W.vid[i] !== this.followed) {
         active++;
         if (lights < MAX_LIGHTS) {
           const x = far[f7], h = far[f7 + 1], z = far[f7 + 2], sx = far[f7 + 3], sz = far[f7 + 4], shown = far[f7 + 6], o = lights * 6;

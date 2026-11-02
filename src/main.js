@@ -9,6 +9,7 @@ import { makeProjection } from './shared/geo.js';
 import { createMaterials, shared } from './world/materials.js';
 import { loadTextures } from './world/textures.js';
 import { Streamer, frozen } from './world/streamer.js';
+import { chunked } from './world/chunks.js';
 import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
@@ -195,17 +196,26 @@ streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway wh
 streamer.accel(accel); drawnDecks.ground.accel = accelLookup(accel.pave); // (and the acceleration lanes paved, and stood on)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
+// (the city-wide meshes in a few pieces, so that what is out of view, the shadow map's above all, is not drawn:
+// world/chunks.js; the trains move)
+for (const c of [...railways.children]) if (c !== railways.userData.trains.group) chunked(c);
 scene.add(railways);
 {
-  const flyovers = await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint }, drawnDecks);
+  const flyovers = chunked(await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint }, drawnDecks));
   scene.add(frozen(flyovers));
   streamer.under = overDecks(flyovers.userData.footprints, PROP); // (nothing on the ground standing up through a deck)
   // (the street lights on the decks: flyovers.js; the tiles light the roads up to them)
   const lights = flyovers.userData.lights, rows = new Float32Array(lights.length * 6), level = new Map();
   lights.forEach(([x, z, rot, y], k) => { rows.set([PROP.LIGHT, 0, rot, x, z, 1], k * 6); level.set(Math.fround(x) + ',' + Math.fround(z), y); });
-  if (lights.length) scene.add(frozen(Object.assign(props.build(rows, [], (x, z) => level.get(x + ',' + z) ?? streamer.ground(x, z)).group, { name: 'deck lights' })));
+  if (lights.length) {
+    const deckLights = Object.assign(props.build(rows, [], (x, z) => level.get(x + ',' + z) ?? streamer.ground(x, z)).group, { name: 'deck lights' });
+    // (no shadows: one mesh of the city's deck lamps, 150 thousand triangles in every redraw of the shadow map for
+    // posts thinner than its texels)
+    deckLights.traverse((o) => { o.castShadow = false; });
+    scene.add(frozen(deckLights));
+  }
 }
-if (manifest.structures) scene.add(frozen(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth)));
+if (manifest.structures) scene.add(frozen(chunked(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth))));
 if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
 const traffic = new Traffic(roads, streamer.surface, drawnDecks);
 traffic.eye = camera.position; // (the level of detail of its cars)
@@ -283,6 +293,10 @@ const governor = (() => {
     { ratio: 1, clouds: 'off', ...lean, detail: 0.6 },
     { ratio: 1, clouds: 'off', ...lean, shadow: 2048, detail: 0.5 },
     { ratio: 0.8, clouds: 'off', ...lean, shadow: 1024, detail: 0.4 },
+    // (and for a GPU that is slower still, or slowed: on an M3 hot or busy the view over PR-22 held at 30 a second at
+    // the step above with its main thread at a third of the frame, and only fewer pixels and triangles helped)
+    { ratio: 0.65, clouds: 'off', ...lean, shadow: 1024, detail: 0.33 },
+    { ratio: 0.5, clouds: 'off', ...lean, shadow: 1024, detail: 0.25 },
   ];
   const q = params.get('quality');
   // (it starts a little lean and earns the rest: a slow first minute is worse than a plain one)
