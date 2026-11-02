@@ -616,12 +616,16 @@ export class SimTraffic {
       for (const [k, v] of this.spins) if (frame - v[1] > 60) { this.spins.delete(k); this.looks.delete(k); }
       for (const [k, v] of this.fits) if (frame - v[2] > 60) this.fits.delete(k);
     }
-    this.boxHide.needsUpdate = true;
-    this.boxes.count = mid; this.boxes.instanceMatrix.needsUpdate = true;
-    if (this.boxes.instanceColor) this.boxes.instanceColor.needsUpdate = true;
+    // Only the part of each buffer in use goes up to the GPU. They are sized for the busiest morning (40,000 boxes,
+    // 120,000 pairs of lamps), and sent whole every frame they were 9 MB a frame, 14 ms of an M3's frame in the
+    // browser's upload, the most of any one thing (a few hundred kilobytes now).
+    const upload = (attr, n) => { if (n <= 0) return; attr.clearUpdateRanges(); attr.addUpdateRange(0, n * attr.itemSize); attr.needsUpdate = true; }; // (none in use: nothing is drawn, nothing sent)
+    upload(this.boxHide, mid);
+    this.boxes.count = mid; upload(this.boxes.instanceMatrix, mid);
+    if (this.boxes.instanceColor) upload(this.boxes.instanceColor, mid);
     const g = this.lights.geometry;
     g.setDrawRange(0, lights * 2);
-    g.attributes.position.needsUpdate = true; g.attributes.color.needsUpdate = true;
+    upload(g.attributes.position, lights * 2); upload(g.attributes.color, lights * 2);
     this.lights.material.uniforms.uScale.value = Math.min(3, devicePixelRatio || 1);
     this.beam.color.setScalar(0.36 * this.headlights * night);
     this.beam.visible = night > 0.02;
