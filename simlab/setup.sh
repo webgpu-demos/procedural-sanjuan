@@ -5,7 +5,7 @@ trap 'echo "::error title=setup failed::line $LINENO"' ERR
 cd "$(dirname "$0")/.."
 sudo mkdir -p /mnt/sim /mnt/res && sudo chown "$(id -u):$(id -g)" /mnt/sim /mnt/res
 python3 -m venv .venv-sim
-.venv-sim/bin/pip install -q eclipse-sumo==1.28.0 libsumo==1.28.0 numpy openpyxl pyshp pyarrow rtree
+.venv-sim/bin/pip install -q eclipse-sumo==1.28.0 libsumo==1.28.0 numpy scipy openpyxl pyshp pyarrow rtree
 mkdir -p data/sim/census data/sim/gtfs data/sim/sanjuan public/tiles/sanjuan
 cp simlab/inputs/{departures,municipios,pr_flows}.json data/sim/census/
 cp simlab/inputs/PRITA_GTFS.zip data/sim/gtfs/

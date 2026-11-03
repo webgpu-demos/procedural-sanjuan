@@ -26,6 +26,9 @@ if os.path.exists(taz): cmd += ['--with-taz']
 if WEIGHTS:
     # edgeData of that run: its travel times, every five minutes
     cmd += ['--weight-files', os.path.join(SIM, WEIGHTS, 'edgedata.xml'), '--weight-attribute', 'traveltime']
+# (more of duarouter's options: --duaargs="--weights.tls-penalty 10": a time for each traffic light crossed, the wait
+# the free-flow times leave out, without which the shortest way runs down the avenues beside the expressway)
+cmd += args.get('duaargs', '').split()
 t0 = time.time()
 subprocess.run(cmd, check=True)
 print(f'routes in {time.time() - t0:.0f}s ->', os.path.relpath(os.path.join(SIM, DEMAND, 'routes.rou.xml'), ROOT))

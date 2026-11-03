@@ -3,7 +3,8 @@
 #   MODE=all (default): tools/sim/all.sh with SCALE, ITER, RUNARGS, DEMANDARGS
 #   MODE=morning: the morning only, and what the apagón starts from (its state, routes, gates, buses) in $RES/carry
 #   MODE=apagon FROM=<job>: the apagón from that job's morning
-#   NETARGS: network.mjs options (--zip-ramps, --ramps)
+#   NETARGS: network.mjs options (--zip-ramps, --ramps); DUAARGS: duarouter's (route.py --duaargs)
+#   CALIB: calibrate.py's options (the morning's cars re-weighted to the counts; holdout.py, the halves apart)
 set -x
 cd "$ROOT"
 S=$ROOT/data/sim/sanjuan
@@ -21,9 +22,14 @@ morning)
     node tools/sim/network.mjs --area=sanjuan $NETARGS
     $PY tools/sim/demand.py --area=sanjuan --scale=${SCALE:-1} $DEMANDARGS
     $PY tools/sim/gtfs.py --area=sanjuan
-    rm -f $S/morning/assigned.rou.alt.xml.gz; $PY tools/sim/route.py --area=sanjuan
-    timeout ${LIMIT:-320}m $PY tools/sim/run.py --area=sanjuan --scenario=morning --demand=morning --end=10.25 --share=${SCALE:-1} $RUNARGS
-    $PY tools/sim/validate.py --area=sanjuan --scenario=morning ) > $RES/all.txt 2>&1
+    rm -f $S/morning/assigned.rou.alt.xml.gz; $PY tools/sim/route.py --area=sanjuan "--duaargs=$DUAARGS"
+    if [ -n "$CALIB" ]; then
+      $PY simlab/calibrate.py --routes=$S/morning/routes.rou.xml --trips=$S/morning/trips.json --out=$S/morning --from-share=${SCALE:-1} $CALIB
+      cp $S/morning/points.json $RES/; fi
+    timeout ${LIMIT:-320}m $PY tools/sim/run.py --area=sanjuan --scenario=morning --demand=morning --end=10.25 --share=${SHARE:-${SCALE:-1}} $RUNARGS
+    $PY tools/sim/validate.py --area=sanjuan --scenario=morning
+    if [ -n "$CALIB" ]; then $PY simlab/holdout.py --points=$S/morning/points.json --edgedata=$S/morning/edgedata.xml --out=$RES/holdout.json; fi
+    ) > $RES/all.txt 2>&1
   code=$?
   cp $S/morning/stats.xml $RES/stats-morning.xml
   cp -r $T/morning $T/buses.json $T/ferries.json $RES/sim/
