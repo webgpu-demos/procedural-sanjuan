@@ -21,7 +21,7 @@ import { correctProfiles } from './shared/profile.js';
 import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
-import { Driver, placeOnRoad } from './world/drive.js';
+import { Driver, placeOnRoad, Overhead } from './world/drive.js';
 import { Walker, Cyclist, Flyer } from './world/player.js';
 import { People } from './world/people.js';
 import { Hud } from './hud.js';
@@ -271,7 +271,7 @@ async function setScenario(name) {
   const lights = await fetch(`${next.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   if (sim) { scene.remove(sim.group); next.followed = sim.followed; sim.dispose(); }
   next.headlights = sim?.headlights ?? next.headlights;
-  sim = next; scene.add(sim.group);
+  sim = next; scene.add(sim.group); sim.covers = overhead;
   if (lights && simSignals) simSignals.setTimeline(lights.timeline);
   const speeds = await fetch(`${sim.base}/speeds.bin`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
   if (speeds && speedMap) speedMap.setSpeeds(sim.index, speeds);
@@ -639,6 +639,10 @@ function stopRiding() { setMode('explore'); if (!sim) return; sim.followed = nul
 // and out of it again, Esc back to exploring. Each way has its camera rigs (V cycles: chase, close, first person,
 // cinematic). Where you were, and how, is kept for the next visit.
 const tiles = () => scene.children.filter((o) => o.name.startsWith('tile '));
+// the roofs drawn over the streets: a simulated car under one, where the simulation's roads and the city's buildings
+// do not agree, fades out (simtraffic.js)
+const overhead = new Overhead(tiles, manifest.tileSize);
+if (sim) sim.covers = overhead;
 const lift = (x, z) => streamer.lift(x, z); // (how high the paving stands: what stands on it is not sunk in it)
 drawnDecks.lift = lift; // (the cars on it too)
 // People on foot (world/people.js): their walks and avatars load once the city around the view has (?people=0: none;

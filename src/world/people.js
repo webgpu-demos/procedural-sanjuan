@@ -670,6 +670,10 @@ export class People {
     if (!this.ready) return;
     const { camera } = view, now = (this.now = (this.now ?? 0) + dt);
     this.hour = view.hour; this.T = view.T; this.cars = view.cars ?? []; this.signals = view.signals ?? null; this.player = view.player ?? null;
+    // the cars by 10 m cell, for the ones in their way (carIn)
+    const C = this.cars, grid = this.carGrid ??= new Map();
+    if ((this.gridFrame = (this.gridFrame ?? 0) + 1) % 600 === 0) grid.clear(); else for (const a of grid.values()) a.length = 0;
+    for (let i = 0; i < C.length; i += 4) { const k = Math.floor(C[i] / 10) * 4096 + Math.floor(C[i + 1] / 10); let a = grid.get(k); if (!a) grid.set(k, (a = [])); a.push(i); }
     const eye = camera.position, ground = this.surface(eye.x, eye.z), up = Math.max(0, eye.y - ground);
     // where people are kept: round what the view looks at, from street level out to a few hundred metres up
     const on = this.enabled && up < 320; // (from higher a person is a pixel or less)
@@ -811,6 +815,24 @@ export class People {
   }
   // (straight into a clip at its first pose: the transition's last)
   hold(p, clip) { p.clipA = clip; p.phase = 0; p.clipB = null; p.blend = 0; }
+  // A car whose way it is in, or will be in a second and a half: [across, along, heading] of it from the car (across:
+  // to the car's right), or null
+  carIn(p) {
+    const C = this.cars, grid = this.carGrid, i0 = Math.floor(p.x / 10), j0 = Math.floor(p.z / 10), out = this.threat ??= [0, 0, 0];
+    if (!grid || !C.length) return null;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const list = grid.get((i0 + a) * 4096 + j0 + b);
+      if (!list) continue;
+      for (const i of list) {
+        const dx = p.x - C[i], dz = p.z - C[i + 1], v = C[i + 3], r = 4 + v * 1.5;
+        if (dx * dx + dz * dz > r * r) continue;
+        const s = Math.sin(C[i + 2]), c = Math.cos(C[i + 2]), along = dx * s + dz * c, across = dx * c - dz * s;
+        if (Math.abs(across) < 1.8 && along > -2.8 && along < 2.8 + v * 1.5) { out[0] = across; out[1] = along; out[2] = C[i + 2]; return out; }
+      }
+    }
+    return null;
+  }
+
   // at a crossing it must wait at: there, standing, waiting
   arrive(p, next, now) {
     p.tr = null; // (setting off still, and there already: it stops where it is)
@@ -829,8 +851,11 @@ export class People {
       p.v = 0;
       if ((now - (p.check ?? 0)) > 0.25) {
         p.check = now;
-        const go = this.canCross(p, p.next[0]) || now - p.waitFrom > 75;
+        // (a minute and a quarter without a gap: it gives up and goes back the way it came; it went across into the
+        // traffic before)
+        const go = this.canCross(p, p.next[0]), giveUp = !go && now - p.waitFrom > 75;
         if (go) { this.enter(p, p.next[0], p.next[1]); p.state = 'cross'; if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null); }
+        else if (giveUp) { p.dir = -p.dir; p.u = 0; p.next = null; p.state = 'walk'; if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null); }
       }
     } else if (p.tr) {
       // carried along a transition (setting off, stopping)
@@ -841,6 +866,22 @@ export class People {
       // pace: its own, or the one in front's when close
       let target = p.speed;
       if (p.ahead) { const gap = p.ahead.gap - 1.2; target = Math.min(target, Math.max(0, gap) * 1.2, gap < 1.4 ? p.ahead.p.v + 0.05 : target); }
+      // A car coming through where it walks (a shared street, a footway over a driveway, the crossing it is on): the
+      // simulated cars keep to their recorded way and cannot stop for it, so it gets out of theirs, across its way
+      // from the car's line and slowing, or waiting for one coming across its way; on a crossing it hurries over.
+      const car = this.carIn(p);
+      if (car) {
+        if (p.state === 'cross' || l.kind === KIND.CROSSING) target = Math.max(target, 1.9);
+        else {
+          const k = Math.cos(car[2] - p.heading); // (the car along its way, or across it)
+          if (Math.abs(k) > 0.5) { p.lane = -Math.sign(car[0]) * k > 0 ? 1 : -1; target = Math.min(target, 0.5); }
+          else {
+            // (across: not stepping into its way, or quickly out of it)
+            const toward = car[0] * (Math.sin(p.heading) * Math.cos(car[2]) - Math.cos(p.heading) * Math.sin(car[2])) < 0;
+            target = toward && Math.abs(car[0]) > 1.1 && car[1] > 0 ? 0 : Math.max(target, 1.9);
+          }
+        }
+      }
       // the one you are (walking, cycling): stepped round, not walked through
       const pl = this.player;
       if (pl) {
@@ -892,7 +933,8 @@ export class People {
     const L = f.leader;
     if (!L || L.gone) { f.out = true; return; }
     // beside the one it walks with, or behind on a narrow sidewalk
-    const l = L.link, narrow = !l || l.width < 1.7 || L.state === 'cross';
+    // (and in single file, behind, where a car comes through: the one in front has stepped aside: carIn)
+    const l = L.link, narrow = !l || l.width < 1.7 || L.state === 'cross' || !!this.carIn(f);
     const side = f.rank === 1 ? -1 : 1, back = narrow ? 0.9 * f.rank : 0.15;
     const e = pointOn(l, L.dir > 0 ? Math.max(0, Math.min(l.len, L.u - back)) : Math.max(0, Math.min(l.len, l.len - L.u + back)), this.v);
     const dx = e[2] * L.dir, dz = e[3] * L.dir, lat = L.lat + (narrow ? 0 : side * 0.62);
