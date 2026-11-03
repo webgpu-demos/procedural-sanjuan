@@ -115,6 +115,77 @@ export class Roofs {
   }
 }
 
+// Under a building: in each metre of a tile, the height of the roof drawn over it (its roofs' triangles laid down
+// cell by cell, NaN where there is none), worked out for a tile the first time a simulated car near the view asks.
+// (A street the simulation drives where the city draws a building: Avenida Roosevelt at Hato Rey runs through one,
+// the data of the two not agreeing; its cars went through the walls. Under a roof now they fade out.)
+const COVER = 1;
+export class Overhead {
+  constructor(tiles, size = 256) { this.tiles = tiles; this.size = size; this.grids = new Map(); this.byKey = new Map(); this.budget = 2; }
+  of(tile) {
+    let g = this.grids.get(tile);
+    if (g !== undefined) return g;
+    if (this.budget-- <= 0) return null; // (two tiles a frame: a tile with towers on it takes milliseconds)
+    const b = new THREE.Box3().setFromObject(tile), x0 = Math.floor(b.min.x), z0 = Math.floor(b.min.z);
+    const w = Math.max(1, Math.ceil(b.max.x - x0)), h = Math.max(1, Math.ceil(b.max.z - z0));
+    let roof = null;
+    tile.traverse((o) => {
+      if (!o.isMesh || !o.userData.facade) return;
+      const pos = o.geometry.attributes.position.array, nor = o.geometry.attributes.normal.array, idx = o.geometry.index?.array;
+      const n = idx ? idx.length : pos.length / 3;
+      for (let t = 0; t < n; t += 3) {
+        const a = idx ? idx[t] : t, bb = idx ? idx[t + 1] : t + 1, c = idx ? idx[t + 2] : t + 2;
+        if (nor[a * 3 + 1] < 0.3) continue; // (a wall)
+        const ax = pos[a * 3], az = pos[a * 3 + 2], bx = pos[bb * 3], bz = pos[bb * 3 + 2], cx = pos[c * 3], cz = pos[c * 3 + 2];
+        const d = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
+        if (Math.abs(d) < 1e-6) continue;
+        const i0 = Math.max(0, Math.floor((Math.min(ax, bx, cx) - x0) / COVER)), i1 = Math.min(w - 1, Math.floor((Math.max(ax, bx, cx) - x0) / COVER));
+        const j0 = Math.max(0, Math.floor((Math.min(az, bz, cz) - z0) / COVER)), j1 = Math.min(h - 1, Math.floor((Math.max(az, bz, cz) - z0) / COVER));
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const px = x0 + (i + 0.5) * COVER, pz = z0 + (j + 0.5) * COVER;
+          const u = ((bx - px) * (cz - pz) - (cx - px) * (bz - pz)) / d, v = ((cx - px) * (az - pz) - (ax - px) * (cz - pz)) / d;
+          if (u < -1e-4 || v < -1e-4 || u + v > 1 + 1e-4) continue;
+          const y = u * pos[a * 3 + 1] + v * pos[bb * 3 + 1] + (1 - u - v) * pos[c * 3 + 1];
+          roof ??= new Float32Array(w * h).fill(NaN);
+          const k = j * w + i; if (!(roof[k] >= y)) roof[k] = y;
+        }
+      }
+    });
+    g = roof ? { x0, z0, w, h, roof } : null;
+    this.grids.set(tile, g);
+    if (this.grids.size > 80) this.grids.delete(this.grids.keys().next().value); // (the oldest)
+    return g;
+  }
+  // the tiles in the scene now (once a frame, by the caller: refresh())
+  // (the budget each frame; the tiles every 30th: they come and go with the view, slowly)
+  refresh() {
+    this.budget = 2;
+    if ((this.frame = (this.frame ?? 0) + 1) % 30 !== 1) return;
+    this.byKey.clear();
+    for (const t of this.tiles()) { const [a, c] = t.name.slice(5).split('_').map(Number); this.byKey.set((a + 32768) * 65536 + c + 32768, t); }
+    for (const t of [...this.grids.keys()]) if (!t.parent) this.grids.delete(t);
+  }
+  // the roof drawn over (x, z), or -Infinity (of the tile there and those round it: a building of one may stand over
+  // its edge)
+  at(x, z) {
+    let top = -Infinity;
+    const tx = Math.floor(x / this.size), tz = Math.floor(z / this.size);
+    for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) {
+      const tile = this.byKey.get((tx + a + 32768) * 65536 + tz + c + 32768);
+      if (!tile) continue;
+      const b = tile.userData.box ??= new THREE.Box3().setFromObject(tile);
+      if (x < b.min.x || x > b.max.x || z < b.min.z || z > b.max.z) continue;
+      const g = this.of(tile);
+      if (!g) continue;
+      const i = Math.floor((x - g.x0) / COVER), j = Math.floor((z - g.z0) / COVER);
+      if (i < 0 || j < 0 || i >= g.w || j >= g.h) continue;
+      const y = g.roof[j * g.w + i];
+      if (y > top) top = y;
+    }
+    return top;
+  }
+}
+
 export class Driver {
   // scene; surface(x, z, -2): the terrain; sim(): the simulated traffic (decks, the cars round about), or null;
   // tiles(): the scene's tile groups (for the walls)
