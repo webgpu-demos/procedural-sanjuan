@@ -1,0 +1,117 @@
+++ set -e
+++ node tools/sim/network.mjs --area=sanjuan
+   0.2s 16 expressway stretches narrowed to the lanes beyond them
+   0.3s 7072 joins: 42907 edges
+   0.4s 82 acceleration lanes (of 83 the client paves)
+   0.5s 1030 junctions joined from 2382 nodes
+   0.7s plain network: 17524 nodes (427 with lights, 116 zippers), 40573 directed edges from 36830 roads
+Success.
+  10.4s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.0 MB)
+++ .venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=0.7 --spread=15
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39100 of 39767 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+233988 trips: {'work': 151939, 'through': 9756, 'school': 29334, 'errand': 27911, 'airport': 7023, 'delivery': 10146} (scale 0.7)
+departures by half hour: 4.5h 2937 5.0h 8132 5.5h 10467 6.0h 20357 6.5h 26220 7.0h 51604 7.5h 36060 8.0h 25979 8.5h 18635 9.0h 16084 9.5h 17513
+-> data/sim/sanjuan/morning
+++ .venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+++ rm -f /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz
+++ .venv-sim/bin/python tools/sim/route.py --area=sanjuan '--duaargs=--weights.tls-penalty 10'
+Success.
+routes in 50s -> data/sim/sanjuan/morning/routes.rou.xml
+++ '[' -n '--nofit=1 --f=0.7 --holdout=1' ']'
+++ .venv-sim/bin/python simlab/calibrate.py --routes=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml --trips=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/trips.json --out=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning --from-share=0.7 --nofit=1 --f=0.7 --holdout=1
+1219 counted roads, 611 fitted
+233988 cars, 460 buses
+5802009 crossings, 206957 cars cross a fitted road
+share  fitted    n  611  7-8 crossings/counted 0.60  GEH<5 6%  r² 0.41  |  freeway 0.59  arterial 0.62  collector 0.34
+share  held out  n  608  7-8 crossings/counted 0.64  GEH<5 6%  r² 0.41  |  freeway 0.68  arterial 0.61  collector 0.36
+fitted fitted    n  611  7-8 crossings/counted 0.60  GEH<5 6%  r² 0.41  |  freeway 0.59  arterial 0.62  collector 0.34
+fitted held out  n  608  7-8 crossings/counted 0.64  GEH<5 6%  r² 0.41  |  freeway 0.68  arterial 0.61  collector 0.36
+share by hour, fitted roads, crossings/counted: 5h 0.55 6h 0.66 7h 0.86 8h 0.57 9h 0.41
+fitted by hour, fitted roads, crossings/counted: 5h 0.55 6h 0.66 7h 0.86 8h 0.57 9h 0.41
+233988 cars (the share at 0.7: 233988), 460 buses
+++ cp /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/points.json /mnt/res/
+++ timeout 320m .venv-sim/bin/python tools/sim/run.py --area=sanjuan --scenario=morning --demand=morning --end=10.25 --share=0.7 --reroute=1 --reroute-period=300
+    2.5s sumo morning: 4.50 h to 10.25 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (4696ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml' ... done (52ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (10ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (5ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+
+Simulation ended at time: 36900.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 12701.42s
+ Real time factor: 1.62974
+ UPS: 23322.018612
+Vehicles:
+ Inserted: 227374 (Loaded: 234448)
+ Running: 1651
+ Waiting: 0
+ Teleports: 1621 (Collisions: 115, Jam: 334, Yield: 927, Wrong Lane: 245)
+ Emergency Stops: 6
+ Emergency Braking: 843
+Statistics (avg of 227374):
+ RouteLength: 9625.06
+ Speed: 9.49
+ Duration: 1302.80
+ WaitingTime: 397.41
+ TimeLoss: 701.46
+ DepartDelay: 69.83
+ DepartDelayWaiting: 0.00
+AStarRouter answered 393331 queries and explored 9568.35 edges on average.
+AStarRouter spent 5963.20s answering queries (15.16ms on average).
+AStarRouter answered 380851 queries and explored 9635.25 edges on average.
+AStarRouter spent 5841.60s answering queries (15.34ms on average).
+AStarRouter answered 371497 queries and explored 9564.22 edges on average.
+AStarRouter spent 5697.00s answering queries (15.34ms on average).
+AStarRouter answered 360985 queries and explored 9600.15 edges on average.
+AStarRouter spent 5572.25s answering queries (15.44ms on average).
+12711.2s sumo done
+12747.6s tracks: 21 M samples read, up to 6.31 h, 24842 tracks, 8236 on the road
+12773.6s tracks: 41 M samples read, up to 6.85 h, 45198 tracks, 11444 on the road
+12797.5s tracks: 60 M samples read, up to 7.21 h, 63832 tracks, 20290 on the road
+12820.5s tracks: 81 M samples read, up to 7.45 h, 80599 tracks, 28470 on the road
+12840.1s tracks: 100 M samples read, up to 7.62 h, 93042 tracks, 31846 on the road
+12860.4s tracks: 121 M samples read, up to 7.80 h, 105396 tracks, 31857 on the road
+12878.6s tracks: 140 M samples read, up to 7.97 h, 115887 tracks, 31540 on the road
+12898.6s tracks: 161 M samples read, up to 8.15 h, 126933 tracks, 29950 on the road
+12918.4s tracks: 182 M samples read, up to 8.35 h, 137949 tracks, 28923 on the road
+12936.9s tracks: 201 M samples read, up to 8.53 h, 147877 tracks, 28010 on the road
+12957.6s tracks: 221 M samples read, up to 8.75 h, 159575 tracks, 24851 on the road
+12977.2s tracks: 240 M samples read, up to 8.97 h, 171164 tracks, 21764 on the road
+12999.6s tracks: 261 M samples read, up to 9.27 h, 186739 tracks, 16505 on the road
+13023.5s tracks: 282 M samples read, up to 9.69 h, 206487 tracks, 11134 on the road
+13040.8s 228563 tracks from 296 M samples; peak 32581 cars on the road at once
+13381.3s 138 windows, 331.2 MB (gzipped)
+13388.2s speeds: 69 intervals x 46546 edges
+13393.4s done: {"total": "1621", "jam": "334", "yield": "927", "wrongLane": "245"}
+++ .venv-sim/bin/python tools/sim/validate.py --area=sanjuan --scenario=morning
+1219 counted roads matched; simulated/counted 0.44; GEH<5 12%, GEH<10 24%, r² 0.32
+  other                  n    4  ratio 3.51  GEH<5    0%  GEH<10    0%
+  interstate / freeway   n  321  ratio 0.36  GEH<5    6%  GEH<10   15%
+  arterials              n  791  ratio 0.55  GEH<5   13%  GEH<10   27%
+  collectors             n   81  ratio 0.61  GEH<5   17%  GEH<10   37%
+  local                  n   22  ratio 0.35  GEH<5    9%  GEH<10   18%
+worst: [('PR-18', 19472, 1447), ('PR-18', 19472, 1585), ('PR-22', 15976, 359), ('PR-22', 19072, 1866), ('PR-22', 19072, 2068), ('PR-22', 19072, 2345)]
+++ '[' -n '--nofit=1 --f=0.7 --holdout=1' ']'
+++ .venv-sim/bin/python simlab/holdout.py --points=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/points.json --edgedata=/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/edgedata.xml --out=/mnt/res/holdout.json
+fitted    n  611  simulated/counted 0.45  GEH<5 12%  r² 0.35  | freeway 0.36 (6%)  arterial 0.57 (13%)  collector 0.63 (22%)
+held out  n  608  simulated/counted 0.44  GEH<5 11%  r² 0.30  | freeway 0.36 (6%)  arterial 0.53 (13%)  collector 0.58 (12%)
