@@ -379,10 +379,30 @@ export class SimTraffic {
     while (j < c - 2 && K[(s + j + 1) * 4] <= T) j++;
     while (j > 0 && K[(s + j) * 4] > T) j--;
     W.cursor[i] = j;
-    const a = (s + j) * 4, b = a + 4, f = (T - K[a]) / Math.max(1e-6, K[b] - K[a]);
-    out[0] = K[a + 1] + (K[b + 1] - K[a + 1]) * f; out[1] = K[a + 2] + (K[b + 2] - K[a + 2]) * f; out[2] = K[a + 3] + (K[b + 3] - K[a + 3]) * f;
+    const a = (s + j) * 4, b = a + 4, dt = Math.max(1e-6, K[b] - K[a]), f = (T - K[a]) / dt;
+    out[1] = K[a + 2] + (K[b + 2] - K[a + 2]) * f;
+    // Across the ground, a curve through the knots, not straight from one to the next (a cubic, its slope at each knot
+    // the way between the knots either side: Catmull-Rom). The knots are SUMO's seconds where the track bends; drawn
+    // straight between, a car turning at a junction changed course in a jolt at each, 40° at a time, while its
+    // heading (eased) turned smoothly: seen sideways for a moment every second. (Its slopes no longer than the step
+    // either side allows, so a car stopping at a knot does not run on past it and back.)
+    const ax = K[a + 1], az = K[a + 3], bx = K[b + 1], bz = K[b + 3], cl = Math.hypot(bx - ax, bz - az);
+    if (cl < 0.05 || c < 3) { out[0] = ax + (bx - ax) * f; out[2] = az + (bz - az) * f; return true; }
+    const p = j > 0 ? a - 4 : a, q = j < c - 2 ? b + 4 : b;
+    const slope = (o, lo, hi) => {
+      // (the velocity at a knot over this step's time, its length held to the step's)
+      let vx = (K[hi + 1] - K[lo + 1]) / Math.max(1e-6, K[hi] - K[lo]) * dt, vz = (K[hi + 3] - K[lo + 3]) / Math.max(1e-6, K[hi] - K[lo]) * dt;
+      const l = Math.hypot(vx, vz); if (l > cl) { vx *= cl / l; vz *= cl / l; }
+      o[0] = vx; o[1] = vz; return o;
+    };
+    const ta = slope(SimTraffic.ta, p, b), tb = slope(SimTraffic.tb, a, q);
+    const f2 = f * f, f3 = f2 * f, h00 = 2 * f3 - 3 * f2 + 1, h10 = f3 - 2 * f2 + f, h01 = 3 * f2 - 2 * f3, h11 = f3 - f2;
+    out[0] = h00 * ax + h10 * ta[0] + h01 * bx + h11 * tb[0];
+    out[2] = h00 * az + h10 * ta[1] + h01 * bz + h11 * tb[1];
     return true;
   }
+  static ta = [0, 0];
+  static tb = [0, 0];
 
   // ---------------------------------------------------------------- the frame
   update(T, camera, dt = 1 / 60) {
