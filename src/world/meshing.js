@@ -163,7 +163,9 @@ const CUT = new Set([AREA.PARK, AREA.WOOD, AREA.OTHER, AREA.PITCH, AREA.BEACH, A
 // at street level up to the deck, drawn over its road (0.08 m up to the carriageway's 0.06: the lane lines, kerbs and
 // islands stood out of it)
 const LOW = (a, style) => style.layer === GROUND.WATER || a.kind === AREA.BEACH || a.kind === AREA.WOOD;
-export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(grid, surface), cut = null, ground = null) {
+// the paving taken out of the carriageways (clear: src/shared/carriage.js carriageLookup), its kerbs with it
+const CLEAR = new Set([AREA.SIDEWALK, AREA.ISLAND, AREA.TACTILE, AREA.PLAZA]);
+export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(grid, surface), cut = null, ground = null, clear = null) {
   const pos = new Buf(), nor = new Buf(), col = new Buf(), lay = new Buf();
   let deck = -1; // deck of the parapet being meshed
   const emit = (p, style, on = drape) => {
@@ -211,10 +213,11 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
     else parapet(walls[i], walls[i + 1], walls[i + 2], walls[i + 3]);
   }
   for (const a of areas) {
-    const style = styleOf(a), cutting = cut && CUT.has(a.kind), on = ground && LOW(a, style) ? ground : drape;
+    const style = styleOf(a), cutting = cut && CUT.has(a.kind) ? cut : clear && CLEAR.has(a.kind) ? clear.cut : null, on = ground && LOW(a, style) ? ground : drape;
+    const kept = clear && CLEAR.has(a.kind) ? (x0, z0, x1, z1) => !clear.inside((x0 + x1) / 2, (z0 + z1) / 2) : null;
     for (const rings of a.polygons) {
       for (const [p, q, r] of triangulate(rings)) on.triangle(p, q, r, (a, b, c) => {
-        const pieces = cutting ? cut([a, b, c]) : null;
+        const pieces = cutting ? cutting([a, b, c]) : null;
         if (!pieces) { emit(a, style, on); emit(b, style, on); emit(c, style, on); return; }
         for (const piece of pieces) for (let k = 1; k + 1 < piece.length; k++) { emit(piece[0], style, on); emit(piece[k], style, on); emit(piece[k + 1], style, on); }
       });
@@ -222,7 +225,7 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
         const n = ring.length / 2;
         for (let k = 0; k < n; k++) drape.segment(
           [ring[k * 2], ring[k * 2 + 1]], [ring[((k + 1) % n) * 2], ring[((k + 1) % n) * 2 + 1]],
-          (a, b) => kerb(a[0], a[1], b[0], b[1], style.lift));
+          (a, b) => { if (!kept || kept(a[0], a[1], b[0], b[1])) kerb(a[0], a[1], b[0], b[1], style.lift); });
       }
     }
   }
@@ -647,7 +650,7 @@ export function buildingMesh(buildings, tx, tz) {
 // edge (streamer.wet).
 const LIFT_CELL = 1;
 const PAVED = new Set([AREA.CARRIAGEWAY, AREA.ROAD, AREA.SIDEWALK, AREA.ISLAND, AREA.PARKING, AREA.PLAZA, AREA.PATH, AREA.STEPS, AREA.TACTILE, AREA.OTHER]);
-function liftRaster(areas, tx, tz, tileSize) {
+function liftRaster(areas, tx, tz, tileSize, clear = null) {
   const n = Math.ceil(tileSize / LIFT_CELL), x0 = tx * tileSize, z0 = tz * tileSize, data = new Uint8Array(n * n), flag = new Uint8Array(n * n), xs = [];
   // (each cell whose middle the polygon covers)
   const fill = (rings, f) => {
@@ -669,7 +672,8 @@ function liftRaster(areas, tx, tz, tileSize) {
   for (const a of areas) {
     const style = styleOf(a), cm = Math.round(style.lift * 100), wet = style.layer === GROUND.WATER, paved = PAVED.has(a.kind);
     if (!cm && !wet && !paved) continue;
-    for (const rings of a.polygons) fill(rings, (c) => { if (data[c] < cm) data[c] = cm; if (wet) flag[c] |= 1; if (paved) flag[c] |= 2; });
+    const keep = clear && CLEAR.has(a.kind) ? (c) => !clear.inside(x0 + ((c % n) + 0.5) * LIFT_CELL, z0 + (Math.floor(c / n) + 0.5) * LIFT_CELL) : null;
+    for (const rings of a.polygons) fill(rings, (c) => { if (keep && !keep(c)) return; if (data[c] < cm) data[c] = cm; if (wet) flag[c] |= 1; if (paved) flag[c] |= 2; });
   }
   for (let c = 0; c < data.length; c++) if (flag[c] === 1) data[c] |= WET;
   return { data, n, x0, z0, cell: LIFT_CELL };
@@ -683,15 +687,16 @@ function joinMeshes(a, b) {
   return out;
 }
 
-// channels: prepareChannels() (src/world/channels.js), or null
-export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z), channels = null) {
+// channels: prepareChannels() (src/world/channels.js), or null; carriage: carriageLookup() (src/shared/carriage.js), the
+// carriageways no paving stands on, or null
+export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z), channels = null, carriage = null) {
   // (the default surface ignores decks: fine for tests, the worker passes makeSurface())
   const drape = createDraper(grid, surface, tileSize), ground = createDraper(grid, (x, z) => sampleGrid(grid, x, z), tileSize);
   tile = { ...tile, ...clearRoadway(tile) }; // (nothing standing out in the lanes: src/shared/roadway.js)
   const ch = channels?.forTile(tile.tx, tile.tz), cut = ch?.cut ?? null;
   return {
     terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize, cut),
-    roads: joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut, ground), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null),
+    roads: joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut, ground, carriage), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null),
     paint: roadMesh(tile.areas.filter(isPaint), grid, surface, [], drape),
     decals: decalMesh(tile.props, drape),
     buildings: buildingMesh(tile.buildings, tile.tx, tile.tz),
@@ -699,6 +704,6 @@ export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(g
     props: Float32Array.from(tile.props.flatMap((p) => [p.kind, p.variant, p.rot, p.x, p.z, p.scale])),
     wires: tile.wires,
     signs: tile.signs, // plain objects; the text is drawn on the main thread
-    lifts: liftRaster(tile.areas.filter((a) => !isPaint(a)), tile.tx, tile.tz, tileSize),
+    lifts: liftRaster(tile.areas.filter((a) => !isPaint(a)), tile.tx, tile.tz, tileSize, carriage),
   };
 }

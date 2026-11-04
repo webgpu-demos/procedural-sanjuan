@@ -97,6 +97,8 @@ export class Streamer {
   // segs: the approaches to the expressway's merges and forks, whose turn arrows the workers leave out (roadway.js
   // mergeApproaches); before the first tile.
   merges(segs) { for (const w of this.workers) w.postMessage({ type: 'merges', segs: segs.buffer.slice(0) }); }
+  // segs: the carriageways no paving stands on (src/shared/carriage.js carriageSegs); before the first tile
+  carriage(segs) { for (const w of this.workers) w.postMessage({ type: 'carriage', segs: segs.buffer.slice(0) }); }
   // quads: the acceleration lanes' paving and lines (roadway.js accelQuads), paved in the tiles; before the first tile.
   accel(quads) { for (const w of this.workers) w.postMessage({ type: 'accel', pave: quads.pave.buffer.slice(0), line: quads.line.buffer.slice(0) }); }
   // pads: where the decks land on the ground, the ground held level with them (src/shared/terrain.js padField); before

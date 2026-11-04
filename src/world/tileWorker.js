@@ -5,9 +5,11 @@ import { makeSurface } from '../shared/decks.js';
 import { padField } from '../shared/terrain.js';
 import { mergeArrows, accelTile, accelLookup } from '../shared/roadway.js';
 import { prepareChannels } from './channels.js';
+import { carriageLookup } from '../shared/carriage.js';
 
 let grid = null, surface = null, merging = null, channels = null; // merging: the turn arrows painted where nothing turns (roadway.js)
 let accel = null; // the acceleration lanes' quads (roadway.js accelLanes): paved in the tiles they cross
+let carriage = null; // the carriageways no paving stands on (src/shared/carriage.js)
 
 // All typed arrays in a result, so they are transferred rather than copied.
 // Every mesh's bounding box and sphere (positions -> [min xyz, max xyz, centre xyz, radius], as three works them out),
@@ -90,6 +92,7 @@ self.onmessage = async ({ data: m }) => {
     return;
   }
   if (m.type === 'merges') { merging = mergeArrows(new Float32Array(m.segs)); return; }
+  if (m.type === 'carriage') { carriage = carriageLookup(new Float32Array(m.segs)); return; }
   if (m.type === 'pads') { grid.pads = padField(m.pads); return; }
   if (m.type === 'accel') { const pave = new Float32Array(m.pave); accel = { pave, line: new Float32Array(m.line), on: accelLookup(pave) }; return; }
   if (m.type === 'tile' || m.type === 'blocks') {
@@ -100,7 +103,7 @@ self.onmessage = async ({ data: m }) => {
       const tile = decodeTile(await res.arrayBuffer());
       if (merging) tile.props = tile.props.filter((p) => !merging(p));
       const paved = accel ? accelTile(tile, accel, m.tileSize, accel.on) : tile;
-      const mesh = buildTile(paved, grid, m.tileSize, surface, channels);
+      const mesh = buildTile(paved, grid, m.tileSize, surface, channels, carriage);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
       bound(mesh);
       self.postMessage({ type: 'tile', key: m.key, mesh }, buffers(mesh));
