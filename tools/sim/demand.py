@@ -165,6 +165,7 @@ def profile(name):
 ALL = {k: sum(v[k] for v in DEP.values()) for k in ['total'] + LABELS}
 AM_SHARE = {n: profile(n).sum() / (DEP.get(n) or ALL)['total'] for n in MUNI}
 SPREAD = float(args.get('spread', 0)) * 60  # (--spread=minutes: each departure moved by up to that, either way)
+EXTERNAL = float(args.get('external', 1))
 def depart_time(name):
     w = profile(name); i = np.searchsorted(np.cumsum(w), rng.random() * w.sum())
     lo, hi = BINS[i]; lo = max(lo, 4.5)
@@ -241,8 +242,13 @@ for f in FLOWS:
             if not o_in and not crosses(a, b): continue
             d, _ = pick_gate(b, False)
         kind = 'work' if (o_in or d_in) else 'through'
-        stats[kind] += 1
-        add(t, o, d, kind, [a, b])
+        # (--external=k: k times the trips that come in or go out through a gate; the commuters alone drove a fifth
+        # of what is counted where the expressways come in, PR-52 from Caguas and Baldorioty from Carolina at free speed)
+        reps = 1
+        if EXTERNAL != 1 and not (o_in and d_in): reps = int(EXTERNAL) + (rng.random() < EXTERNAL - int(EXTERNAL))
+        for r in range(reps):
+            stats[kind] += 1
+            add(t if r == 0 else depart_time(a) + (0 if o_in else dist / 15.0), o, d, kind, [a, b])  # (a copy: its own hour)
 
 # school runs: a parent drives to school and back, 6:40-7:55 (private schools; public school buses are few)
 for m in near:
@@ -314,7 +320,11 @@ with open(os.path.join(OUT, 'trips.xml'), 'w') as fx:
     fx.write('<routes>\n')
     for k, v in VTYPES.items():
         cls = v.pop('vClass', 'passenger')
-        drive = dict(speedFactor='normc(1.06,0.1,0.75,1.35)', sigma=0.3, tau=1.0, minGap=2.0, lcStrategic=1.2, lcCooperative=0.8, lcAssertive=1.3, impatience=0.5)
+        # (lane changes at a driver's pace: SUMO moved a car standing in a queue across into the next lane at 1.3 m/s,
+        # broadside to its way, and one car in five was seen sliding; no faster across now than 0.3 m/s standing and
+        # half its speed moving)
+        drive = dict(speedFactor='normc(1.06,0.1,0.75,1.35)', sigma=0.3, tau=1.0, minGap=2.0, lcStrategic=1.2, lcCooperative=0.8, lcAssertive=1.3, impatience=0.5,
+                     lcMaxSpeedLatStanding=0.3, lcMaxSpeedLatFactor=0.5)
         drive.update(VEXTRA)
         fx.write(f'  <vType id="{k}" vClass="{cls}" ' + ' '.join(f'{a}="{b}"' for a, b in {**v, **drive}.items()) + '/>\n')
     end = lambda k, e: f'{k}Taz="{e[4:]}"' if e.startswith('taz:') else f'{k}="{e}"'
