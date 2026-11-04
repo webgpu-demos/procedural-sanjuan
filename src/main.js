@@ -22,6 +22,7 @@ import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup } from 
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad, Overhead } from './world/drive.js';
+import { carriageSegs } from './shared/carriage.js';
 import { Walker, Cyclist, Flyer } from './world/player.js';
 import { People } from './world/people.js';
 import { Hud } from './hud.js';
@@ -217,6 +218,7 @@ streamer.pads(deckPads(roads, (x, z) => streamer.ground(x, z))); // (and the gro
 // the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
 const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
+streamer.carriage(carriageSegs(roads)); // (no median's paving across a road it meets: src/shared/carriage.js)
 streamer.accel(accel); drawnDecks.ground.accel = accelLookup(accel.pave); // (and the acceleration lanes paved, and stood on)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
