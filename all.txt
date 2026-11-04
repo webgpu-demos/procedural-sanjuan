@@ -1,0 +1,110 @@
+++ set -e
+++ node tools/sim/network.mjs --area=sanjuan
+   0.6s   e16211 (Expreso Las Américas): 3 lanes between 7 joining and 5 beyond -> 5
+   0.6s   e19290 (Autopista José de Diego): 4 lanes between 6 joining and 5 beyond -> 5
+   0.6s   e19639 (Expreso Las Américas): 4 lanes between 6 joining and 6 beyond -> 6
+   0.6s   e19826 (Autopista José de Diego): 2 lanes between 4 joining and 4 beyond -> 4
+   0.6s   e25021 (Carretera 1): 2 lanes between 4 joining and 4 beyond -> 4
+   0.6s   e32591 (Expreso Román Baldorioty de Castro): 2 lanes between 4 joining and 4 beyond -> 4
+   0.6s 6 pinches at joins widened
+   0.6s 16 expressway stretches narrowed to the lanes beyond them
+   0.7s 7074 joins: 42905 edges
+   0.8s 82 acceleration lanes (of 83 the client paves)
+   0.9s 1030 junctions joined from 2382 nodes
+   1.2s plain network: 17522 nodes (427 with lights, 113 zippers), 40571 directed edges from 36830 roads
+Success.
+  11.1s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.0 MB)
+++ .venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=0.7 --spread=15 --external=1.25 '--vtype=lcMaxSpeedLatStanding=0.3;lcMaxSpeedLatFactor=0.5'
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.03  17.58   2.31   9.11
+  Guaynabo         7.40   3.55   0.18   1.09
+  Carolina         3.61   0.78   0.01   0.44
+  Trujillo Alto    3.57   1.49   0.08   0.35
+  Bayamón          0.39   0.25   0.02   0.06
+  Caguas           0.22   0.29   0.00   0.04
+  Cataño           0.18   0.32   0.05   0.15
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.01   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39098 of 39765 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.26), np.float64(0.2)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.02), np.float64(0.05)), 'Guaynabo': (np.float64(0.86), np.float64(0.84)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.55), 1), 'Gurabo': (np.float64(0.01), np.float64(0.02)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.09), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.02))}
+258921 trips: {'work': 173602, 'through': 12370, 'school': 29334, 'errand': 27911, 'airport': 7048, 'delivery': 11223} (scale 0.7)
+departures by half hour: 4.5h 3223 5.0h 8958 5.5h 12110 6.0h 23418 6.5h 29822 7.0h 56128 7.5h 39530 8.0h 29415 8.5h 20686 9.0h 17408 9.5h 18223
+-> data/sim/sanjuan/morning
+++ .venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+++ rm -f /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz
+++ .venv-sim/bin/python tools/sim/route.py --area=sanjuan --duaargs=
+Success.
+routes in 56s -> data/sim/sanjuan/morning/routes.rou.xml
+++ '[' -n '' ']'
+++ timeout 335m .venv-sim/bin/python tools/sim/run.py --area=sanjuan --scenario=morning --demand=morning --end=10.25 --share=0.7 --reroute=1 --reroute-period=300
+    2.3s sumo morning: 4.50 h to 10.25 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (4892ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml' ... done (47ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (11ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (5ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+Step #16200.00 (150ms ~= 6.67*RT, ~0.00UPS, vehicles TOT 0 ACT 0 BUF 0)                   Step #17100.00 (16ms ~= 62.50*RT, ~53625.00UPS, vehicles TOT 1129 ACT 858 BUF 0)          Step #18000.00 (108ms ~= 9.26*RT, ~15240.74UPS, vehicles TOT 3232 ACT 1646 BUF 3)         Step #18900.00 (111ms ~= 9.01*RT, ~28612.61UPS, vehicles TOT 7303 ACT 3176 BUF 0)         Step #19800.00 (172ms ~= 5.81*RT, ~23866.28UPS, vehicles TOT 12227 ACT 4105 BUF 0)        Step #20700.00 (5924ms ~= 0.17*RT, ~814.65UPS, vehicles TOT 17784 ACT 4826 BUF 11)        Step #21600.00 (204ms ~= 4.90*RT, ~29401.96UPS, vehicles TOT 24370 ACT 5998 BUF 1)        Step #22500.00 (393ms ~= 2.54*RT, ~22809.16UPS, vehicles TOT 34457 ACT 8964 BUF 591)      Step #23400.00 (612ms ~= 1.63*RT, ~18648.69UPS, vehicles TOT 46155 ACT 11413 BUF 1687)    Step #24300.00 (772ms ~= 1.30*RT, ~16382.12UPS, vehicles TOT 57896 ACT 12647 BUF 3110)    Step #25200.00 (838ms ~= 1.19*RT, ~18251.79UPS, vehicles TOT 72642 ACT 15295 BUF 3703)    Step #26100.00 (1204ms ~= 0.83*RT, ~19075.58UPS, vehicles TOT 95637 ACT 22967 BUF 4635)   Step #27000.00 (1725ms ~= 0.58*RT, ~18406.96UPS, vehicles TOT 122627 ACT 31752 BUF 5901)  Step #27900.00 (1366ms ~= 0.73*RT, ~24847.00UPS, vehicles TOT 142962 ACT 33941 BUF 5082)  Step #28800.00 (1276ms ~= 0.78*RT, ~25471.79UPS, vehicles TOT 158368 ACT 32502 BUF 3501)  Step #29700.00 (1340ms ~= 0.75*RT, ~23482.84UPS, vehicles TOT 172151 ACT 31467 BUF 3547)  Step #30600.00 (1165ms ~= 0.86*RT, ~25032.62UPS, vehicles TOT 185009 ACT 29163 BUF 3540)  Step #31500.00 (977ms ~= 1.02*RT, ~26542.48UPS, vehicles TOT 195971 ACT 25932 BUF 2443)   Step #32400.00 (828ms ~= 1.21*RT, ~26722.22UPS, vehicles TOT 205920 ACT 22126 BUF 1270)   Step #33300.00 (580ms ~= 1.72*RT, ~31522.41UPS, vehicles TOT 214985 ACT 18283 BUF 776)    Step #34200.00 (359ms ~= 2.79*RT, ~40841.23UPS, vehicles TOT 224037 ACT 14662 BUF 497)    Step #35100.00 (352ms ~= 2.84*RT, ~33781.25UPS, vehicles TOT 233353 ACT 11891 BUF 298)    Step #36000.00 (242ms ~= 4.13*RT, ~40938.02UPS, vehicles TOT 242770 ACT 9907 BUF 21)      Step #36900.00 (77ms ~= 12.99*RT, ~29662.34UPS, vehicles TOT 242791 ACT 2284 BUF 0)       
+Simulation ended at time: 36900.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 15831.78s
+ Real time factor: 1.3075
+ UPS: 20138.191952
+Vehicles:
+ Inserted: 242791 (Loaded: 259381)
+ Running: 2284
+ Waiting: 0
+ Teleports: 1609 (Collisions: 126, Jam: 285, Yield: 958, Wrong Lane: 240)
+ Emergency Stops: 2
+ Emergency Braking: 923
+Statistics (avg of 242791):
+ RouteLength: 9669.87
+ Speed: 9.37
+ Duration: 1313.16
+ WaitingTime: 400.79
+ TimeLoss: 713.50
+ DepartDelay: 88.69
+ DepartDelayWaiting: 0.00
+AStarRouter answered 474250 queries and explored 10406.17 edges on average.
+AStarRouter spent 8055.22s answering queries (16.99ms on average).
+AStarRouter answered 462081 queries and explored 10437.85 edges on average.
+AStarRouter spent 7910.15s answering queries (17.12ms on average).
+AStarRouter answered 450527 queries and explored 10501.40 edges on average.
+AStarRouter spent 7783.16s answering queries (17.28ms on average).
+AStarRouter answered 440495 queries and explored 10496.25 edges on average.
+AStarRouter spent 7602.95s answering queries (17.26ms on average).
+15841.4s sumo done
+15877.2s tracks: 21 M samples read, up to 6.22 h, 24405 tracks, 8517 on the road
+15902.0s tracks: 41 M samples read, up to 6.71 h, 43343 tracks, 12387 on the road
+15925.5s tracks: 60 M samples read, up to 7.09 h, 62372 tracks, 17315 on the road
+15948.5s tracks: 81 M samples read, up to 7.36 h, 80408 tracks, 27005 on the road
+15967.3s tracks: 100 M samples read, up to 7.53 h, 93434 tracks, 32440 on the road
+15987.3s tracks: 121 M samples read, up to 7.70 h, 105973 tracks, 34019 on the road
+16007.0s tracks: 142 M samples read, up to 7.87 h, 117899 tracks, 33684 on the road
+16025.3s tracks: 161 M samples read, up to 8.03 h, 128472 tracks, 32235 on the road
+16045.6s tracks: 181 M samples read, up to 8.22 h, 139508 tracks, 31181 on the road
+16064.1s tracks: 200 M samples read, up to 8.38 h, 149594 tracks, 30512 on the road
+16084.4s tracks: 221 M samples read, up to 8.58 h, 161022 tracks, 28207 on the road
+16105.5s tracks: 242 M samples read, up to 8.79 h, 173400 tracks, 25124 on the road
+16125.5s tracks: 261 M samples read, up to 9.02 h, 185653 tracks, 21805 on the road
+16148.5s tracks: 281 M samples read, up to 9.31 h, 200929 tracks, 17228 on the road
+16171.1s tracks: 300 M samples read, up to 9.66 h, 218313 tracks, 12872 on the road
+16193.7s 243980 tracks from 319 M samples; peak 34194 cars on the road at once
+16546.6s 138 windows, 357.8 MB (gzipped)
+16554.0s speeds: 69 intervals x 46546 edges
+16559.2s done: {"total": "1609", "jam": "285", "yield": "958", "wrongLane": "240"}
+++ .venv-sim/bin/python tools/sim/validate.py --area=sanjuan --scenario=morning
+1219 counted roads matched; simulated/counted 0.46; GEH<5 15%, GEH<10 27%, r² 0.36
+  other                  n    4  ratio 3.26  GEH<5    0%  GEH<10    0%
+  interstate / freeway   n  321  ratio 0.38  GEH<5    8%  GEH<10   16%
+  arterials              n  791  ratio 0.57  GEH<5   16%  GEH<10   30%
+  collectors             n   81  ratio 0.69  GEH<5   28%  GEH<10   41%
+  local                  n   22  ratio 0.36  GEH<5    9%  GEH<10   23%
+worst: [('PR-18', 19472, 1520), ('PR-22', 15976, 243), ('PR-18', 19472, 1558), ('PR-22', 19072, 1938), ('PR-22', 19072, 2129), ('PR-22', 19072, 2392)]
+++ '[' -n '' ']'
