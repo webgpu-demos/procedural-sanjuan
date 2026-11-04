@@ -88,6 +88,29 @@ roads.edges.forEach((e, i) => {
   }
 });
 
+// Pinches. Where two expressways (or a ramp of two lanes) join, OSM sometimes has the stretch after the join
+// narrower than what joins it and narrower than what comes after: PR-22 at Kennedy, 4 lanes and a ramp's 2 into 4
+// for 62 m, then 5; PR-18 into PR-22 at Hato Rey, 2 and 2 into 2 for 300 m, then 4. SUMO zips them lane by lane
+// there, and in the published morning the queues behind ran back half a kilometre and more with the road beyond
+// empty. Such a stretch (under 400 m) is given as many lanes as come into it, up to as many as go on beyond it.
+// (--no-pinch: as OSM has them)
+if (flag('pinch')) {
+  const into = new Map(), outOf = new Map();
+  for (const e of edges) if (e.fast) { (into.get(e.to) ?? into.set(e.to, []).get(e.to)).push(e); (outOf.get(e.from) ?? outOf.set(e.from, []).get(e.from)).push(e); }
+  const len = (e) => { let s = 0; for (let k = 1; k < e.pts.length; k++) s += Math.hypot(e.pts[k][0] - e.pts[k - 1][0], e.pts[k][1] - e.pts[k - 1][1]); return s; };
+  let n = 0;
+  for (const e of edges) {
+    if (!e.fast || e.link || len(e) > 400) continue;
+    // (a ramp of one lane joins by its acceleration lane, below: not counted)
+    const ins = (into.get(e.from) ?? []).filter((o) => o.src !== e.src && (!o.link || o.lanes >= 2)), outs = (outOf.get(e.to) ?? []).filter((o) => o.src !== e.src && !o.link);
+    if (ins.length < 2 || !outs.length) continue; // (a join, and a road going on)
+    const inLanes = ins.reduce((s, o) => s + o.lanes, 0), beyond = Math.max(...outs.map((o) => o.lanes));
+    const want = Math.min(inLanes, beyond);
+    if (want > e.lanes) { log(`  ${e.id} (${e.name || 'unnamed'}): ${e.lanes} lanes between ${inLanes} joining and ${beyond} beyond -> ${want}`); e.lanes = want; n++; }
+  }
+  log(`${n} pinches at joins widened`);
+}
+
 // Lane drops. OSM draws a toll plaza as stretches of five, six or eight lanes, and where a road narrows SUMO
 // connects only as many lanes as there are beyond: the rest are dead ends whose drivers must find a gap at
 // walking pace, and at the rush hour the expressway stops there (PR-22 at Buchanan, 6 lanes into 2 and an exit,
