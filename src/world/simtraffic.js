@@ -19,6 +19,10 @@ import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
 const NEAR = 700, MID = 2800, LIGHTS = 12000;           // metres from the camera (near: the default; sim.near)
 const NONE = []; // (an empty cell: a lookup that finds nothing makes no array; never added to. Not frozen: a frozen array is iterated the slow way, allocating)
 const BAND = 110;                                       // a car hands over from its model to its box over this
+// a seen car's move onto what is drawn (its painted lane, the deck, the street), eased as a driver steers across: over
+// about MOVE s, no faster across than DRIFT m/s (a lane change on the expressway is 3.5 m in two seconds or more)
+const MOVE = 0.4, DRIFT = 2.0;
+const AROUND = [-1, -0.5, 0.5, 1]; // (where else along its track a model's painted lane is looked up, in spans of about 24 m)
 const DETAIL = 250;                                     // within this, the full model; beyond, a lighter one
 // a 24 m cell's number (the corrected levels by cell, fixAt): the cell east of it is +1, north +CELLS
 const CELLS = 1 << 16;
@@ -384,18 +388,25 @@ export class SimTraffic {
     // Across the ground, a curve through the knots, not straight from one to the next (a cubic, its slope at each knot
     // the way between the knots either side: Catmull-Rom). The knots are SUMO's seconds where the track bends; drawn
     // straight between, a car turning at a junction changed course in a jolt at each, 40° at a time, while its
-    // heading (eased) turned smoothly: seen sideways for a moment every second. (Its slopes no longer than the step
-    // either side allows, so a car stopping at a knot does not run on past it and back.)
-    const ax = K[a + 1], az = K[a + 3], bx = K[b + 1], bz = K[b + 3], cl = Math.hypot(bx - ax, bz - az);
-    if (cl < 0.05 || c < 3) { out[0] = ax + (bx - ax) * f; out[2] = az + (bz - az) * f; return true; }
-    const p = j > 0 ? a - 4 : a, q = j < c - 2 ? b + 4 : b;
-    const slope = (o, lo, hi) => {
-      // (the velocity at a knot over this step's time, its length held to the step's)
-      let vx = (K[hi + 1] - K[lo + 1]) / Math.max(1e-6, K[hi] - K[lo]) * dt, vz = (K[hi + 3] - K[lo + 3]) / Math.max(1e-6, K[hi] - K[lo]) * dt;
-      const l = Math.hypot(vx, vz); if (l > cl) { vx *= cl / l; vz *= cl / l; }
-      o[0] = vx; o[1] = vz; return o;
+    // heading (eased) turned smoothly: seen sideways for a moment every second.
+    // One velocity at each knot, the same for the steps either side of it, so the speed has no step there. (Each step
+    // held its slopes to its own length instead, so a car slowing down changed speed in a jolt at every knot, 20 to
+    // 18 m/s in a frame, and lurched once a second: most of the hard braking seen in the opening that the simulation
+    // did not do.) Its speed no more than twice the slower step's either side (Steffen's limit): a car stopping at a
+    // knot comes to rest there and does not run on past it and back.
+    const ax = K[a + 1], az = K[a + 3], bx = K[b + 1], bz = K[b + 3];
+    if (c < 3) { out[0] = ax + (bx - ax) * f; out[2] = az + (bz - az) * f; return true; }
+    const first = s * 4, last = (s + c - 1) * 4;
+    const speed = (u, v) => Math.hypot(K[v + 1] - K[u + 1], K[v + 3] - K[u + 3]) / Math.max(1e-6, K[v] - K[u]);
+    const slope = (o, k) => {
+      // (the velocity at knot k, over this step's time)
+      const lo = k > first ? k - 4 : k, hi = k < last ? k + 4 : k, span = Math.max(1e-6, K[hi] - K[lo]);
+      let vx = (K[hi + 1] - K[lo + 1]) / span, vz = (K[hi + 3] - K[lo + 3]) / span;
+      const v = Math.hypot(vx, vz), most = 2 * Math.min(k > first ? speed(k - 4, k) : Infinity, k < last ? speed(k, k + 4) : Infinity);
+      if (v > most) { vx *= most / v; vz *= most / v; }
+      o[0] = vx * dt; o[1] = vz * dt; return o;
     };
-    const ta = slope(SimTraffic.ta, p, b), tb = slope(SimTraffic.tb, a, q);
+    const ta = slope(SimTraffic.ta, a), tb = slope(SimTraffic.tb, b);
     const f2 = f * f, f3 = f2 * f, h00 = 2 * f3 - 3 * f2 + 1, h10 = f3 - 2 * f2 + f, h01 = 3 * f2 - 2 * f3, h11 = f3 - f2;
     out[0] = h00 * ax + h10 * ta[0] + h01 * bx + h11 * tb[0];
     out[2] = h00 * az + h10 * ta[1] + h01 * bz + h11 * tb[1];
@@ -518,7 +529,7 @@ export class SimTraffic {
       let sin = Math.sin(heading), cos = Math.cos(heading);
       const seen = d2 < MID * MID || followed;
       // (a box between its 4th frames: as it was, moved along its track)
-      let y, raised, sy, road = null;
+      let y, raised, sy, road = null, lag = 0; // (lag: how far the move onto what is drawn is behind the one wanted, m: for this.trace)
       if (reuse) {
         p[0] += placed[0]; p[2] += placed[1]; y = sy = py0 + placed[2]; raised = placed[3] === 1;
       } else {
@@ -542,7 +553,25 @@ export class SimTraffic {
         const fixed = seen && this.fixes?.size ? this.fixAt(p[0], p[2], p[1], heading) : null; sy = fixed ?? p[1]; road = fixed == null ? null : this.fixEdge;
         const rx = p[0], rz = p[2];
         let cx = 0, cz = 0;
-        if ((d2 < MID * MID || followed) && this.laneCells) { const m = this.relane(p, heading); if (m) { cx = m[0]; cz = m[1]; } }
+        if ((d2 < MID * MID || followed) && this.laneCells) {
+          const m = this.relane(p, heading);
+          let sx = m ? m[0] : 0, sz = m ? m[1] : 0, n = 1, any = !!m;
+          // (a full model: the move into its painted lane taken as well where its track has it a little before and
+          // after, about 24 m either way, and averaged: where SUMO's lanes and the painted ones change in number, three
+          // into five and then four into four, the lane a car is put in changed at a line across the road, a lane's
+          // width at once on PR-22. Averaged, it moves across before the line and after it, as a driver would. Further
+          // off, the easing below makes the same move, only after the line.)
+          if (d2 < DETAIL * DETAIL || followed) {
+            const span = Math.min(6, Math.max(0.5, 24 / Math.max(1, speed))), o = this.around ??= [0, 0, 0];
+            for (const k of AROUND) {
+              if (!SimTraffic.at(W, i, T + k * span, o)) continue;
+              const mk = this.relane(o, heading); n++;
+              if (mk) { sx += mk[0]; sz += mk[1]; any = true; }
+            }
+            SimTraffic.at(W, i, T, o); // (restore the cursor)
+          }
+          if (any) { cx = sx / n; cz = sz / n; }
+        }
         let stood = seen ? this.drawn.stand(this.surface, rx + cx, rz + cz, sy, heading, road) : null;
         if (stood?.push) { cx += stood.push[0]; cz += stood.push[1]; } // (onto the deck drawn, from just beyond its edge)
         if (seen && (d2 < this.near * this.near || followed)) {
@@ -551,14 +580,25 @@ export class SimTraffic {
           if (f) { cx += f[0]; cz += f[1]; }
         }
         if (seen) {
-          const was = this.corr.get(vid), gap = was ? frame - was[2] : Infinity;
+          // Towards the move wanted as a driver steers across: a spring, critically damped (MOVE s), no faster across
+          // than DRIFT m/s at speed (0.3 at a standstill), over the time since this car was last worked out, as
+          // simulated. (Stepped towards it at a third of the car's speed instead, 7 m/s across on the expressway, a car
+          // went sideways a metre in a few frames wherever the move wanted changed, and twitched where it flickered for
+          // a frame, as it does where one stretch of painted lanes meets the next: the expressway's cars braked and
+          // surged half a metre at a time with nothing in front of them.) [x, z, frame, its speed across x, z]
+          const was = this.corr.get(vid), gap = was ? frame - was[2] : Infinity, wx = cx, wz = cz;
           if (gap <= 8) {
-            // (towards the move wanted, at a driver's pace across: the time since this car was last worked out, as simulated)
-            const sdt = Math.max(1e-6, gap * dt * Math.max(1, this.rate || 0)), step = (0.3 + 0.3 * speed) * sdt;
-            const ex = cx - was[0], ez = cz - was[1], e = Math.hypot(ex, ez), k = e > step ? step / e : 1;
-            cx = was[0] + ex * k; cz = was[1] + ez * k; was[0] = cx; was[1] = cz; was[2] = frame;
-          } else if (was) { was[0] = cx; was[1] = cz; was[2] = frame; }
-          else this.corr.set(vid, [cx, cz, frame]);
+            const h = Math.max(1e-6, gap * dt * Math.max(1, this.rate || 0)), w = 1 / MOVE, decay = Math.exp(-w * h);
+            const ex = was[0] - cx, ez = was[1] - cz, gx = was[3] + w * ex, gz = was[4] + w * ez;
+            let nx = cx + (ex + gx * h) * decay, nz = cz + (ez + gz * h) * decay;
+            let vx = (was[3] - gx * w * h) * decay, vz = (was[4] - gz * w * h) * decay;
+            const most = Math.min(DRIFT, 0.3 + 0.12 * speed) * h, mx = nx - was[0], mz = nz - was[1], m = Math.hypot(mx, mz);
+            if (m > most) { nx = was[0] + mx * most / m; nz = was[1] + mz * most / m; vx = (nx - was[0]) / h; vz = (nz - was[1]) / h; }
+            was[3] = vx; was[4] = vz;
+            cx = was[0] = nx; cz = was[1] = nz; was[2] = frame;
+          } else if (was) { was[0] = cx; was[1] = cz; was[2] = frame; was[3] = was[4] = 0; }
+          else this.corr.set(vid, [cx, cz, frame, 0, 0]);
+          lag = Math.hypot(wx - cx, wz - cz);
           if (cx !== 0 || cz !== 0) stood = this.drawn.stand(this.surface, rx + cx, rz + cz, sy, heading, road);
         }
         p[0] = rx + cx; p[2] = rz + cz;
@@ -588,7 +628,13 @@ export class SimTraffic {
             if (tr) { tr[0] = fx - Math.sin(h) * K; tr[1] = fz - Math.cos(h) * K; tr[2] = frame; tr[3] = h; tr[4] = fx; tr[5] = fz; }
             else this.trail.set(vid, (tr = [fx - Math.sin(h) * K, fz - Math.cos(h) * K, frame, h, fx, fz]));
           }
-          heading = tr[3]; sin = Math.sin(heading); cos = Math.cos(heading);
+          heading = tr[3];
+          // (turned the way it moves across onto what is drawn, as a car steering into its lane is, not sliding there
+          // broadside: its speed across over its speed along, that taken as at least 4 m/s, so a car standing in a
+          // queue, nudged across, turns a few degrees and not round to face the way it is nudged)
+          const cv = this.corr.get(vid);
+          if (cv && cv[2] === frame && (cv[3] || cv[4])) { const s = Math.max(4, speed); heading = Math.atan2(Math.sin(heading) * s + cv[3], Math.cos(heading) * s + cv[4]); }
+          sin = Math.sin(heading); cos = Math.cos(heading);
         }
         raised = !!stood?.deck;
         y = seen ? stood.y : sy;
@@ -629,7 +675,7 @@ export class SimTraffic {
           for (const s of this.solids) shown *= smooth(0.05, 0.7, segDist(c[0], c[1], c[2], c[3], s[0], s[1], s[2], s[3]) - c[4] - s[4]);
         }
       }
-      if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], sy, raised, shown, heading, spec);
+      if (this.trace) this.trace(vid, p[0], y, p[2], d2 < this.near * this.near ? 'near' : d2 < MID * MID ? 'mid' : 'far', p[1], sy, raised, shown, heading, spec, lag);
       if (d2 < 320 * 320) { nearby[nNear++] = p[0]; nearby[nNear++] = p[2]; } // (for the minimap: x, z of each)
       if (d2 < 420 * 420) { cars[nCars++] = p[0]; cars[nCars++] = p[2]; cars[nCars++] = heading; cars[nCars++] = speed; } // (for the people waiting to cross: src/world/people.js)
       if (d2 < 250 * 250) { nearN++; nearSpeed += speed; if (speed < 0.5) nearStopped++; }
