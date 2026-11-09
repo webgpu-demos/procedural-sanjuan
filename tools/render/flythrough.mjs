@@ -15,12 +15,8 @@
 //   --fps=24 --size=1280x720 --url=http://localhost:5280 --port=9333 --chrome=<path to Chrome>
 //
 // Memory, on an 8 GB Mac. The page alone takes some 3 GB. A close shot's `radius` keeps only what it sees up close in
-// full (at quality=high it is 1.4 km round the point looked at). The crowd is the danger: low over Old San Juan, where
-// hundreds of people are in view, drawing them (world/people.js, one BatchedMesh) made Chrome's GPU layer (ANGLE on
-// Metal) take some 2 MB of wired memory per person drawn, gigabytes within three frames, with or without multi-draw
-// and whatever the attributes' formats; the frames came out black and the machine stalled. Such a shot sets
-// `people: 0` (from 50 m up they are a few pixels, and an image model paints its own). The render stops if free
-// memory falls below --min-free, or if the GPU context is lost or a shader fails; the low point is printed at the end.
+// full (at quality=high it is 1.4 km round the point looked at). The render stops if free memory falls below
+// --min-free, or if the GPU context is lost or a shader fails; the low point is printed at the end.
 //
 // Depth is drawn white near, black far (and black for the sky), on a log scale between the shot's dNear and dFar,
 // fixed for the whole shot so that it does not flicker: the convention of depth ControlNets. From the air it is
@@ -38,8 +34,8 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../.
 
 // Shots: the camera's eye and the point it looks at, each from [start] to [end] (x east, y above the ground there,
 // z south: metres from Plaza de Armas), eased in and out like the opening's (experience.js); the hour on San
-// Juan's clock (held still), clouds as a coverage (0: none); radius: metres of city loaded in full, people: the
-// crowd's density (see Memory).
+// Juan's clock (held still), clouds as a coverage (0: none); radius: metres of city loaded in full (see Memory),
+// people: the crowd's density.
 const SHOTS = {
   // Old San Juan from over the Atlantic: El Morro on its headland, the old city behind it, Puerta de Tierra and the
   // Condado towers beyond, late in the afternoon (the sun low in the west-southwest, behind the camera's right)
@@ -54,10 +50,9 @@ const SHOTS = {
     eye: [[-1050, 35, -690], [-960, 35, -830]], at: [[-805, 8, -615], [-795, 8, -625]],
   },
   // San Juan Bautista: in from the west-southwest over the roofs of the old city towards its front on Calle del
-  // Cristo (it faces west, lit by the afternoon sun), its bell gable and the dome over the crossing. Nobody on foot:
-  // the old city's crowd is more than the GPU can hold (see Memory)
+  // Cristo (it faces west, lit by the afternoon sun), its bell gable and the dome over the crossing
   cathedral: {
-    hour: 16.6, dur: 8, clouds: 0.3, near: 25, dNear: 80, dFar: 5000, radius: 500, people: 0,
+    hour: 16.6, dur: 8, clouds: 0.3, near: 25, dNear: 80, dFar: 5000, radius: 500,
     eye: [[-290, 50, 15], [-245, 45, -25]], at: [[-128, 16, -46], [-125, 16, -48]],
   },
   // The Capitol from the south, over Avenida Ponce de León: a slow arc from the southwest to its front, the rotunda

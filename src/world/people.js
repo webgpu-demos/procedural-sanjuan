@@ -62,13 +62,19 @@ const pick = (list) => list[Math.floor(rnd() * list.length)];
 const weighted = (pairs) => { let t = 0; for (const [, w] of pairs) t += w; let r = rnd() * t; for (const [v, w] of pairs) { r -= w; if (r <= 0) return v; } return pairs[pairs.length - 1][0]; };
 
 // ---------------------------------------------------------------- the shaders
+// (No flat varyings. A program with one makes ANGLE on Metal rewrite the indices of every indexed draw, GL's
+// flat-shaded vertex being the triangle's last and Metal's its first; the version in Chrome 156 rewrites each draw
+// into a new buffer, from the start of the index buffer to the end of the draw. One person is one draw at its
+// avatar's place in the batch's indices, a few megabytes long: hundreds in view took gigabytes of the GPU's memory
+// within a few frames. The atlas layer, the same at a person's every vertex, is interpolated to itself instead,
+// and the sampler rounds it to the layer.)
 const VERT_PARS = /* glsl */`
 uniform highp sampler2D uBones;
 uniform highp sampler2D uPeople;
 attribute vec4 skinIndex;
 attribute vec4 skinWeight;
 varying vec4 vLook;
-flat varying float vLayer;
+varying float vLayer;
 vec4 personData(float id, int k) { int i = int(id) * 4 + k; int w = textureSize(uPeople, 0).x; return texelFetch(uPeople, ivec2(i % w, i / w), 0); }
 mat4 poseBone(float row, float b) {
   int i = (int(row) * ${NB} + int(b)) * 3, w = textureSize(uBones, 0).x;
@@ -96,7 +102,7 @@ mat4 skinM = personBone(clipA, clipB, clipA.w, skinIndex.x) * skinWeight.x + per
 const FRAG_PARS = /* glsl */`
 uniform highp sampler2DArray uAtlas;
 varying vec4 vLook;
-flat varying float vLayer;`;
+varying float vLayer;`;
 // (a person fading in or out: a dither, as the cars do)
 const FADE = 'if (vLook.a < 0.999 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) > vLook.a) discard;';
 // Their shadows. The sun's depth bias (environment.js: -0.0003 of a 3,990 m depth range, some 1.2 m, against acne on
