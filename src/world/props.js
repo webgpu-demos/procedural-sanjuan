@@ -6,7 +6,7 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { Tree } from '@dgreenheck/ez-tree';
 import { PROP, DECAL } from '../shared/tileformat.js';
 import { shared } from './materials.js';
-import { LAMP_LAYER, lampMaterial, gridAware } from './lamplight.js';
+import { LAMP_LAYER, lampMaterial, lampUniforms, gridAware } from './lamplight.js';
 import { parkedVehicles } from './traffic.js';
 import { DECAL_COLS, DECAL_ROWS } from './decals.js';
 
@@ -647,11 +647,55 @@ export class Props {
       wire: wireMaterial(),
     };
     this.mats.poolCool = lampMaterial(this.mats.pool.map, {}, { grid: true }); // white LED lamps on the back streets
+    // a parked car far off (parkedBox): its paint (the stand-in's per-car colour), dark glass round the cabin
+    this.mats.parkedBox = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.3 });
+    this.mats.parkedBox.onBeforeCompile = (shader) => {
+      lampUniforms(shader); // (every material samples the lamp map: see simtraffic.js's boxes)
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec3 paintColor;\nattribute float aGlass;\nvarying vec3 vPaint;\nvarying float vGlass;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaint = paintColor; vGlass = aGlass;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vPaint;\nvarying float vGlass;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(vPaint, vec3(0.035, 0.04, 0.05), vGlass);');
+    };
+    this.mats.parkedBox.customProgramCacheKey = () => 'car-parked-box-v1';
+    this.boxes = new Map();
     // (a tree's shadow from afar: its simple crown, at its size in the tree's own units; drawn only into the shadow map)
     this.mats.shadowPlain = new THREE.MeshBasicMaterial();
     for (const t of this.trees) if (!t.palm) t.shadowCrown = this.models.blob.clone().scale(t.radius * 1.75, t.height, t.radius * 1.75);
     this.time = 0;
     this.signalSlot = null; // (x, z, rot) -> the head's slot in the simulated signals' texture (simsignals.js)
+  }
+
+  // A parked car's far shape for the stand-in `geometry`: its body as a box and the cabin above it (dark glass, the
+  // roof in paint), twenty triangles, sharing the stand-in's per-car paint
+  parkedBox(geometry) {
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+    const { min, max } = geometry.boundingBox, key = [min.x, min.y, min.z, max.x, max.y, max.z].map((v) => v.toFixed(2)).join();
+    let base = this.boxes.get(key);
+    if (!base) {
+      const pos = [], nor = [], glass = [];
+      const face = (a, b, c, d, n, g) => { pos.push(...a, ...b, ...c, ...a, ...c, ...d); for (let i = 0; i < 6; i++) { nor.push(...n); glass.push(g); } };
+      // five faces of a box (no floor); sides: glass or paint
+      const box = (x0, x1, y0, y1, z0, z1, sides) => {
+        face([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [0, 1, 0], 0);
+        face([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], sides);
+        face([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], sides);
+        face([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], sides);
+        face([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], sides);
+      };
+      const H = max.y - min.y, L = max.z - min.z, belt = min.y + H * 0.58, inset = (max.x - min.x) * 0.07;
+      box(min.x, max.x, min.y + 0.18, belt, min.z, max.z, 0);
+      box(min.x + inset, max.x - inset, belt, max.y, min.z + L * 0.2, min.z + L * 0.68, 1);
+      base = new THREE.BufferGeometry();
+      base.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      base.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      base.setAttribute('aGlass', new THREE.Float32BufferAttribute(glass, 1));
+      this.boxes.set(key, base);
+    }
+    const g = base.clone();
+    g.setAttribute('paintColor', geometry.attributes.paintColor);
+    return g;
   }
 
   update(dt) {
@@ -740,6 +784,16 @@ export class Props {
         const kit = parkedVehicles(), car = kit.model(variant, rows.map((i) => (props[i + 1] >> 2) * 7919 + Math.round(props[i + 3] * 31 + props[i + 4] * 17)));
         const mesh = instanced(rows, car.geometry, car.material, { lift: 0.02, scale: car.scale ? () => car.scale : null });
         mesh.userData.vehicle = true; // (labelled as vehicles in synthetic training images, src/synth/labels.js)
+        mesh.userData.parked = 'near';
+        mesh.userData.own = [car.geometry]; // (the tile's own copies, with its cars' paint: freed with it, as an instanced mesh's geometry is not)
+        // and far off, a body and a cabin in its paint, in the same places (main.js cullSmall shows one or the other): a
+        // car a few pixels long drawn with the stand-in's five hundred triangles was a fifth of an aerial view's
+        // triangles, and as many again in the shadow map
+        const far = new THREE.InstancedMesh(this.parkedBox(car.geometry), this.mats.parkedBox, rows.length);
+        far.instanceMatrix = mesh.instanceMatrix; far.castShadow = far.receiveShadow = true;
+        far.boundingSphere = mesh.boundingSphere; far.visible = false;
+        far.userData.vehicle = true; far.userData.parked = 'far'; far.userData.own = [far.geometry];
+        group.add(far);
       } else if (this.furniture[kind]) {
         const models = this.furniture[kind];
         instanced(rows, models[variant % models.length], this.mats.metal, { lift: 0.12 });
@@ -761,6 +815,7 @@ export class Props {
           });
           mesh.geometry = mesh.geometry.clone();
           mesh.geometry.setAttribute('aLens', new THREE.InstancedBufferAttribute(a, 3));
+          mesh.userData.own = [mesh.geometry]; // (the tile's own copy: freed with it, as an instanced mesh's geometry is not)
         }
       }
     }

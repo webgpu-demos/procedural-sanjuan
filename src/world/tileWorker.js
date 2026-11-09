@@ -31,6 +31,41 @@ function bound(o) {
   for (const v of Object.values(o)) if (v !== o.bounds) bound(v);
 }
 
+// A mesh of separate triangles (the meshing emits each triangle's three corners) welded into shared corners and an
+// index. The tiles' roads and paint held four copies of every corner: 5.8 million vertices round the Milla de Oro,
+// over 200 MB on the GPU and as much again in the page, for 1.4 million distinct ones. Corners merge only when every
+// attribute is the same to the bit, so the picture is the same, corner for corner.
+function weld(m) {
+  if (!m?.position?.length || m.index) return m;
+  const names = Object.keys(m).filter((k) => m[k] instanceof Float32Array), n = m.position.length / 3;
+  if (names.some((k) => m[k].length % n)) return m;
+  const sizes = names.map((k) => m[k].length / n), words = names.map((k) => new Uint32Array(m[k].buffer, m[k].byteOffset, m[k].length));
+  let size = 1; while (size < n * 2) size <<= 1;
+  const table = new Int32Array(size).fill(-1), first = new Int32Array(n), index = new Uint32Array(n); // first: each kept corner's source
+  const same = (u, v) => {
+    for (let a = 0; a < words.length; a++) { const w = words[a], s = sizes[a]; for (let c = 0; c < s; c++) if (w[u * s + c] !== w[v * s + c]) return false; }
+    return true;
+  };
+  let count = 0;
+  for (let v = 0; v < n; v++) {
+    let h = 0x811c9dc5;
+    for (let a = 0; a < words.length; a++) { const w = words[a], s = sizes[a]; for (let c = 0; c < s; c++) h = Math.imul(h ^ w[v * s + c], 0x01000193); }
+    for (let slot = (h ^ (h >>> 15)) & (size - 1); ; slot = (slot + 1) & (size - 1)) {
+      const t = table[slot];
+      if (t < 0) { table[slot] = count; first[count] = v; index[v] = count++; break; }
+      if (same(first[t], v)) { index[v] = t; break; }
+    }
+  }
+  const out = { ...m };
+  names.forEach((k, a) => {
+    const src = m[k], s = sizes[a], dst = new Float32Array(count * s);
+    for (let i = 0; i < count; i++) for (let c = 0; c < s; c++) dst[i * s + c] = src[first[i] * s + c];
+    out[k] = dst;
+  });
+  out.index = count < 65536 ? Uint16Array.from(index) : index;
+  return out;
+}
+
 function buffers(o, out = []) {
   for (const v of Object.values(o)) {
     if (ArrayBuffer.isView(v)) out.push(v.buffer);
@@ -105,6 +140,8 @@ self.onmessage = async ({ data: m }) => {
       const paved = accel ? accelTile(tile, accel, m.tileSize, accel.on) : tile;
       const mesh = buildTile(paved, grid, m.tileSize, surface, channels, carriage);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
+      for (const k of ['roads', 'paint', 'decals']) mesh[k] = weld(mesh[k]);
+      if (mesh.buildings.details) mesh.buildings.details = weld(mesh.buildings.details);
       bound(mesh);
       self.postMessage({ type: 'tile', key: m.key, mesh }, buffers(mesh));
     } catch (e) {
