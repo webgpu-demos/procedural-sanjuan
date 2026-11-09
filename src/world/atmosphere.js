@@ -238,26 +238,32 @@ export class Atmosphere {
     plain.setFragmentShader(aerial.getFragmentShader());
     Object.assign(plain, generator.textures);
     plain.stbnTexture = stbn;
+    // The library starts the sky's cosSunAngularRadius at the sun's angular radius itself (0.0047) instead of its
+    // cosine, so the sun's disk is tried for every ray within ~90° of the sun and only its antialiasing keeps it off;
+    // that reads screen derivatives after an early return for opaque cloud, so along cloud edges the sun showed
+    // through as bright beads (at dawn and dusk most of all). Setting the radius through its setter fixes the cosine.
+    for (const e of [aerial, plain]) e.sunAngularRadius = e.sunAngularRadius;
 
     // ---- the passes
     this.composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
     this.composer.addPass(new RenderPass(scene, camera));
     // window glass reflects what is on screen (first of all: it reads the panes marked in the alpha channel)
+    // The colour is scaled into the atmosphere's units and back inside the passes either side of it, not in passes
+    // of their own (a full-screen pass costs as much as a simple effect's whole work): within a pass postprocessing
+    // runs the effects that read depth first, so the scale follows the reflections here and the clouds below. (The
+    // ambient occlusion between only multiplies the colour: the scale does not change it.)
     this.reflections = new WindowReflections(camera);
-    this.reflectionPass = new EffectPass(camera, this.reflections);
+    this.reflectionPass = new EffectPass(camera, this.reflections, new Scale(UNITS));
     this.composer.addPass(this.reflectionPass);
     // ambient occlusion: contact shading between buildings and the ground
     this.ao = new N8AOPostPass(scene, camera, innerWidth, innerHeight);
     Object.assign(this.ao.configuration, { aoRadius: 7, distanceFalloff: 1, intensity: 2.6, halfRes: true, gammaCorrection: false });
     this.ao.configuration.color = new THREE.Color(0.02, 0.02, 0.03);
     this.composer.addPass(this.ao);
-    // (each scale in a pass of its own: within one pass, postprocessing runs the effects that read depth first)
-    this.composer.addPass(new EffectPass(camera, new Scale(UNITS)));
-    this.cloudPass = new EffectPass(camera, clouds, aerial);
+    this.cloudPass = new EffectPass(camera, clouds, aerial, new Scale(1 / UNITS));
     this.composer.addPass(this.cloudPass);
-    this.skyPass = new EffectPass(camera, plain);
+    this.skyPass = new EffectPass(camera, plain, new Scale(1 / UNITS));
     this.composer.addPass(this.skyPass);
-    this.composer.addPass(new EffectPass(camera, new Scale(1 / UNITS)));
     this.bloom = new BloomEffect({ intensity: 0.5, luminanceThreshold: 0.9, luminanceSmoothing: 0.2, mipmapBlur: true });
     // the film: a soft vignette and a fine grain over the tone-mapped picture (the experience turns them up for its shots)
     // depth of field, for riding with a car: the car sharp, the city behind it soft (off unless focus() is called)
@@ -296,7 +302,9 @@ export class Atmosphere {
     this.cloudPass.enabled = on; this.skyPass.enabled = !on;
     const q = order[Math.min(order.indexOf(this.want.quality), order.indexOf(this.cap.clouds))] ?? 'low';
     if (on && q !== this.applied) { this.clouds.qualityPreset = q; this.applied = q; }
-    this.reflectionPass.enabled = this.want.reflect && this.cap.reflect;
+    // (the pass stays: it scales the colour too. Skipped, the reflections leave its shader)
+    const reflect = this.want.reflect && this.cap.reflect;
+    if (reflect !== (this.reflections.blendMode.blendFunction !== BlendFunction.SKIP)) this.reflections.blendMode.blendFunction = reflect ? BlendFunction.NORMAL : BlendFunction.SKIP;
     if (!this.cap.dof) this.dofPass.enabled = false;
   }
   get coverage() { return this.clouds.coverage; }

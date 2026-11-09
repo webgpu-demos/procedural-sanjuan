@@ -30,6 +30,8 @@ export function frozen(o) {
   return o;
 }
 
+function released() { this.array = null; } // (a BufferAttribute's onUpload: its array is on the GPU, the copy here goes)
+
 function geometry(arrays, attrs) {
   const g = new THREE.BufferGeometry();
   for (const [name, size] of attrs) if (arrays[name]?.length) g.setAttribute(name, new THREE.BufferAttribute(arrays[name], size));
@@ -231,7 +233,13 @@ export class Streamer {
     if (!b) return; // dropped while in flight
     b.state = 'ready';
     if (!msg.mesh.position.length) return;
-    b.mesh = new THREE.Mesh(geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3], ['aTile', 2]]), this.materials.blocks);
+    const geo = geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3], ['aTile', 2]]);
+    // The distant blocks are only ever drawn, so their arrays are let go once they are on the GPU (round Hato Rey
+    // 280 MB of the page's heap held a copy of what the GPU already had), and a click's ray goes through them (it
+    // looks for facades: before, it also tested each of the blocks' millions of triangles).
+    for (const a of [...Object.values(geo.attributes), geo.index]) a.onUpload(released);
+    b.mesh = new THREE.Mesh(geo, this.materials.blocks);
+    b.mesh.raycast = () => {};
     b.mesh.name = `blocks ${msg.key}`;
     this.scene.add(frozen(b.mesh));
     this.coverBlocks(b);
@@ -319,6 +327,14 @@ export class Streamer {
       m.receiveShadow = true;
       m.userData = { tile: msg.key, info, ends: buildings.ends, facade: true };
       group.add(m);
+      const d = buildings.details;
+      if (d?.position.length) { // what stands on the roofs (meshing.js): left out at a distance with the other small things (main.js)
+        const r = new THREE.Mesh(geometry(d, [['position', 3], ['normal', 3], ['color', 3], ['aFacade', 4], ['aBldg', 4], ['aPhoto', 2]]), m.material);
+        r.castShadow = r.receiveShadow = true;
+        r.userData.roofs = true;
+        r.raycast = () => {}; // (a click picks the building under it)
+        group.add(r);
+      }
     }
     if (models) { // a tile's static models (bridges, street furniture, trees), where the compiler wrote any
       const m = new THREE.Mesh(geometry(models, [['position', 3], ['normal', 3], ['color', 3]]), this.materials.models);
@@ -338,7 +354,7 @@ export class Streamer {
       }));
       group.add(m);
     }
-    const tris = terrain.index.length / 3 + roads.position.length / 9 + buildings.triangles;
+    const tris = terrain.index.length / 3 + (roads.index ? roads.index.length : roads.position.length / 3) / 3 + buildings.triangles;
     Object.assign(t, { state: 'ready', group, trees, signs, atlases, signNear: false, buildings: info.length, tris });
     this.scene.add(frozen(group));
     const tl = this.available.get(msg.key);

@@ -913,15 +913,20 @@ const hud = new Hud({
 
 // ---------------------------------------------------------------- loop
 const readout = document.getElementById('hud'); // (the technical readout: G)
-const clock = new THREE.Clock();
+const timer = new THREE.Timer(); timer.connect(document); // (a hidden tab's time does not count: no jump on return)
 let frames = 0, fpsTime = 0, fps = 0;
 
-let loading = true, shadowKey = '', shadowFrame = 0, detailFrame = 0;
+let loading = true, shadowAt = null, shadowFrame = 0, detailFrame = 0;
 const streamFocus = new THREE.Vector3(), STREAM_AHEAD = 450;
-// how far small things are drawn (m), times the governor's detail: parked cars, street furniture and lamps
-const FAR_PARKED = 1300, FAR_SMALL = 1000;
+// how far small things are drawn (m), times the governor's detail: parked cars, street furniture and lamps; and
+// where a parked car's stand-in gives way to its box (props.js parkedBox)
+const FAR_PARKED = 1300, FAR_SMALL = 1000, NEAR_PARKED = 350;
+// (and the lane lines: 15 cm wide, a quarter of a pixel at 650 m, where they only shimmer; each tile's are a few
+// thousand triangles, and a Mac's GPU pays for triangles more than for pixels)
+const FAR_PAINT = 650;
 // Small things are not drawn far off: parked cars beyond 1.3 km and street furniture beyond 1 km are a pixel or
-// two each, yet most of the draw calls of a wide view (the governor brings them nearer on a slow machine)
+// two each, yet most of the draw calls of a wide view (the governor brings them nearer on a slow machine). Each is
+// drawn from a tile's distance `from` (m) to `to`.
 function cullSmall() {
   const size = manifest.tileSize, c = camera.position, up = Math.max(0, c.y - streamer.ground(c.x, c.z));
   for (const tile of scene.children) {
@@ -929,16 +934,19 @@ function cullSmall() {
     if (!tile.userData.small) {
       tile.userData.small = [];
       tile.traverse((o) => {
+        if (o.material === materials.paint) tile.userData.small.push([o, 0, FAR_PAINT]);
+        if (o.userData.roofs) tile.userData.small.push([o, 0, FAR_SMALL]); // (tanks and the like on the roofs: streamer.js)
         if (!o.isInstancedMesh) return;
         const key = String((Array.isArray(o.material) ? o.material[0] : o.material).customProgramCacheKey?.() ?? '');
-        if (key.startsWith('car-parked')) tile.userData.small.push([o, FAR_PARKED]);
-        else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, FAR_SMALL]);
+        if (o.userData.parked) tile.userData.small.push(o.userData.parked === 'near' ? [o, 0, NEAR_PARKED] : [o, NEAR_PARKED, FAR_PARKED]);
+        else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, 0, FAR_SMALL]);
       });
       const [x, z] = tile.name.slice(5).split('_').map(Number);
       tile.userData.centre = [(x + 0.5) * size, (z + 0.5) * size];
     }
     const [x, z] = tile.userData.centre, d = Math.max(0, Math.hypot(x - c.x, z - c.z, up) - size * 0.7);
-    for (const [o, far] of tile.userData.small) o.visible = d < far * governor.detail;
+    const k = d / governor.detail;
+    for (const [o, from, to] of tile.userData.small) o.visible = k >= from && k < to;
   }
 }
 // ?perf: a graph of the last four seconds of frames (the time from one to the next, with the 60 and 30 fps lines) and
@@ -968,7 +976,8 @@ const perf = params.has('perf') ? (() => {
 })() : null;
 
 function frame(_, manual) {
-  const dt = manual ?? Math.min(clock.getDelta(), 0.1); // (manual: a step driven from outside, for testing with the page hidden)
+  if (manual == null) timer.update(_);
+  const dt = manual ?? Math.min(timer.getDelta(), 0.1); // (manual: a step driven from outside, for testing with the page hidden)
   perf?.start();
   renderer.info.reset();
   clockTime.tick(sim && simOn() && !sim.ready(clockTime.hour * 3600) ? 0 : dt); // (the clock waits for the cars' next window)
@@ -1039,16 +1048,21 @@ function frame(_, manual) {
   env.update(dt);
   env.follow(controls.target, camera);
   // Shadows: faded out once the sun is down (the moon's, at this strength, would not show) and then not drawn at
-  // all; by day the map is drawn again when its frustum moves, else every third frame (for the cars): it is a
-  // whole second pass over the city. (The light keeps casting: switching that recompiles every material.)
+  // all; by day the map is drawn every third frame (for the cars), and at once when it no longer covers the view
+  // well: its frustum grown or shrunk, or the focus gone a sixth of the way to its edge. It is a whole second pass
+  // over the city, and moving it at every step drew it every frame of a flight or a drive. (Between redraws the
+  // materials keep the matrix it was drawn with, which three updates only when it draws the map: the shadows stay
+  // where they fell, the map a frame or two behind the view.) (The light keeps casting: switching that recompiles
+  // every material.)
   env.sun.castShadow = guiState.shadowsWanted;
   env.sun.shadow.intensity = Math.min(1, env.daylight / 0.15);
   {
-    const p = env.sun.target.position, key = `${p.x},${p.z},${env.shadowExtent}`;
+    const p = env.sun.target.position, ext = env.shadowExtent, at = shadowAt;
+    const moved = !at || at.ext !== ext || Math.hypot(p.x - at.x, p.z - at.z) > ext / 6;
     // (and once at the start, by night too: until the map exists the materials' shadow samplers are given a
     // texture of the wrong kind, and their draws fail)
-    renderer.shadowMap.needsUpdate = !env.sun.shadow.map || (env.sun.shadow.intensity > 0 && (key !== shadowKey || ++shadowFrame % 3 === 0));
-    shadowKey = key;
+    renderer.shadowMap.needsUpdate = !env.sun.shadow.map || (env.sun.shadow.intensity > 0 && (moved || ++shadowFrame % 3 === 0));
+    if (renderer.shadowMap.needsUpdate) shadowAt = { x: p.x, z: p.z, ext };
   }
   perf?.lap('rest');
   lampLight.update(scene, controls.target, camera.position, env.night);
