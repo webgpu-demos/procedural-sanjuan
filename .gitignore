@@ -39,3 +39,6 @@ data/sim/
 
 # audio previews rendered for review
 samples/
+
+# camera moves rendered by tools/render/flythrough.mjs
+data/renders/
