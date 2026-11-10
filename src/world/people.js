@@ -363,8 +363,11 @@ function avatarGeometries(gltf) {
 
 // ---------------------------------------------------------------- the walks
 // The network in blocks (walkways.mjs: walks.json, walks/<cx>_<cz>.bin), loaded round the view.
+// off(x, z): whether a point is where no one walks now (an acceleration lane paved over the sidewalk: main.js, src/shared/
+// roadway.js accelLanes): a link mostly so, but for a crossing, is left out (kept in its block's list, which crossings
+// and spots index).
 class Walks {
-  constructor(base) { this.base = base; this.nodes = new Map(); this.blocks = new Map(); this.links = []; this.spots = []; this.cells = new Map(); this.meta = null; }
+  constructor(base, off = null) { this.base = base; this.off = off; this.nodes = new Map(); this.blocks = new Map(); this.links = []; this.spots = []; this.cells = new Map(); this.meta = null; }
   async init() {
     this.meta = await fetch(`${this.base}/walks.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     if (!this.meta) return false;
@@ -410,11 +413,20 @@ class Walks {
       const cum = [0];
       for (let q = 2; q < line.length; q += 2) cum.push(cum[cum.length - 1] + Math.hypot(line[q] - line[q - 2], line[q + 1] - line[q - 1]));
       const l = { a, b, pts: line, cum, len: cum[cum.length - 1], kind: kind[i], width: width[i] / 10, w: Array.from(w.subarray(i * 9, i * 9 + 9), dec), cross: null, block: key, rate: 0 };
-      a.links.push(l); b.links.push(l); block.links.push(l);
+      if (this.off && kind[i] !== KIND.CROSSING && l.len > 0) { // (every 3 m or so along it)
+        let on = 0;
+        for (let q = 2; q < line.length; q += 2) {
+          const d = cum[q / 2] - cum[q / 2 - 1], k = Math.max(1, Math.ceil(d / 3));
+          for (let j = 0; j < k; j++) { const f = (j + 0.5) / k; if (this.off(line[q - 2] + (line[q] - line[q - 2]) * f, line[q - 1] + (line[q + 1] - line[q - 1]) * f)) on += d / k; }
+        }
+        l.off = on * 2 > l.len || on > 10; // (most of it, or 10 m: who walks it walks in the lane)
+      }
+      if (!l.off) { a.links.push(l); b.links.push(l); }
+      block.links.push(l);
     }
     for (let c = 0; c < nC; c++) block.links[cl[c]].cross = { edge: ce[c], node: cn[c], lights: cf[c] & 1 };
     // (count: the people at it now; another group comes only to one nobody is at)
-    for (let s = 0; s < nS; s++) block.spots.push({ x: sxz[s * 2], z: sxz[s * 2 + 1], kind: sk[s], heading: (sh[s] / 256) * Math.PI * 2, link: block.links[sl[s]], w: Array.from(sw.subarray(s * 9, s * 9 + 9), dec), count: 0 });
+    for (let s = 0; s < nS; s++) if (!block.links[sl[s]].off) block.spots.push({ x: sxz[s * 2], z: sxz[s * 2 + 1], kind: sk[s], heading: (sh[s] / 256) * Math.PI * 2, link: block.links[sl[s]], w: Array.from(sw.subarray(s * 9, s * 9 + 9), dec), count: 0 });
     block.nodeIds = ids;
     this.blocks.set(key, block);
     this.rebuild();
@@ -428,7 +440,7 @@ class Walks {
   }
   rebuild() {
     this.links = []; this.spots = []; this.cells.clear();
-    for (const b of this.blocks.values()) if (b !== 'loading') { this.links.push(...b.links); this.spots.push(...b.spots); }
+    for (const b of this.blocks.values()) if (b !== 'loading') { for (const l of b.links) if (!l.off) this.links.push(l); this.spots.push(...b.spots); }
     for (const l of this.links) { const m = Math.floor(l.pts.length / 4) * 2, k = Math.floor(l.pts[m] / 64) + ',' + Math.floor(l.pts[m + 1] / 64); if (!this.cells.has(k)) this.cells.set(k, []); this.cells.get(k).push(l); }
     this.version = (this.version ?? 0) + 1;
   }
@@ -481,8 +493,8 @@ function nearestOn(l, x, z) {
 // ---------------------------------------------------------------- the crowd
 export class People {
   // base: the area's tiles; surface, lift: the streets' heights (streamer); models: the avatars' folder
-  static async load({ base, models = 'models/people/crowd', surface, lift, renderer }) {
-    const walks = new Walks(base);
+  static async load({ base, models = 'models/people/crowd', surface, lift, renderer, off = null }) {
+    const walks = new Walks(base, off);
     const [ok, manifest] = await Promise.all([walks.init(), fetch(`${models}/people.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
     if (!ok || !manifest) return null;
     const p = new People(walks, manifest, models, surface, lift, renderer);

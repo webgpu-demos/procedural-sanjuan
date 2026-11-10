@@ -585,15 +585,9 @@ function buildPalm(def) {
     colored(crown, [0.2, 0.34, 0.12]),
     colored(new THREE.CylinderGeometry(0.18, 0.28, crownY, 5).translate(lean * 0.4, crownY / 2, 0), royal ? [0.42, 0.41, 0.38] : [0.28, 0.24, 0.18]),
   ]);
-  // (and past FAR_SMALL, main.js cullSmall: a flattened octahedron on a three-sided trunk, 14 triangles)
-  const radius = royal ? 4.2 : 5.2;
-  const farLow = mergeGeometries([
-    colored(new THREE.OctahedronGeometry(radius * 0.8, 0).scale(1, 0.4, 1).translate(lean, crownY, 0), [0.2, 0.34, 0.12]),
-    colored(new THREE.CylinderGeometry(0.22, 0.3, crownY, 3, 1, true).translate(lean * 0.4, crownY / 2, 0), royal ? [0.42, 0.41, 0.38] : [0.28, 0.24, 0.18]),
-  ]);
   return {
-    radius, height: H, palm: true,
-    branches, leaves, solid, far, farLow,
+    radius: royal ? 4.2 : 5.2, height: H, palm: true,
+    branches, leaves, solid, far,
     branchMat: trunkMat,
     leafMat: leafMaterial(frondMap, royal ? 0xd8f0b0 : 0xc8e6a0),
   };
@@ -602,9 +596,8 @@ function buildPalm(def) {
 // Far trees: a smooth lumpy crown on a stick (unit height, unit width), coloured per vertex: green, or for a tree
 // in flower its blossom's colour (tint), as dark against it as the green is against the green trees' tints (a
 // flamboyán went green beyond its lighter model: no red canopy from the air).
-// detail 0: the crown alone in 20 triangles, for past FAR_SMALL (main.js cullSmall), where the stick is not seen.
-function blobTreeGeometry(tint = null, detail = 2) {
-  const crown = mergeVertices(new THREE.IcosahedronGeometry(0.5, detail).deleteAttribute('uv').deleteAttribute('normal'));
+function blobTreeGeometry(tint = null) {
+  const crown = mergeVertices(new THREE.IcosahedronGeometry(0.5, 2).deleteAttribute('uv').deleteAttribute('normal'));
   const p = crown.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
@@ -621,7 +614,6 @@ function blobTreeGeometry(tint = null, detail = 2) {
     c[i * 3] = 0.012 + 0.03 * t; c[i * 3 + 1] = 0.032 + 0.07 * t; c[i * 3 + 2] = 0.008 + 0.014 * t;
   }
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
-  if (detail < 2) return g;
   return mergeGeometries([g, tube(0.035, 0.03, 0.35, 0, 0, 0, [0.25, 0.2, 0.16], 5)]);
 }
 
@@ -634,8 +626,7 @@ export class Props {
     this.trees.forEach((t, v) => { const m = TREES[v].palm ? t : buildTree(TREES[v], true); t.lite = { branches: m.branches, leaves: m.leaves, solid: m.solid }; });
     this.models = {
       pole: [poleGeometry(false), poleGeometry(true)], light: lightGeometry(), signal: signalGeometry(), vending: vendingGeometry(),
-      blob: blobTreeGeometry(), bloom: blobTreeGeometry(TREES.find((d) => d.recolor)?.tint),
-      blobLow: blobTreeGeometry(null, 0), bloomLow: blobTreeGeometry(TREES.find((d) => d.recolor)?.tint, 0), lamp: new THREE.BoxGeometry(0.24, 0.03, 0.6), quad: new THREE.PlaneGeometry(1, 1),
+      blob: blobTreeGeometry(), bloom: blobTreeGeometry(TREES.find((d) => d.recolor)?.tint), lamp: new THREE.BoxGeometry(0.24, 0.03, 0.6), quad: new THREE.PlaneGeometry(1, 1),
       pool: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), lens: new THREE.CircleGeometry(0.15, 16),
     };
     // furniture drawn as one instanced model per kind (and variant)
@@ -781,16 +772,9 @@ export class Props {
             b.userData.shadowAs = part === 'leaves' ? [t.shadowCrown, this.mats.shadowPlain] : [null, null];
           }
         }
-        // A tree far off: its simple crown out to FAR_SMALL, and past it the same in a few triangles (userData.crown,
-        // which main.js cullSmall shows by distance: trees had vanished from aerial views a kilometre out)
-        const bloom = TREES[variant % TREES.length].recolor;
-        const crown = t.far ? instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false })
-          : instanced(rows, bloom ? this.models.bloom : this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] });
-        crown.userData.crown = 'near';
-        const low = new THREE.InstancedMesh(t.far ? t.farLow : bloom ? this.models.bloomLow : this.models.blobLow, this.mats.blob, rows.length);
-        low.instanceMatrix = crown.instanceMatrix; low.castShadow = low.receiveShadow = false; low.computeBoundingSphere();
-        low.userData.crown = 'distant';
-        far.add(low);
+        // (crown: a tree far off, which main.js cullSmall is to leave to the tiles' own distances, as it does leaves)
+        if (t.far) instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false }).userData.crown = true;
+        else instanced(rows, TREES[variant % TREES.length].recolor ? this.models.bloom : this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] }).userData.crown = true;
       } else if (kind === PROP.POLE) {
         instanced(rows, this.models.pole[variant % 2], this.mats.metal);
         instanced(rows, this.models.lamp, this.mats.lamp, { shadow: false, local: [POLE_LAMP.x, POLE_LAMP.y - 0.02, 0], scale: () => [1.6, 1, 0.3] });

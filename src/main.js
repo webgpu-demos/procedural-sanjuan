@@ -19,7 +19,7 @@ import { DrawnDecks, mergeDecks } from './world/roadlevel.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
-import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup } from './shared/roadway.js';
+import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup, accelCarriage } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad, Overhead } from './world/drive.js';
@@ -227,7 +227,7 @@ const [roads, rails, lanes] = await Promise.all([
 roads.lanes = lanes;
 // the acceleration lanes where ramps join the expressway (src/shared/roadway.js, on the roads as compiled: the
 // simulation's network has them in the same places, tools/sim/network.mjs): paved in the tiles, driven by the cars
-const accel = accelQuads(accelLanes(roads, lanes?.edges ?? null));
+const accelList = accelLanes(roads, lanes?.edges ?? null), accel = accelQuads(accelList);
 // (the expressway's height without the humps the elevation model's overpass ridges put in it, and the bridges that
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
@@ -237,7 +237,10 @@ streamer.pads(deckPads(roads, (x, z) => streamer.ground(x, z))); // (and the gro
 // the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
 const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
-streamer.carriage(carriageSegs(roads)); // (no median's paving across a road it meets: src/shared/carriage.js)
+{ // (no median's paving across a road it meets: src/shared/carriage.js; nor a sidewalk under an acceleration lane)
+  const a = carriageSegs(roads), b = accelCarriage(accelList), segs = new Float32Array(a.length + b.length);
+  segs.set(a); segs.set(b, a.length); streamer.carriage(segs);
+}
 streamer.accel(accel); drawnDecks.ground.accel = accelLookup(accel.pave); // (and the acceleration lanes paved, and stood on)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
@@ -717,7 +720,7 @@ drawnDecks.lift = lift; // (the cars on it too)
 const PEOPLE = params.get('people') == null ? 1 : Number(params.get('people'));
 function loadPeople() {
   if (!(PEOPLE > 0)) return;
-  People.load({ base: `tiles/${AREA}`, surface: streamer.surface, lift, renderer })
+  People.load({ base: `tiles/${AREA}`, surface: streamer.surface, lift, renderer, off: drawnDecks.ground.accel })
     .then((p) => { if (!p) return; people = p; p.density = PEOPLE; p.enabled = peopleOn; scene.add(p.group); })
     .catch((e) => console.warn('the people stay at home:', e));
 }
@@ -1014,8 +1017,6 @@ function cullSmall() {
         if (!o.isInstancedMesh) return;
         const key = String((Array.isArray(o.material) ? o.material[0] : o.material).customProgramCacheKey?.() ?? '');
         if (o.userData.parked) tile.userData.small.push(o.userData.parked === 'near' ? [o, 0, NEAR_PARKED] : [o, NEAR_PARKED, FAR_PARKED]);
-        // (a far tree's crown: its simple one out to FAR_SMALL, the one of a few triangles past it, props.js)
-        else if (o.userData.crown) tile.userData.small.push(o.userData.crown === 'distant' ? [o, FAR_SMALL, Infinity] : [o, 0, FAR_SMALL]);
         else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, 0, FAR_SMALL]);
       });
       const [x, z] = tile.name.slice(5).split('_').map(Number);

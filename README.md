@@ -117,6 +117,23 @@ npm run preview    # top-down render -> data/preview/<area>.png
 npm test           # tile format round trip + checks over the compiled areas
 ```
 
+A compile clears the area's folder, and with it what other tools write there; `tools/pipeline/rebuild.sh` makes an
+area ready to serve in one go (compile, `clearroads.mjs`, `lanetable.mjs`, `walkways.mjs`, the gates, `npm test`):
+
+```
+sh tools/pipeline/rebuild.sh --area=sanjuan --road-levels=<an earlier compile's roads.json>
+sh tools/pipeline/rebuild.sh --area=condado
+```
+
+`--road-levels` keeps the levels of an earlier compile on structures only (spans, bridges, tunnels, flyovers and
+the expressways), tuned shot by shot; it needs the same road graph (San Juan's live one is in
+`data/tiles-backup/live-2026-10-28/`). The compile refuses an area whose `sim/` is still there (`--force` deletes
+it). `tools/audit/gates.mjs` prints what the data must pass: road points off the ground, skywalks, paint under a
+sidewalk, hidden ads, house fronts in a driven lane. Skywalks and other raised parts (`min_height`) are kept off
+the ground (`BFLAG.RAISED`), with an underside, and cars and people pass under them; a road's paint is clipped to
+its carriageway; where two expressways join into a stretch narrower than both (`pinches.mjs`), it is widened to
+what joins it.
+
 No building stands in a road: `compile` takes out (or notches, keeping the rest of its footprint) a building that a
 drawn street-level centreline runs into by half a metre or more, and paves the slot (`tools/pipeline/roadclear.mjs`;
 forts and landmark models excepted). Tiles compiled before that rule are patched in place, without a recompile
@@ -240,7 +257,7 @@ and back up as needed (`?quality=high` keeps it all). `G` brings back the settin
 experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
 
 ```
-npm run sim:setup                    # once: Python environment with SUMO 1.28 and libsumo (.venv-sim/)
+npm run sim:setup                    # once: Python environment with SUMO 1.28 and sumolib (.venv-sim/)
 npm run sim:data                     # Census: commuting flows, departure times, municipio boundaries
 npm run sim:net                      # roads.json -> SUMO network; buildings as trip ends; FHWA counts
 npm run sim:all                      # demand, buses, routes, the morning and the apagón, validated (SCALE=, RUNARGS=)
@@ -259,12 +276,20 @@ npm run sim:all                      # demand, buses, routes, the morning and th
   Juan, the client paves them where the simulation drives them), and where any other ramp joins it in fewer lanes,
   a zipper (netconvert's own guessed acceleration lanes, `--ramps`, widened roads past what the tiles pave);
   an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
+  `checknet.py` runs after netconvert and fails the build on a junction link that starts more than a metre behind
+  the lane it leaves (SUMO puts the car back that far: the client drew it hopping backwards); the run lists the
+  roads where SUMO's lanes and the paint's differ. The network records the sha1 of the `roads.json` it was made
+  from, the run carries it in its index, and `tools/deploy.sh` will not publish a run made on other roads.
 - **Demand** (`demand.py`): a cordon model. Homes, jobs, schools and shops are the floor area of the city's
   buildings, by use and municipio; the ACS municipio-to-municipio commuting flows say who drives where; a
   commuter from beyond the area leaves by whichever of the roads towards their municipio the routes favour (a
   TAZ of its gates); departure times by municipio of residence (ACS B08302, the six round the area; any other as
   those six together), smoothed over the survey's half hours (`--spread=15`); school runs, errands, deliveries
-  and through traffic on top. The whole morning is about 334,000 trips.
+  and through traffic on top. The whole morning is about 334,000 trips. A trip from a place in the area sets off
+  standing from the kerb, and one to a place in the area pulls in to the kerb along its last street and stops
+  (`--arrive=<m/s>` rolls instead); a trip through a gate comes in and leaves at the road's speed. Vehicle
+  lengths and widths are those the client draws (`src/shared/vehicles.json`, read by `demand.py`, `gtfs.py`,
+  `run.py`, `traffic.js` and `roadway.js`).
 - **Routes** (`route.py`, `assign.py`): every driver re-plans on the way, every five minutes, on the travel times
   of the moment (`--reroute=1`): at half the demand, the run teleported 355 cars where the same routes driven as
   planned teleported 11,000 and locked Hato Rey from 7:30. `assign.py` (SUMO's iterative assignment on the
@@ -281,10 +306,12 @@ npm run sim:all                      # demand, buses, routes, the morning and th
   stops (`--dark=priority` keeps netconvert's priorities instead).
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
-  direction is matched to the counted line (which runs down the median of a divided road). The published run, at
-  seven tenths of the demand, on the network with the acceleration lanes the client paves (and other ramps zipped
-  in), carried 0.45 of the counted traffic (freeways 0.35, arterials 0.57; r² 0.30) and teleported 1,570 of its
-  227,000 cars (1,388 still on the road at 10:15); with the ramps zipped and no acceleration lanes, 0.45 and 1,338
+  direction is matched to the counted line (which runs down the median of a divided road). The published run
+  (November 2026, job `Q1`: trips from and to the area start and end at the kerb), at seven tenths of the demand,
+  on the network with the acceleration lanes the client paves (and other ramps zipped in), carried 0.45 of the
+  counted traffic (freeways 0.36, arterials 0.57; r² 0.36) and teleported 1,433 of its 228,000 cars (1,215 still on
+  the road at 10:15); with cars arriving at 3 m/s instead of stopping (`Q2`), 0.45 and 1,535 (1,869). The October
+  run, setting off and arriving at speed: 0.45, 1,570 of 227,000 (1,388); with the ramps zipped and no acceleration lanes, 0.45 and 1,338
   (1,683); with netconvert's guessed acceleration lanes it had carried 0.48 (freeways 0.40; r² 0.40, 1,286
   teleported), its trips an eighth shorter, but those lanes lay past the paving the tiles draw (73 km of lanes in
   San Juan where a car stood off the road, 25 km without), and with the ramps giving way, 0.45 and 2,280
@@ -349,8 +376,11 @@ npm run deploy     # vite build (with the compiled areas in public/) -> force-pu
 
 GitHub Pages serves that branch (Settings → Pages → Deploy from a branch → `gh-pages`, `/`). The build uses
 relative URLs (`base: './'` in `vite.config.js`), so it works under `https://<owner>.github.io/<repo>/`.
-The branch holds only the latest build (about 210 MB with all four areas); compile the areas before deploying,
-and run `npm test` (an area compiled before the road rule needs `clearroads.mjs`, above).
+The branch holds only the latest build (about 800 MB with the two simulated runs; Pages serves up to 1 GB, and
+the deploy stops at 980 MB); compile the areas before deploying, and run `npm test` (an area compiled before the
+road rule needs `clearroads.mjs`, above). The deploy refuses a working tree with uncommitted changes (the build
+is published under HEAD's hash) and a run whose roads hash differs from the tiles' (`ALLOW_UNHASHED=1` lets
+through a run older than the hash).
 
 ## Compiled output (`public/tiles/<area>/`)
 

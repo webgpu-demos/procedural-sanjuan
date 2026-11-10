@@ -1,5 +1,5 @@
 // A page of the city in headless Chrome (as tools/render/views.mjs runs it), settled, then a script evaluated in it.
-//   node tools/audit/probe.mjs --q='time=12&cam=...' --js=file.js [--shot=out.png] [--size=1280x720] [--sim=1] [--port=9341] [--settle=60]
+//   node tools/audit/probe.mjs --q='time=12&cam=...' --js=file.js [--shot=out.png] [--size=1280x720] [--sim=1] [--port=9341] [--settle=60] [--xp=1: the opening on]
 // The script file holds the body of an async function (A = window.__app, step(dt) = one frame, sleep(ms)); what it
 // returns is printed as JSON. --shots: the script may return { shots: { name: dataURL } }, written beside --shot.
 import { spawn, spawnSync } from 'node:child_process';
@@ -13,7 +13,7 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const freeNow = () => Number(spawnSync('sysctl', ['-n', 'kern.memorystatus_level']).stdout) || 100;
 const body = args.js ? fs.readFileSync(args.js, 'utf8') : 'return null;';
-const page = `${args.url ?? 'http://localhost:5280'}/?area=${args.area ?? 'sanjuan'}&quality=${args.quality ?? 'high'}&people=${args.people ?? 0}&xp=0&${args.q ?? ''}${args.sim ? '' : '&sim=0'}`;
+const page = `${args.url ?? 'http://localhost:5280'}/?area=${args.area ?? 'sanjuan'}&quality=${args.quality ?? 'high'}&people=${args.people ?? 0}&xp=${args.xp ?? 0}&${args.q ?? ''}${args.sim ? '' : '&sim=0'}`;
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'probe-'));
 const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${PORT}`, '--use-angle=metal', `--user-data-dir=${profile}`, '--enable-precise-memory-info',
   `--window-size=${W},${H}`, '--hide-scrollbars', '--mute-audio', '--no-first-run', '--no-default-browser-check', '--js-flags=--expose-gc',
