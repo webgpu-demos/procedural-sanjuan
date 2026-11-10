@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import GUI from 'lil-gui';
 import { makeProjection } from './shared/geo.js';
+import { NO_ADS } from './shared/places.js';
 import { createMaterials, shared } from './world/materials.js';
 import { loadTextures } from './world/textures.js';
 import { Streamer, frozen } from './world/streamer.js';
@@ -180,7 +181,7 @@ if (LARGE) {
 loader.set(0.14, 'railways and roads');
 const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
 { // (no billboards or LED screens in the colonial city: Old San Juan, west of Puerta de Tierra)
-  const [x0, z1] = proj.project(-66.1245, 18.4600), [x1, z0] = proj.project(-66.1040, 18.4725);
+  const [x0, z1] = proj.project(NO_ADS.west, NO_ADS.south), [x1, z0] = proj.project(NO_ADS.east, NO_ADS.north);
   signs.noAds = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
 }
 // A raised sea (?sea=, Garita's sea-level scenario): the sea's surface at that height, over everything lower. It is
