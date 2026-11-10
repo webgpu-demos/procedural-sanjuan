@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import { AREA, PROP, BARRIER } from '../../src/shared/tileformat.js';
 import { hash, forEachAlong, inRings } from './landscape.mjs';
+import { roofLike } from './buildings.mjs';
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const num = (v) => { const n = Number.parseFloat(v); return Number.isFinite(n) ? n : null; };
@@ -129,7 +130,7 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
       if (rail == null || !inBounds(cx, cz)) continue; // no visible track beside it: an underground platform
       out.structures.platforms.push({ ring: ring.map(([x, z]) => [r2(x), r2(z)]), y: r2(rail + 0.95), covered: t.covered === 'yes' || Math.abs(ringArea(ring)) > 250 });
       tally('platform');
-    } else if (t.building === 'roof' && w.closed && !hidden(t)) {
+    } else if (roofLike(t) && w.closed && !hidden(t)) { // (building=roof, "roof;yes" and the like, carports: buildings.mjs)
       const ring = openRing(w.pts), cx = ring.reduce((s, p) => s + p[0], 0) / ring.length, cz = ring.reduce((s, p) => s + p[1], 0) / ring.length;
       if (!inBounds(cx, cz)) continue;
       // A roof far above the ground is part of a larger structure (a platform high in a tower or a stadium),

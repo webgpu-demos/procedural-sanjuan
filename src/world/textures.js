@@ -62,6 +62,8 @@ function arrayTexture(layers, renderer) {
   t.generateMipmaps = true;
   t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   t.needsUpdate = true;
+  // (its pixels are let go once they are on the GPU: the four arrays kept 96 MB of them on the page's heap)
+  t.onUpdate = () => { t.image.data = null; t.onUpdate = null; };
   return t;
 }
 

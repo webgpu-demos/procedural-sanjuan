@@ -26,7 +26,10 @@ export const VERSION = 7;
 // Wall material from OSM's building:material, in a building's hint (0 = not mapped).
 export const MATERIAL = { NONE: 0, TILE: 1, CONCRETE: 2, PLASTER: 3, BRICK: 4, METAL: 5, GLASS: 6 };
 
-// LATTICE: a steel lattice tower (OSM tower:construction); MASONRY: fortress stonework, without windows
+// LATTICE: a steel lattice tower (OSM tower:construction); MASONRY: fortress stonework, without windows;
+// NO_SOLID: not drawn and not run into: a building taken out of a road (tools/pipeline/roadclear.mjs) by
+// clearroads.mjs after the area was compiled. The record stays, so the buildings after it keep their index in the
+// tile: their ids (t_x_z.ids), their colours and their rooms' seeds go by it.
 export const BFLAG = { LOD2: 1, NO_SOLID: 2, LATTICE: 4, MASONRY: 8 };
 
 // Ground surface kinds. WATER code 1 is the sea (the rest are lakes, lagoons and rivers).
@@ -73,11 +76,13 @@ class Writer {
   i32(v) { this.need(4); this.dv.setInt32(this.o, v, true); this.o += 4; }
   f32(v) { this.need(4); this.dv.setFloat32(this.o, v, true); this.o += 4; }
   str(s) { const b = new TextEncoder().encode(s); this.u16(b.length); this.need(b.length); new Uint8Array(this.buf, this.o, b.length).set(b); this.o += b.length; }
+  // (a ring as the compiler has it, [[x, z], ...], or as decodeTile gives it, [x, z, ...])
   polygons(polys) {
     this.u16(polys.length);
     for (const rings of polys) {
       this.u16(rings.length);
       for (const ring of rings) {
+        if (flat(ring)) { this.u32(ring.length / 2); for (const v of ring) this.f32(v); continue; }
         this.u32(ring.length);
         for (const [x, z] of ring) { this.f32(x); this.f32(z); }
       }
@@ -87,12 +92,17 @@ class Writer {
 }
 
 const clampInt = (v, max) => Math.max(0, Math.min(max, Math.round(v || 0)));
+// numbers one after the other (a typed array from decodeTile), not a list of points
+const flat = (a) => ArrayBuffer.isView(a) || typeof a[0] === 'number';
 
+// Takes a tile as the compiler builds it, and as decodeTile gives it (rings, wires and walls as flat arrays): a tile
+// decoded and encoded again is the same bytes (tools/tests/tileformat.test.mjs), which is what lets a tool change one
+// thing in a compiled tile and leave the rest as it was (tools/pipeline/clearroads.mjs).
 export function encodeTile({ tx, tz, buildings, areas, props = [], wires = [], walls = [], signs = [] }) {
   const w = new Writer();
   w.u32(MAGIC); w.u16(VERSION); w.u16(0);
   w.i32(tx); w.i32(tz);
-  w.u32(buildings.length); w.u32(areas.length); w.u32(props.length); w.u32(wires.length); w.u32(walls.length); w.u32(signs.length);
+  w.u32(buildings.length); w.u32(areas.length); w.u32(props.length); w.u32(flat(wires) ? wires.length / 4 : wires.length); w.u32(flat(walls) ? walls.length / 5 : walls.length); w.u32(signs.length);
   for (const b of buildings) {
     w.u16(clampInt(b.usage, 65535)); w.u8(clampInt(b.storeys, 255)); w.u8(b.flags || 0);
     w.f32(b.base); w.f32(b.height); w.f32(b.measuredHeight ?? -1); w.u32((b.hint ?? 0) >>> 0);
@@ -103,8 +113,8 @@ export function encodeTile({ tx, tz, buildings, areas, props = [], wires = [], w
       // s.uv: per ring, [u, v, ...] in the tile's roof photo atlas (0..1), where the surface has a photo
       w.u8((s.roof ? 1 : 0) | (s.uv ? 2 : 0)); w.u8(s.rings.length);
       s.rings.forEach((ring, r) => {
-        w.u16(ring.length);
-        for (const [x, y, z] of ring) { w.f32(x); w.f32(y); w.f32(z); }
+        if (flat(ring)) { w.u16(ring.length / 3); for (const v of ring) w.f32(v); }
+        else { w.u16(ring.length); for (const [x, y, z] of ring) { w.f32(x); w.f32(y); w.f32(z); } }
         if (s.uv) for (const c of s.uv[r]) w.u16(clampInt(c * 65535, 65535));
       });
     }
@@ -116,11 +126,14 @@ export function encodeTile({ tx, tz, buildings, areas, props = [], wires = [], w
   const TAU = Math.PI * 2;
   for (const p of props) {
     w.u8(p.kind); w.u8(p.variant || 0);
-    w.u16(Math.round(((((p.rot || 0) % TAU) + TAU) % TAU) / TAU * 65535));
+    // (a whole turn, which is what decodeTile makes of 65535, is written back as 65535, not as 0)
+    w.u16(p.rot === TAU ? 65535 : Math.round(((((p.rot || 0) % TAU) + TAU) % TAU) / TAU * 65535));
     w.f32(p.x); w.f32(p.z); w.f32(p.scale ?? 1);
   }
-  for (const [x1, z1, x2, z2] of wires) { w.f32(x1); w.f32(z1); w.f32(x2); w.f32(z2); }
-  for (const wall of walls) for (const v of wall) w.f32(v);
+  if (flat(wires)) for (const v of wires) w.f32(v);
+  else for (const [x1, z1, x2, z2] of wires) { w.f32(x1); w.f32(z1); w.f32(x2); w.f32(z2); }
+  if (flat(walls)) for (const v of walls) w.f32(v);
+  else for (const wall of walls) for (const v of wall) w.f32(v);
   for (const s of signs) {
     w.u8(s.style); w.u8(s.color); w.u16(0);
     for (const v of [s.x, s.y, s.z, s.nx, s.nz, s.w, s.h]) w.f32(v);

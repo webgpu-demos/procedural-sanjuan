@@ -101,7 +101,8 @@ const OSM_QUERIES = {
   way["historic"="citywalls"]({bb});
   way["waterway"~"^(river|stream|canal|ditch)$"]({bb});
   way["man_made"~"^(bridge|pier)$"]({bb});
-  way["building"="roof"]({bb});
+  way["building"~"(^|;) *(roof|carport) *(;|$)"]({bb});
+  way["building:part"~"(^|;) *(roof|carport) *(;|$)"]({bb});
   way["leisure"="swimming_pool"]({bb});
   node["highway"="stop"]({bb});
   node["railway"="level_crossing"]({bb});

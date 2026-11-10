@@ -341,7 +341,9 @@ function wireMaterial() {
     fragmentShader: /* glsl */ `
       uniform float uPx; varying float vDepth;
       void main() {
-        float cover = clamp(0.03 * uPx / max(vDepth, 0.5), 0.0, 0.9);
+        // (gone by WIRE_LOD_DISTANCE, where the tile's lines are hidden, streamer.js: a fifth to a third opaque there,
+        // they popped)
+        float cover = clamp(0.03 * uPx / max(vDepth, 0.5), 0.0, 0.9) * (1.0 - smoothstep(${(WIRE_LOD_DISTANCE * 0.7).toFixed(1)}, ${WIRE_LOD_DISTANCE.toFixed(1)}, vDepth));
         if (cover < 0.02) discard;
         gl_FragColor = vec4(vec3(0.006, 0.007, 0.009), cover);
       }`,
@@ -591,8 +593,10 @@ function buildPalm(def) {
   };
 }
 
-// Far trees: a smooth lumpy crown on a stick (unit height, unit width), coloured per vertex.
-function blobTreeGeometry() {
+// Far trees: a smooth lumpy crown on a stick (unit height, unit width), coloured per vertex: green, or for a tree
+// in flower its blossom's colour (tint), as dark against it as the green is against the green trees' tints (a
+// flamboyán went green beyond its lighter model: no red canopy from the air).
+function blobTreeGeometry(tint = null) {
   const crown = mergeVertices(new THREE.IcosahedronGeometry(0.5, 2).deleteAttribute('uv').deleteAttribute('normal'));
   const p = crown.attributes.position;
   for (let i = 0; i < p.count; i++) {
@@ -603,8 +607,10 @@ function blobTreeGeometry() {
   crown.computeVertexNormals();
   const g = crown.toNonIndexed(), n = g.attributes.position.count, c = new Float32Array(n * 3);
   // darker underneath, lighter on top, like a lit canopy
+  const bloom = tint != null && new THREE.Color(tint).multiplyScalar(0.2); // (0.102 of green on top, against 0.51 in the green tints)
   for (let i = 0; i < n; i++) {
     const t = THREE.MathUtils.clamp((g.attributes.position.getY(i) - 0.25) / 0.75, 0, 1);
+    if (bloom) { const k = 0.31 + 0.69 * t; c[i * 3] = bloom.r * k; c[i * 3 + 1] = bloom.g * k; c[i * 3 + 2] = bloom.b * k; continue; }
     c[i * 3] = 0.012 + 0.03 * t; c[i * 3 + 1] = 0.032 + 0.07 * t; c[i * 3 + 2] = 0.008 + 0.014 * t;
   }
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
@@ -620,7 +626,7 @@ export class Props {
     this.trees.forEach((t, v) => { const m = TREES[v].palm ? t : buildTree(TREES[v], true); t.lite = { branches: m.branches, leaves: m.leaves, solid: m.solid }; });
     this.models = {
       pole: [poleGeometry(false), poleGeometry(true)], light: lightGeometry(), signal: signalGeometry(), vending: vendingGeometry(),
-      blob: blobTreeGeometry(), lamp: new THREE.BoxGeometry(0.24, 0.03, 0.6), quad: new THREE.PlaneGeometry(1, 1),
+      blob: blobTreeGeometry(), bloom: blobTreeGeometry(TREES.find((d) => d.recolor)?.tint), lamp: new THREE.BoxGeometry(0.24, 0.03, 0.6), quad: new THREE.PlaneGeometry(1, 1),
       pool: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), lens: new THREE.CircleGeometry(0.15, 16),
     };
     // furniture drawn as one instanced model per kind (and variant)
@@ -766,8 +772,9 @@ export class Props {
             b.userData.shadowAs = part === 'leaves' ? [t.shadowCrown, this.mats.shadowPlain] : [null, null];
           }
         }
-        if (t.far) instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false });
-        else instanced(rows, this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] });
+        // (crown: a tree far off, which main.js cullSmall is to leave to the tiles' own distances, as it does leaves)
+        if (t.far) instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false }).userData.crown = true;
+        else instanced(rows, TREES[variant % TREES.length].recolor ? this.models.bloom : this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] }).userData.crown = true;
       } else if (kind === PROP.POLE) {
         instanced(rows, this.models.pole[variant % 2], this.mats.metal);
         instanced(rows, this.models.lamp, this.mats.lamp, { shadow: false, local: [POLE_LAMP.x, POLE_LAMP.y - 0.02, 0], scale: () => [1.6, 1, 0.3] });

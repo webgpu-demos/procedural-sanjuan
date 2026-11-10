@@ -28,10 +28,33 @@ const MOVE = ['walk', 'walk2', 'stroll', 'brisk', 'jog'], STILL = ['idle', 'wait
 // poses): setting off from standing, stopping from either foot, standing up from a seat
 const TRANS = ['start', 'stopL', 'stopR', 'standup'];
 const CLIPS = [...MOVE, ...STILL, ...TRANS];
-const FPS = { move: 30, still: 10 };
 const POOL = 1600;                  // people at once, at most
-const LOD = [24, 95];               // metres: the full body nearer than this, the plain one beyond the second
+// metres: the full body nearer than the first, the plain one beyond the second; and either side of each a band, a
+// tenth of it, in which a person keeps the model it has (the first was 24 m, where a person is some 75 to 110 pixels
+// tall and the change shows; and one walked behind at the distance itself, a foot nearer and further as the two go,
+// changed model 91 times in ten seconds)
+const LOD = [40, 95], LOD_BAND = 0.1;
+// (the level at a distance, for one drawn at level `was` (-1: not drawn): it changes only once past the band)
+const lodAt = (d, was) => {
+  if (was < 0) return d < LOD[0] ? 0 : d < LOD[1] ? 1 : 2;
+  let l = was;
+  while (l < 2 && d > LOD[l] * (1 + LOD_BAND)) l++;
+  while (l > 0 && d < LOD[l - 1] * (1 - LOD_BAND)) l--;
+  return l;
+};
 const FAR = 360;                    // nobody is drawn beyond this (a few pixels)
+// Where a person stands that its way, taken anew, does not say (enter, settle): no more than this (m) is kept to be
+// walked off; beyond it, it is where its way says at once
+const OFF_MAX = 2.5;
+// Across its way a person moves no faster than this share of its pace along it (it does not slide sideways standing),
+// or, out of a car's way, than this (m/s)
+const SIDE = 0.9, DODGE = 1.2;
+// A seat and the way it is on: within the first (m), the one who gets up walks off along the way, eased onto it; out
+// to the second, a straight leg to it first; further (a bench in the middle of a plaza: 28% of San Juan's benches are
+// over 6 m from the nearest way, one 24.8 m, and what lies between is not known here), or with the way behind the
+// seat's back (19% of the benches in between: the straight leg would go through the bench), it stays until nobody is
+// looking, and is gone
+const SEAT_NEAR = 1.5, SEAT_REACH = 6;
 const W_BONES = 2048;               // the pose texture's width (texels)
 // the profiles of walkways.mjs (shops, offices, sights, bars, schools, buses, homes, clinics, the beach and the
 // parks): the share of its busiest hour each has at each hour of the day (0..23 h, San Juan time)
@@ -62,13 +85,19 @@ const pick = (list) => list[Math.floor(rnd() * list.length)];
 const weighted = (pairs) => { let t = 0; for (const [, w] of pairs) t += w; let r = rnd() * t; for (const [v, w] of pairs) { r -= w; if (r <= 0) return v; } return pairs[pairs.length - 1][0]; };
 
 // ---------------------------------------------------------------- the shaders
+// (No flat varyings. A program with one makes ANGLE on Metal rewrite the indices of every indexed draw, GL's
+// flat-shaded vertex being the triangle's last and Metal's its first; the version in Chrome 156 rewrites each draw
+// into a new buffer, from the start of the index buffer to the end of the draw. One person is one draw at its
+// avatar's place in the batch's indices, a few megabytes long: hundreds in view took gigabytes of the GPU's memory
+// within a few frames. The atlas layer, the same at a person's every vertex, is interpolated to itself instead,
+// and the sampler rounds it to the layer.)
 const VERT_PARS = /* glsl */`
 uniform highp sampler2D uBones;
 uniform highp sampler2D uPeople;
 attribute vec4 skinIndex;
 attribute vec4 skinWeight;
 varying vec4 vLook;
-flat varying float vLayer;
+varying float vLayer;
 vec4 personData(float id, int k) { int i = int(id) * 4 + k; int w = textureSize(uPeople, 0).x; return texelFetch(uPeople, ivec2(i % w, i / w), 0); }
 mat4 poseBone(float row, float b) {
   int i = (int(row) * ${NB} + int(b)) * 3, w = textureSize(uBones, 0).x;
@@ -96,7 +125,7 @@ mat4 skinM = personBone(clipA, clipB, clipA.w, skinIndex.x) * skinWeight.x + per
 const FRAG_PARS = /* glsl */`
 uniform highp sampler2DArray uAtlas;
 varying vec4 vLook;
-flat varying float vLayer;`;
+varying float vLayer;`;
 // (a person fading in or out: a dither, as the cars do)
 const FADE = 'if (vLook.a < 0.999 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) > vLook.a) discard;';
 // Their shadows. The sun's depth bias (environment.js: -0.0003 of a 3,990 m depth range, some 1.2 m, against acne on
@@ -164,8 +193,16 @@ function personDepth(cutout, textures) {
 // A transition (moves: <sex>-moves.glb) carries the person as it goes (setting off, stopping): its pelvis's travel,
 // key by key, is taken out of its track and kept (travel: metres forward of where it began) for the person to be
 // carried along by.
+// (leg: the rig's, thigh and shin, at rest: an avatar with shorter ones covers less ground a stride, bakeAvatar)
+const legOf = (scene) => {
+  const at = (n) => scene.getObjectByName(n)?.getWorldPosition(new THREE.Vector3());
+  const hip = at('Bip01_L_Thigh'), knee = at('Bip01_L_Calf'), ankle = at('Bip01_L_Foot');
+  return hip && knee && ankle ? hip.distanceTo(knee) + knee.distanceTo(ankle) : 0;
+};
 function prepareClips(move, still, moves = null) {
   const V = () => new THREE.Vector3(), clips = {};
+  move.scene.updateMatrixWorld(true);
+  const leg = legOf(move.scene);
   for (const [g, moving] of [[move, true], [still, false], ...(moves ? [[moves, 'trans']] : [])]) {
     g.scene.updateMatrixWorld(true);
     let pelvis = null; g.scene.traverse((o) => { if (o.name === 'Bip01_Pelvis') pelvis = o; });
@@ -209,18 +246,28 @@ function prepareClips(move, still, moves = null) {
       clips[clip.name] = { clip, speed, moving };
     }
   }
-  return clips;
+  return { clips, leg };
 }
 // Every frame of every clip, as an avatar's 22 bones' skinning matrices (its bone's pose times its bind pose inverted),
 // turned so that it faces +z: rows of 22 x 3 texels. The walks at 30 a second; standing, talking and sitting at 8, and
 // a long one cut to 14 s, its last 1.5 s turning into its first (it loops without a jump).
-const STILL_FPS = 8, STILL_MAX = 14, LOOP_FADE = 1.5;
-function bakeAvatar(gltf, clips) {
+const MOVE_FPS = 30, STILL_FPS = 8, STILL_MAX = 14, LOOP_FADE = 1.5;
+// (a clip's frames in the texture: whether it is cut, how long it runs, how many they are)
+const framesOf = (c) => {
+  const cut = !c.moving && c.clip.duration > STILL_MAX + LOOP_FADE, T = cut ? STILL_MAX : c.clip.duration;
+  return { cut, T, frames: Math.max(2, Math.round(T * (c.moving ? MOVE_FPS : STILL_FPS)) + (c.trans ? 1 : 0)) };
+};
+const framesOfAll = (clips) => CLIPS.reduce((n, name) => n + (clips[name] ? framesOf(clips[name]).frames : 0), 0);
+// into: the pose texture's half floats, the avatar's frames written from frame `first` on (each 22 bones of 12: the
+// texture is made once at its size, loadAssets; a list grown twelve numbers at a time, then copied twice, was most of
+// the 1.7 s the page stood still for as the title came up)
+function bakeAvatar(gltf, clips, into, first) {
   const scene = gltf.scene, V = () => new THREE.Vector3();
   let skinned = null; scene.traverse((o) => { if (!skinned && o.isSkinnedMesh) skinned = o; });
   const sk = skinned.skeleton, idx = BONES.map((n) => sk.bones.findIndex((b) => b.name === n));
   if (idx.some((i) => i < 0)) throw new Error('a crowd avatar without its bones');
   scene.updateMatrixWorld(true);
+  const leg = legOf(scene); // (at rest, before a clip poses it)
   const bone = (n) => sk.bones[idx[BONES.indexOf(n)]];
   const ahead = V();
   for (const s of ['L', 'R']) ahead.add(bone(`Bip01_${s}_Toe0`).getWorldPosition(V()).sub(bone(`Bip01_${s}_Foot`).getWorldPosition(V())));
@@ -228,29 +275,30 @@ function bakeAvatar(gltf, clips) {
   // (as three skins: the mesh's world, its bind matrix's inverse, the bone's pose times its inverse bind matrix, the
   // bind matrix; avatarGeometries puts every level's geometry in the first mesh's bind space)
   const K = new THREE.Matrix4().multiplyMatrices(skinned.matrixWorld, skinned.bindMatrixInverse).premultiply(turn), Bm = skinned.bindMatrix.clone();
-  const mixer = new THREE.AnimationMixer(scene), m = new THREE.Matrix4(), rows = [], out = {};
-  const pose = (t, into) => {
+  const mixer = new THREE.AnimationMixer(scene), m = new THREE.Matrix4(), out = {}, half = THREE.DataUtils.toHalfFloat;
+  const pose = (t, to) => {
     mixer.setTime(t); scene.updateMatrixWorld(true);
     for (let b = 0; b < NB; b++) {
       m.multiplyMatrices(sk.bones[idx[b]].matrixWorld, sk.boneInverses[idx[b]]).premultiply(K).multiply(Bm);
-      into.set(m.elements, b * 16);
+      to.set(m.elements, b * 16);
     }
-    return into;
+    return to;
   };
   const A = new Float32Array(NB * 16), B = new Float32Array(NB * 16);
+  let row = first;
   for (const name of CLIPS) {
     const c = clips[name];
     if (!c) continue;
-    const fps = c.moving ? FPS.move : STILL_FPS, cut = !c.moving && c.clip.duration > STILL_MAX + LOOP_FADE;
-    const T = cut ? STILL_MAX : c.clip.duration, frames = Math.max(2, Math.round(T * fps) + (c.trans ? 1 : 0)), start = rows.length / (NB * 12);
+    const { cut, T, frames } = framesOf(c), start = row;
     const action = mixer.clipAction(c.clip); action.play();
     // (a transition is played once: its last frame its end, not its first again)
     const tOf = (f) => (c.trans ? Math.min((f / (frames - 1)) * T, T - 1e-4) : (f / frames) * T); // (at its very end, the mixer would wrap to its start)
-    for (let f = 0; f < frames; f++) {
+    for (let f = 0; f < frames; f++, row++) {
       const t = tOf(f) + (cut ? LOOP_FADE : 0);
       pose(t, A);
       if (cut && t >= T) { pose(t - T, B); const w = (t - T) / LOOP_FADE; for (let i = 0; i < A.length; i++) A[i] = A[i] * (1 - w) + B[i] * w; }
-      for (let b = 0; b < NB; b++) { const e = A.subarray(b * 16, b * 16 + 16); rows.push(e[0], e[4], e[8], e[12], e[1], e[5], e[9], e[13], e[2], e[6], e[10], e[14]); }
+      // (a bone's three rows of its matrix, the fourth being 0 0 0 1)
+      for (let b = 0, o = row * NB * 12; b < NB; b++) for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) into[o++] = half(A[b * 16 + k * 4 + r]);
     }
     action.stop();
     out[name] = { start, frames, duration: T, speed: c.speed };
@@ -265,8 +313,10 @@ function bakeAvatar(gltf, clips) {
       Object.assign(out[name], { trans: true, travel, reach: travel[frames - 1] });
     }
   }
-  return { rows: Float32Array.from(rows), clips: out };
+  return { clips: out, frames: row - first, leg };
 }
+// (a turn of the page's own between two long pieces of work)
+const breathe = () => new Promise((done) => setTimeout(done));
 
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const loadImage = (url) => fetch(url).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(url)))).then((b) => createImageBitmap(b, { imageOrientation: 'none' }));
@@ -359,11 +409,12 @@ class Walks {
       line.push(b.x, b.z);
       const cum = [0];
       for (let q = 2; q < line.length; q += 2) cum.push(cum[cum.length - 1] + Math.hypot(line[q] - line[q - 2], line[q + 1] - line[q - 1]));
-      const l = { a, b, pts: line, cum, len: cum[cum.length - 1], kind: kind[i], width: width[i] / 10, w: Array.from(w.subarray(i * 9, i * 9 + 9), dec), cross: null, block: key, rate: 0, people: [] };
+      const l = { a, b, pts: line, cum, len: cum[cum.length - 1], kind: kind[i], width: width[i] / 10, w: Array.from(w.subarray(i * 9, i * 9 + 9), dec), cross: null, block: key, rate: 0 };
       a.links.push(l); b.links.push(l); block.links.push(l);
     }
     for (let c = 0; c < nC; c++) block.links[cl[c]].cross = { edge: ce[c], node: cn[c], lights: cf[c] & 1 };
-    for (let s = 0; s < nS; s++) block.spots.push({ x: sxz[s * 2], z: sxz[s * 2 + 1], kind: sk[s], heading: (sh[s] / 256) * Math.PI * 2, link: block.links[sl[s]], w: Array.from(sw.subarray(s * 9, s * 9 + 9), dec), busy: 0 });
+    // (count: the people at it now; another group comes only to one nobody is at)
+    for (let s = 0; s < nS; s++) block.spots.push({ x: sxz[s * 2], z: sxz[s * 2 + 1], kind: sk[s], heading: (sh[s] / 256) * Math.PI * 2, link: block.links[sl[s]], w: Array.from(sw.subarray(s * 9, s * 9 + 9), dec), count: 0 });
     block.nodeIds = ids;
     this.blocks.set(key, block);
     this.rebuild();
@@ -389,15 +440,42 @@ class Walks {
     return out;
   }
 }
-// a point along a link at distance u from its start: [x, z, dx, dz]
-function pointOn(l, u, out) {
-  const c = l.cum, p = l.pts;
+// a point along a link at distance u from its start: [x, z, dx, dz] (before its start or past its end, on along its
+// first or last stretch: one come onto it from beside its end is still a step or two short of it, enter). w: within
+// this of a bend (m), the way turns from the one stretch's to the next's, so that one walking beside the line, as
+// far out as w allows, goes round the bend and does not jump across it (a bend of 40 degrees and a person 1.8 m out:
+// 1.2 m in a frame)
+function pointOn(l, u, out, w = 0) {
+  const c = l.cum, p = l.pts, n = c.length - 1;
   let k = 1;
-  while (k < c.length - 1 && c[k] < u) k++;
-  const seg = c[k] - c[k - 1] || 1, t = Math.max(0, Math.min(1, (u - c[k - 1]) / seg));
+  while (k < n && (c[k] < u || c[k] === c[k - 1])) k++; // (and past a stretch of no length: a point twice over)
+  const seg = c[k] - c[k - 1] || 1, t = Math.max(c[k - 1] > 0 ? 0 : -Infinity, Math.min(c[k] < c[n] ? 1 : Infinity, (u - c[k - 1]) / seg));
   const ax = p[(k - 1) * 2], az = p[(k - 1) * 2 + 1], bx = p[k * 2], bz = p[k * 2 + 1];
   out[0] = ax + (bx - ax) * t; out[1] = az + (bz - az) * t; out[2] = (bx - ax) / seg; out[3] = (bz - az) / seg;
+  if (w > 0 && n > 1) {
+    // (the bend at this stretch's start, or at its end, and how far from it; half the way of the other stretch's there)
+    const from = u - c[k - 1], to = c[k] - u, j = from < to ? k - 1 : k + 1, at = from < to ? from : to;
+    if (j >= 1 && j <= n) {
+      const W = Math.min(w, (c[k] - c[k - 1]) / 2, (c[j] - c[j - 1]) / 2);
+      if (at < W) {
+        const s = c[j] - c[j - 1], ox = (p[j * 2] - p[(j - 1) * 2]) / s, oz = (p[j * 2 + 1] - p[(j - 1) * 2 + 1]) / s, a = 0.5 * (1 - at / W);
+        const x = out[2] * (1 - a) + ox * a, z = out[3] * (1 - a) + oz * a, m = Math.hypot(x, z);
+        if (m > 1e-3) { out[2] = x / m; out[3] = z / m; }
+      }
+    }
+  }
   return out;
+}
+// the point of a link nearest (x, z): [u, how far]
+function nearestOn(l, x, z) {
+  const c = l.cum, p = l.pts;
+  let bu = 0, bd = Infinity;
+  for (let k = 1; k < c.length; k++) {
+    const ax = p[(k - 1) * 2], az = p[(k - 1) * 2 + 1], ex = p[k * 2] - ax, ez = p[k * 2 + 1] - az, L2 = ex * ex + ez * ez || 1;
+    const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)), d = Math.hypot(ax + ex * t - x, az + ez * t - z);
+    if (d < bd) { bd = d; bu = c[k - 1] + t * (c[k] - c[k - 1]); }
+  }
+  return [bu, bd];
 }
 
 // ---------------------------------------------------------------- the crowd
@@ -456,30 +534,32 @@ export class People {
     }
     // the avatars: their bodies into the batches, their clips into the pose texture
     this.avatars = avatars.map((a, i) => ({ ...a, layer: i, geo: null, base: a.skin?.[0] ?? 66 }));
-    const chunks = [];
-    let rowsSoFar = 0;
     await Promise.all(this.avatars.map(async (a) => {
       const gltf = await loader.loadAsync(`${base}/${a.id}.glb`).catch((e) => { console.warn('crowd avatar', a.id, e); return null; });
       if (!gltf) return;
       a.gltf = gltf;
     }));
+    // (the pose texture at its size first, every avatar's frames written straight into it; and the page let go between
+    // one avatar and the next: the 39 in one piece held it some 1.7 s as the title came up)
+    const frames = this.avatars.reduce((n, a) => n + (a.gltf && sexes.get(a.group) ? framesOfAll(sexes.get(a.group).clips) : 0), 0);
+    const H = Math.max(1, Math.ceil((frames * NB * 3) / W_BONES)), data = new Uint16Array(W_BONES * H * 4);
+    let row = 0;
     for (const a of this.avatars) {
       if (!a.gltf) continue;
       try {
-        const baked = bakeAvatar(a.gltf, sexes.get(a.group)), offset = rowsSoFar / (NB * 12);
-        for (const c of Object.values(baked.clips)) c.start += offset;
-        chunks.push(baked.rows); rowsSoFar += baked.rows.length;
+        const sex = sexes.get(a.group), baked = bakeAvatar(a.gltf, sex.clips, data, row);
+        row += baked.frames;
         a.clips = baked.clips;
+        // (its stride against the clips' rig's: a child's legs are some four fifths of it, and it takes more steps)
+        a.stride = sex.leg > 0 && baked.leg > 0 ? baked.leg / sex.leg : 1;
         a.geo = [0, 1, 2].map((lod) => ({ body: null, hair: null, lod }));
         for (const { lod, cutout, geometry } of avatarGeometries(a.gltf)) a.geo[lod][cutout ? 'hair' : 'body'] = (cutout ? this.hair : this.body).addGeometry(geometry);
         if (a.geo.some((g) => g.body == null)) a.geo = null;
       } catch (e) { console.warn('crowd avatar', a.id, e.message); a.geo = null; }
       a.gltf = null;
+      await breathe();
     }
     this.avatars = this.avatars.filter((a) => a.geo);
-    const H = Math.ceil(rowsSoFar / 4 / W_BONES), data = new Uint16Array(W_BONES * H * 4);
-    let at = 0;
-    for (const c of chunks) for (let i = 0; i < c.length; i++) data[at++] = THREE.DataUtils.toHalfFloat(c[i]);
     const bones = new THREE.DataTexture(data, W_BONES, H, THREE.RGBAFormat, THREE.HalfFloatType);
     bones.needsUpdate = true;
     textures.uBones.value = bones;
@@ -512,7 +592,6 @@ export class People {
       ['beach', day && share(P.LEISURE) / all > 0.5 && w[P.LEISURE] > 3 ? 0.4 : 0], // (the streets along the sand and its paths, about a tenth of the beach's walks; not a block away)
     ]);
   }
-  // (each by its weight: dressed for the heat more often than for an air-conditioned office)
   // (by its weight: dressed for the heat more often than for an air-conditioned office; fair-haired ones less often
   // away from where visitors are; not the one just picked, nor one of the same group)
   avatarFor(role, w, avoid = null) {
@@ -558,7 +637,8 @@ export class People {
     for (let k = 0; k < company; k++) {
       const f = this.person(kids && k === 0 ? 'child' : role, l.w, new Set([leader, ...(leader.followers ?? [])].map((q) => q.avatar)));
       if (!f) break;
-      Object.assign(f, { state: 'follow', leader, rank: k + 1, link: l, dir, u: leader.u, pace: leader.pace, born: now, fade: leader.fade, x: leader.x, z: leader.z, heading: leader.heading, clipA: leader.clipA, cycle: leader.cycle, phase: (leader.phase + 0.5) % 1 });
+      Object.assign(f, { state: 'follow', leader, rank: k + 1, link: l, dir, u: leader.u, pace: leader.pace, born: now, fade: leader.fade, x: leader.x, z: leader.z, heading: leader.heading, clipA: leader.clipA, phase: (leader.phase + 0.5) % 1 });
+      f.cycle = this.cycleOf(f, f.clipA); // (its own: a child beside its grown-up takes more steps)
       leader.followers = (leader.followers ?? []).concat(f);
       n++;
     }
@@ -578,8 +658,10 @@ export class People {
     p.clipA = c === p.clips[p.pace] ? p.pace : 'walk';
     // (the clip's own pace, a little either side; in the heat of the day a little slower)
     p.speed = (c.speed || 1.3) * (0.92 + rnd() * 0.14) * (p.role === 'running' ? 1 : this.hour > 11 && this.hour < 16 ? 0.94 : 1);
-    p.cycle = (c.speed || 1.3) * c.duration; // (metres the clip covers in one play)
+    p.cycle = this.cycleOf(p, p.clipA);
   }
+  // (metres a walk's clip covers in one play, as this one walks it: its size, and its legs against the clips' rig's)
+  cycleOf(p, name) { const c = p.clips[name] ?? p.clips.walk; return (c.speed || 1.3) * c.duration * p.scale * (p.avatar.stride ?? 1); }
   spawnStill(s, now, fill) {
     const h = this.hour, kind = s.kind;
     const n = kind === SPOT.BUS ? 1 + Math.floor(rnd() * 3) : kind === SPOT.SHELTER ? 1 + Math.floor(rnd() * 2) : kind === SPOT.BENCH ? 1 + (rnd() < 0.3 ? 1 : 0) : 2 + (rnd() < 0.35 ? 1 : 0);
@@ -609,9 +691,8 @@ export class People {
       if (!p.clips[clip]) clip = 'idle';
       here.add(p.avatar);
       Object.assign(p, { state: 'still', spot: s, x: s.x + ox, z: s.z + oz, heading, clipA: clip, phase: rnd(), until: now + 40 + rnd() * 240, born: now, fade: fill ? 1 : 0, link: s.link });
-      made++;
+      s.count++; made++;
     }
-    if (made) s.busy++;
     return made;
   }
 
@@ -708,12 +789,19 @@ export class People {
     if (on && this.census?.total > 0) {
       const fill = jumped || !this.filled || now < this.fillUntil;
       let budget = fill ? 400 : 6;
+      // (at a spot or walking: whichever is further short of what the census wants; by chance, as it was, those who
+      // left the spots walked on, held the count, and nobody stood at a spot again: 26 to 1 in twelve minutes)
+      let stills = 0; for (const p of this.people) if (p.state === 'still') stills++;
+      const wantStills = this.census.stills * 2 * scale, wantWalks = this.census.total * scale;
       while (this.people.length < want && budget-- > 0 && this.free.length > 3) {
-        const stillShare = this.census.stills * 2 / ((this.census.total + this.census.stills * 2) || 1);
-        if (rnd() < stillShare && this.census.scum.length) {
+        let made = 0;
+        const short = this.census.scum.length && wantStills > 0 && (wantWalks <= 0 || stills / wantStills < (this.people.length - stills) / wantWalks);
+        for (let k = 0; short && !made && k < 4; k++) {
           const s = bisect(this.census.scum, rnd() * this.census.stills);
-          if (s && s.busy < 1 && this.spawnOk(s.x, s.z, eye, fill)) this.spawnStill(s, now, fill);
-        } else {
+          if (s && !s.count && this.spawnOk(s.x, s.z, eye, fill)) stills += made = this.spawnStill(s, now, fill);
+        }
+        if (!made && (!short || this.people.length - stills < wantWalks)) {
+          // (and when the spots picked are taken, or in plain view: one walking instead, if fewer walk than should)
           const l = bisect(this.census.cum, rnd() * this.census.total);
           if (!l) break;
           const u = rnd() * l.len, e = pointOn(l, u, this.v);
@@ -728,11 +816,15 @@ export class People {
     const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
     for (let i = this.people.length - 1; i >= 0; i--) {
       const p = this.people[i], d = Math.hypot(p.x - cx, p.z - cz);
-      const leave = !on || d > R * 1.25 || p.link?.dead || (p.leader && p.leader.gone) || (this.people.length > want * 1.15 + 20 && d > R * 0.8 && !p.leader);
+      // (and one who has left its spot, a while later and out of sight, as one comes, spawnOk: on its way somewhere,
+      // its place taken by whoever the census is short of)
+      const leave = !on || d > R * 1.25 || p.link?.dead || (p.leader && p.leader.gone) || (this.people.length > want * 1.15 + 20 && d > R * 0.8 && !p.leader)
+        || (p.away && now > p.away && (this.frame + p.slot) % 20 === 0 && !this.seen(p, 70));
       if (leave) p.out = true;
       p.fade = Math.max(0, Math.min(1, p.fade + (p.out ? -dt : dt) / 0.6));
       if (p.out && (p.fade <= 0 || !on)) { this.release(p); this.people.splice(i, 1); continue; }
       if (p.state === 'walk' || p.state === 'wait' || p.state === 'cross') this.walk(p, dt, now);
+      else if (p.state === 'approach') this.approach(p, dt, now);
       else if (p.state === 'still' && p.tr) { const d = this.stepTrans(p, dt); p.x += Math.sin(p.heading) * d; p.z += Math.cos(p.heading) * d; }
       else if (p.state === 'still' && now > p.until) this.leaveSpot(p, now);
     }
@@ -748,6 +840,8 @@ export class People {
     const d = Math.hypot(x - eye.x, z - eye.z);
     return d > 70 || !this.inView(x, z);
   }
+  // (one that could be seen going: within r, and in view)
+  seen(p, r = 150) { const eye = this.camera?.position; return !!eye && Math.hypot(p.x - eye.x, p.z - eye.z) < r && this.inView(p.x, p.z); }
   inView(x, z) {
     const cam = this.camera; if (!cam) return false;
     const v = new THREE.Vector3(x, this.surface(x, z) + 1, z).project(cam);
@@ -758,21 +852,43 @@ export class People {
     this.free.push(p.slot);
     this.body.setVisibleAt(p.slot, false);
     if (this.hasHair) this.hair.setVisibleAt(p.slot, false);
-    if (p.spot) p.spot.busy = Math.max(0, p.spot.busy - 0.34);
+    if (p.spot) p.spot.count = Math.max(0, p.spot.count - 1);
     if (p.followers) for (const f of p.followers) f.out = true;
   }
   leaveSpot(p, now) {
-    // off along the sidewalk the spot is on, or (out of sight) gone
-    const l = p.spot?.link;
+    // off along the way the spot is on: from a seat, up first; from beside the way, onto it as it walks; from further,
+    // a straight leg to it first. Where the way is further still, or behind the seat's back, it stays until nobody is
+    // looking, and is gone.
+    const s = p.spot, l = s?.link;
     if (!l || l.dead || p.clipA === 'sit' && rnd() < 0.5) { p.until = now + 30 + rnd() * 120; return; }
-    // (from a seat: up first, then off)
+    const [bu, d] = nearestOn(l, p.x, p.z), e = pointOn(l, bu, this.v);
+    const seat = s.kind === SPOT.BENCH || s.kind === SPOT.SHELTER, behind = seat && (e[0] - p.x) * Math.sin(s.heading) + (e[1] - p.z) * Math.cos(s.heading) < -0.3 * d;
+    if (d > SEAT_REACH || (behind && d > SEAT_NEAR)) {
+      if (this.seen(p)) p.until = now + 10 + rnd() * 20; else p.out = true;
+      return;
+    }
     if (p.clipA === 'sit' && this.begin(p, 'standup', (q) => { this.hold(q, 'idle'); this.leaveSpot(q, this.now); })) return;
-    let best = 0, bu = 0;
-    for (let k = 0; k <= 20; k++) { const u = (k / 20) * l.len, e = pointOn(l, u, this.v), d = Math.hypot(e[0] - p.x, e[1] - p.z); if (k === 0 || d < best) { best = d; bu = u; } }
-    p.spot.busy = Math.max(0, p.spot.busy - 0.34); p.spot = null;
-    p.dir = rnd() < 0.5 ? 1 : -1; p.link = l; p.u = p.dir > 0 ? bu : l.len - bu; p.state = 'walk'; p.goal = rnd() * Math.PI * 2;
-    p.pace = weighted([['walk', 2], ['walk2', 2], ['stroll', 1]]); this.setPace(p);
+    s.count = Math.max(0, s.count - 1); p.spot = null; p.away = now + 30 + rnd() * 60;
+    // (the way along it it faces more, or either)
+    const along = Math.sin(p.heading) * e[2] + Math.cos(p.heading) * e[3], dir = Math.abs(along) > 0.3 ? Math.sign(along) : rnd() < 0.5 ? 1 : -1;
+    p.goal = rnd() * Math.PI * 2; p.pace = weighted([['walk', 2], ['walk2', 2], ['stroll', 1]]); this.setPace(p);
+    if (d > SEAT_NEAR) { p.state = 'approach'; p.to = { x: e[0], z: e[1], link: l, dir, u: bu, until: now + 12 }; }
+    else { this.enter(p, l, dir, bu); p.state = 'walk'; }
     if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null);
+  }
+  // (the straight leg from a spot to its way, setting off as it goes; there, along the way)
+  approach(p, dt, now) {
+    const to = p.to, dx = to.x - p.x, dz = to.z - p.z, d = Math.hypot(dx, dz);
+    let step;
+    if (p.tr) { step = this.stepTrans(p, dt); p.v = dt ? step / dt : 0; }
+    else { p.v += (p.speed - p.v) * Math.min(1, dt * 3); step = p.v * dt; }
+    p.headingTo = Math.atan2(dx, dz);
+    if (d <= Math.max(step, 0.3) || now > to.until || to.link.dead) {
+      p.to = null; this.enter(p, to.link, to.dir, to.u); p.state = 'walk'; this.place(p, dt);
+      return;
+    }
+    // (on the way it faces, turning to the spot: no sliding sideways)
+    p.x += Math.sin(p.heading) * step; p.z += Math.cos(p.heading) * step;
   }
   // ---------------------------------------------------------------- the transitions
   // A transition's clip played once from its start (the clip before fading out under it), the person carried along
@@ -836,7 +952,7 @@ export class People {
   // at a crossing it must wait at: there, standing, waiting
   arrive(p, next, now) {
     p.tr = null; // (setting off still, and there already: it stops where it is)
-    p.u = p.link.len; p.state = 'wait'; p.next = next; p.waitFrom = now; p.v = 0;
+    p.state = 'wait'; p.next = next; p.waitFrom = now; p.v = 0; // (where it is: just past the end of a short way, at times)
     this.switchClip(p, weighted([['wait', 2], ['idle', 2], ['look', 1]]));
   }
   switchClip(p, clip) {
@@ -855,7 +971,7 @@ export class People {
         // traffic before)
         const go = this.canCross(p, p.next[0]), giveUp = !go && now - p.waitFrom > 75;
         if (go) { this.enter(p, p.next[0], p.next[1]); p.state = 'cross'; if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null); }
-        else if (giveUp) { p.dir = -p.dir; p.u = 0; p.next = null; p.state = 'walk'; if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null); }
+        else if (giveUp) { this.turnBack(p); p.next = null; p.state = 'walk'; if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null); }
       }
     } else if (p.tr) {
       // carried along a transition (setting off, stopping)
@@ -870,11 +986,12 @@ export class People {
       // simulated cars keep to their recorded way and cannot stop for it, so it gets out of theirs, across its way
       // from the car's line and slowing, or waiting for one coming across its way; on a crossing it hurries over.
       const car = this.carIn(p);
+      p.dodge = false; // (stepping out of a car's way, or yours: quicker across than walking would carry it, place)
       if (car) {
         if (p.state === 'cross' || l.kind === KIND.CROSSING) target = Math.max(target, 1.9);
         else {
           const k = Math.cos(car[2] - p.heading); // (the car along its way, or across it)
-          if (Math.abs(k) > 0.5) { p.lane = -Math.sign(car[0]) * k > 0 ? 1 : -1; target = Math.min(target, 0.5); }
+          if (Math.abs(k) > 0.5) { p.lane = -Math.sign(car[0]) * k > 0 ? 1 : -1; target = Math.min(target, 0.5); p.dodge = true; }
           else {
             // (across: not stepping into its way, or quickly out of it)
             const toward = car[0] * (Math.sin(p.heading) * Math.cos(car[2]) - Math.cos(p.heading) * Math.sin(car[2])) < 0;
@@ -886,7 +1003,7 @@ export class People {
       const pl = this.player;
       if (pl) {
         const dx = pl.x - p.x, dz = pl.z - p.z, d = Math.hypot(dx, dz), hs = Math.sin(p.heading), hc = Math.cos(p.heading);
-        if (d < 2.4 && dx * hs + dz * hc > 0) { p.lane = -dx * hc + dz * hs > 0 ? -0.8 : 1; target = Math.min(target, Math.max(0.25, (d - 0.7) * 0.8)); }
+        if (d < 2.4 && dx * hs + dz * hc > 0) { p.lane = -dx * hc + dz * hs > 0 ? -0.8 : 1; target = Math.min(target, Math.max(0.25, (d - 0.7) * 0.8)); p.dodge = true; }
       }
       p.v += (target - p.v) * Math.min(1, dt * 3);
       p.u += p.v * dt;
@@ -912,41 +1029,73 @@ export class People {
   onward(p, l, now) {
     const node = p.dir > 0 ? l.b : l.a, next = p.plan && p.plan !== 'none' ? p.plan : this.nextLink(p, node, l);
     p.plan = null;
-    if (!next) { p.dir = -p.dir; p.u = 0; }
+    if (!next) this.turnBack(p);
     else if (next[0].kind === KIND.CROSSING && p.state !== 'cross' && !(p.clips.stopL?.trans && this.canCross(p, next[0]))) this.arrive(p, next, now);
-    else { const over = p.u - l.len; this.enter(p, next[0], next[1]); p.u = Math.min(over, p.link.len); p.state = next[0].kind === KIND.CROSSING ? 'cross' : 'walk'; }
+    else {
+      // (from where it is, just past the end of this one, as far across it as it was)
+      this.put(p);
+      this.enter(p, next[0], next[1]); p.state = next[0].kind === KIND.CROSSING ? 'cross' : 'walk';
+    }
   }
-  // where: along the link, keeping to the right of the way it walks (dt 0: there at once)
+  // where: along the link, keeping to the right of the way it walks (dt 0: there at once); across it no faster than
+  // its pace along it allows (SIDE), or than a step out of a car's way (DODGE)
   place(p, dt) {
-    const l = p.link, e = pointOn(l, p.dir > 0 ? Math.min(p.u, l.len) : Math.max(0, l.len - p.u), this.v), dx = e[2] * p.dir, dz = e[3] * p.dir;
-    const half = Math.max(0, l.width / 2 - 0.35), want = l.kind === KIND.CROSSING ? p.lane * 0.5 : Math.min(half, p.lane * half);
-    p.lat = dt ? p.lat + (want - p.lat) * Math.min(1, dt * 1.5) : want;
-    p.x = e[0] - dz * p.lat; p.z = e[1] + dx * p.lat;
-    if (p.v > 0.05 || !dt) p.headingTo = Math.atan2(dx, dz);
+    const l = p.link, half = Math.max(0, l.width / 2 - 0.35), want = l.kind === KIND.CROSSING ? p.lane * 0.5 : Math.min(half, p.lane * half);
+    if (!dt) p.lat = want;
+    else {
+      const room = (p.dodge ? DODGE : SIDE * Math.abs(p.v)) * dt; p.lat += Math.max(-room, Math.min(room, (want - p.lat) * Math.min(1, dt * 1.5)));
+      // (and what is left to walk off, settle)
+      if (p.ox || p.oz) { const m = Math.hypot(p.ox, p.oz), k = Math.max(0, m - SIDE * Math.abs(p.v) * dt) / m; p.ox *= k; p.oz *= k; }
+    }
+    const e = this.put(p);
+    if ((p.v > 0.05 || !dt) && (e[2] || e[3])) p.headingTo = Math.atan2(e[2] * p.dir, e[3] * p.dir);
   }
-  enter(p, l, dir) {
-    p.link = l; p.dir = dir; p.u = 0; p.plan = null;
+  // (x, z from how far along its link it is and how far across, and what it has still to walk off; past its end, on
+  // along its last stretch; a link of no length, where it was)
+  put(p) {
+    const l = p.link, e = pointOn(l, p.dir > 0 ? p.u : l.len - p.u, this.v, 0.3 + 1.6 * Math.abs(p.lat)), dx = e[2] * p.dir, dz = e[3] * p.dir;
+    if (dx || dz) { p.x = e[0] - dz * p.lat + (p.ox || 0); p.z = e[1] + dx * p.lat + (p.oz || 0); }
+    return e;
+  }
+  // (still at (x, z), whatever its way now says: the difference kept, to be walked off, place; up to OFF_MAX)
+  settle(p, x, z) {
+    p.ox = p.oz = 0; this.put(p);
+    const ox = x - p.x, oz = z - p.z;
+    if (Math.hypot(ox, oz) <= OFF_MAX) { p.ox = ox; p.oz = oz; p.x = x; p.z = z; }
+  }
+  // Onto link l, going dir, from where it stands: as far along it and across it as that is (a crossing's start is a
+  // turn from the sidewalk's end, a seat a step from its way; at most OFF_MAX across), measured from `at` (u from the
+  // link's start), and from there over to its own side as it walks (place)
+  enter(p, l, dir, at = dir > 0 ? 0 : l.len) {
+    const x = p.x, z = p.z, e = pointOn(l, at, this.v), dx = e[2] * dir, dz = e[3] * dir, rx = x - e[0], rz = z - e[1];
+    p.link = l; p.dir = dir; p.plan = null;
+    p.u = Math.max(-OFF_MAX, Math.min(l.len + OFF_MAX, (dir > 0 ? at : l.len - at) + rx * dx + rz * dz));
+    p.lat = Math.max(-OFF_MAX, Math.min(OFF_MAX, rz * dx - rx * dz));
+    this.settle(p, x, z); // (a way that bends, a corner's arc: not quite where its first stretch says)
     // its place across the way: right of centre (people keep right), some further out than others
     p.lane = p.lanePref = 0.25 + rnd() * 0.7;
   }
+  // (back the way it came, from where it is: the same side of the way, now on its left)
+  turnBack(p) { const x = p.x, z = p.z; p.dir = -p.dir; p.u = Math.max(0, p.link.len - p.u); p.lat = -p.lat; this.settle(p, x, z); }
   follow(f, dt) {
     const L = f.leader;
     if (!L || L.gone) { f.out = true; return; }
     // beside the one it walks with, or behind on a narrow sidewalk
     // (and in single file, behind, where a car comes through: the one in front has stepped aside: carIn)
     const l = L.link, narrow = !l || l.width < 1.7 || L.state === 'cross' || !!this.carIn(f);
-    const side = f.rank === 1 ? -1 : 1, back = narrow ? 0.9 * f.rank : 0.15;
-    const e = pointOn(l, L.dir > 0 ? Math.max(0, Math.min(l.len, L.u - back)) : Math.max(0, Math.min(l.len, l.len - L.u + back)), this.v);
-    const dx = e[2] * L.dir, dz = e[3] * L.dir, lat = L.lat + (narrow ? 0 : side * 0.62);
+    const side = f.rank === 1 ? -1 : 1, back = narrow ? 0.9 * f.rank : 0.15, lat = L.lat + (narrow ? 0 : side * 0.62), u = Math.min(l.len, L.u - back);
+    const e = pointOn(l, L.dir > 0 ? u : l.len - u, this.v, 0.3 + 1.6 * Math.abs(lat)), dx = e[2] * L.dir, dz = e[3] * L.dir;
     const tx = e[0] - dz * lat, tz = e[1] + dx * lat;
-    const k = Math.min(1, dt * 6);
+    // (eased there, and no faster than a step or so more than the leader's pace: where it is to be swings round as the
+    // leader turns onto the next way, or goes single file)
+    const gap = Math.hypot(tx - f.x, tz - f.z), k = Math.min(1, dt * 6, gap > 0 ? (Math.max(0.4, L.v) * 1.6 * dt) / gap : 1);
     f.x += (tx - f.x) * k; f.z += (tz - f.z) * k;
     f.v = L.v; f.state = 'follow';
     const still = L.state === 'wait';
     // (setting off or stopping as the one it walks with does)
     if (L.tr) { if (f.clipA !== L.clipA && f.clips[L.clipA]) { f.clipB = f.clipA; f.phaseB = f.phase; f.blend = 1; f.clipA = L.clipA; } }
     else if (still && f.clipA !== 'idle') this.switchClip(f, 'idle');
-    else if (!still && f.clipA !== L.clipA && !STILL.includes(L.clipA)) { this.switchClip(f, L.clipA); f.cycle = L.cycle; }
+    else if (!still && f.clipA !== L.clipA && !STILL.includes(L.clipA)) { this.switchClip(f, L.clipA); f.cycle = this.cycleOf(f, L.clipA); }
     if (L.v > 0.05) f.headingTo = Math.atan2(dx, dz);
   }
   queues(dt) {
@@ -1006,13 +1155,13 @@ export class People {
       else p.phase = (p.phase + dt / c.duration) % 1;
       if (p.blend > 0) {
         const b = p.clips[p.clipB];
-        if (b && !TRANS.includes(p.clipB)) p.phaseB = (p.phaseB + (MOVE.includes(p.clipB) ? (p.v * dt) / (b.speed * b.duration || 1) : dt / b.duration)) % 1;
+        if (b && !TRANS.includes(p.clipB)) p.phaseB = (p.phaseB + (MOVE.includes(p.clipB) ? (p.v * dt) / (this.cycleOf(p, p.clipB) || 1) : dt / b.duration)) % 1;
         p.blend = Math.max(0, p.blend - dt / (tr ? 0.2 : 0.35));
       }
       // the heading eases round
       if (p.headingTo != null) { const d = Math.atan2(Math.sin(p.headingTo - p.heading), Math.cos(p.headingTo - p.heading)); p.heading += d * Math.min(1, dt * 7); }
       const dist = Math.hypot(p.x - eye.x, p.z - eye.z, (p.y ?? eye.y) - eye.y);
-      const lod = this.forceLod ?? (dist < LOD[0] ? 0 : dist < LOD[1] ? 1 : 2);
+      const lod = this.forceLod ?? lodAt(dist, p.lod);
       // its height: on the street as drawn, looked up again when it has moved a little (or now and then)
       if (p.y == null || Math.abs(p.x - p.hx) + Math.abs(p.z - p.hz) > (lod < 2 ? 0.35 : 1.5) || (this.frame + p.slot) % 15 === 0) {
         p.hy = streetAt(this.surface, p.x, p.z, p.y ?? this.surface(p.x, p.z)) + ((p.leader ?? p).link?.kind === KIND.CROSSING ? 0 : this.lift(p.x, p.z));
@@ -1057,5 +1206,4 @@ export class People {
       if (a.clips[clip]?.trans) Object.assign(p, { tr: { name: clip, t: 0, c: a.clips[clip], then: null, k: 1 }, x0: p.x, z0: p.z });
     });
   }
-  dispose() { this.body?.dispose(); this.hair?.dispose(); }
 }

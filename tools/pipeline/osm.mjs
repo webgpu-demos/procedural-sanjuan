@@ -49,6 +49,13 @@ function roadAttrs(t) {
     bridge: t.bridge && t.bridge !== 'no' ? 1 : 0,
     tunnel: t.tunnel && t.tunnel !== 'no' ? 1 : 0,
     name: t.name ?? null, nameEn: t['name:en'] ?? null, ref: t.ref ?? null,
+    // Roads under a building. A passage through one (tunnel=building_passage, 25 ways in San Juan) is at street
+    // level: it stays a tunnel here (the simulation's network and the client read `tunnel`), and `passage` lets the
+    // compiler pave it and open the building over it (roadclear.mjs). `covered` (covered=*, 363 ways) is kept for
+    // what could roof such a slot one day; nothing reads it yet. Written only where set: roads.json is as it was
+    // for every other road.
+    ...(t.tunnel === 'building_passage' ? { passage: 1 } : {}),
+    ...(t.covered && t.covered !== 'no' ? { covered: 1 } : {}),
   };
 }
 

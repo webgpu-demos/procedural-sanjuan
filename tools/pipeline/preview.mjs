@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PNG } from 'pngjs';
 import { resolveArea, ROOT } from './config.mjs';
-import { decodeTile, AREA } from '../../src/shared/tileformat.js';
+import { decodeTile, AREA, BFLAG } from '../../src/shared/tileformat.js';
 
 const area = resolveArea();
 const SCALE = Number(process.argv.find((a) => a.startsWith('--scale='))?.split('=')[1] ?? 2);
@@ -93,7 +93,7 @@ const decoded = manifest.tiles.map((tl) => decodeTile(new Uint8Array(fs.readFile
 for (const tile of decoded) for (const a of tile.areas) if (GROUND_FIRST.has(a.kind)) for (const p of a.polygons) fill(p, AREA_COLOR[a.kind]);
 for (const tile of decoded) for (const a of tile.areas) if (a.kind === AREA.ROAD) for (const p of a.polygons) fill(p, AREA_COLOR[a.kind]);
 for (const tile of decoded) for (const a of tile.areas) if (a.kind !== AREA.ROAD && !GROUND_FIRST.has(a.kind) && AREA_COLOR[a.kind]) for (const p of a.polygons) fill(p, AREA_COLOR[a.kind]);
-const all = decoded.flatMap((tl) => tl.buildings).sort((a, b) => a.height - b.height);
+const all = decoded.flatMap((tl) => tl.buildings).filter((b) => !(b.flags & BFLAG.NO_SOLID)).sort((a, b) => a.height - b.height); // (not those taken out of a road: clearroads.mjs)
 for (const b of all) { nB++; for (const p of b.polygons) fill(p, heightColor(b.height)); }
 
 const rails = JSON.parse(fs.readFileSync(path.join(dir, manifest.rails), 'utf8'));

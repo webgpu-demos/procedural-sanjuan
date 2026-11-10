@@ -21,7 +21,7 @@ function prism(soup, ring, y0, y1, top, side) {
 }
 
 export async function buildStructures(url, ground, depth = null) { // (depth: the lanes at street level, flyovers.js)
-  const { footbridges = [], platforms = [], canopies = [] } = await (await fetch(url)).json();
+  const { footbridges = [], platforms = [], canopies = [] } = typeof url === 'string' ? await (await fetch(url)).json() : await url; // (or the file's contents, fetched already)
   const soup = new Soup();
   const at = (c, l, v) => [c.p[0] + c.n[0] * l, c.p[1] + v, c.p[2] + c.n[2] * l];
   const sweep = (a, b, profile, color) => { for (let j = 0; j + 1 < profile.length; j++) soup.quad(at(a, ...profile[j]), at(b, ...profile[j]), at(b, ...profile[j + 1]), at(a, ...profile[j + 1]), color); };

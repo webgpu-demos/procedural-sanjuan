@@ -21,10 +21,6 @@ def resample(W, src_hz, hz=30):
     return out
 
 
-def hips(S):
-    return S[:, 0, :3]
-
-
 def contacts_slide(rt, S, contacts=None):
     """How far the planted feet slide: per foot, the ground speed (m/s) at frames where it is low and nearly still."""
     W = np.array([rt.soma_world(s) for s in S])

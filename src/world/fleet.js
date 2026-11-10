@@ -89,9 +89,13 @@ class Level {
     this.cap = cap; this.n = 0;
   }
   get objects() { return [this.mesh, this.shadow, ...(this.beams ? [this.beams] : [])]; }
+  dispose() { for (const o of this.objects) { o.geometry.dispose(); if (o !== this.beams) o.material.dispose(); o.dispose(); } this.mesh.customDepthMaterial?.dispose(); }
   end() {
     this.mesh.count = this.shadow.count = this.n;
     if (this.beams) this.beams.count = this.n;
+    // (none in use: nothing is drawn and nothing sent. A range of no length is, to WebGL, the whole array: with no car
+    // near, and all day outside the simulated hours, every level's buffers went up whole each frame, over a megabyte.)
+    if (!this.n) return;
     for (const a of [this.mesh.instanceMatrix, this.paint, this.state, this.wheel, this.hide]) {
       a.clearUpdateRanges(); a.addUpdateRange(0, this.n * a.itemSize); a.needsUpdate = true;
     }
@@ -133,6 +137,7 @@ export class Fleet {
   }
   end() { for (const b of Object.values(this.bodies)) for (const l of b.levels) l.end(); }
   hide() { this.begin(); this.end(); }
+  dispose() { for (const b of Object.values(this.bodies)) for (const l of b.levels) l.dispose(); }
   get count() { let n = 0; for (const b of Object.values(this.bodies)) for (const l of b.levels) n += l.n; return n; }
   // the wheels' radius of a body (for their turn: distance / radius)
   wheelRadius(body) { return specOf(body).wheelRadius; }

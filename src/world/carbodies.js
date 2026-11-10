@@ -623,13 +623,6 @@ function bodyRake(spec) {
   return spec._rake;
 }
 
-// z of a body's nose (front) or tail surface on the centreline at height y, for plates & badges mounted on the tips
-function carTipZ(spec, y, front = true) {
-  const rake = bodyRake(spec);
-  const z = front ? spec.zFront : spec.zRear;
-  return rake ? rake(0, y, z) : z;
-}
-
 // Closes a raked body tip with a grid that follows the rake (a flat loft cap can't bow out at the bumper): each
 // right-half point of the tip section is joined to its mirror image by a row split into `columns`, the crown point
 // closes the top. Row 0 (the sill) stays straight so it meets the flat underbody without a gap. front: faces +z.
@@ -819,63 +812,10 @@ function buildCargoCabin(spec, detail = 1) {
 /**
  * Half-width of a body's outer skin at height y of the cross-section at z (for decals & signs that hug the sides)
  */
-function carBodyHalfWidthAt(spec, z, y) {
-  const s = bodyProfile(spec)(z);
-  const n1 = spec.lowerRound || BODY_LOWER_ROUND;
-  const n2 = spec.upperRound || BODY_UPPER_ROUND;
-  const pts = [];
-  for (let i = 0; i <= 16; i++) {
-    const th = ((i / 16) * Math.PI) / 2;
-    pts.push([s.xB + (s.W - s.xB) * Math.pow(Math.sin(th), 2 / n1), s.yS - (s.yS - s.yB) * Math.pow(Math.cos(th), 2 / n1)]);
-  }
-  for (let i = 1; i <= 16; i++) {
-    const th = ((i / 16) * Math.PI) / 2;
-    pts.push([s.xE + (s.W - s.xE) * Math.pow(Math.cos(th), 2 / n2), s.yS + (s.yE - s.yS) * Math.pow(Math.sin(th), 2 / n2)]);
-  }
-  if (y <= pts[0][1]) return pts[0][0];
-  for (let i = 1; i < pts.length; i++) {
-    if (y <= pts[i][1]) {
-      const t = (y - pts[i - 1][1]) / Math.max(pts[i][1] - pts[i - 1][1], 1e-6);
-      return lerp(pts[i - 1][0], pts[i][0], t);
-    }
-  }
-  return s.xE;
-}
-
 /**
  * A thin grid patch lying `offset` m off the body side (side = +1: +x) over z0..z1, y0..y1. UVs read from the
  * front of the car to the back on both sides (u = 0 at the front on the +x side, at the back on the -x side).
  */
-function buildCarSidePatch(spec, side, z0, z1, y0, y1, offset = 0.003, nz = 10, ny = 6) {
-  const positions = [];
-  const uvs = [];
-  const indices = [];
-  for (let j = 0; j <= ny; j++) {
-    const v = j / ny;
-    const y = lerp(y0, y1, v);
-    for (let i = 0; i <= nz; i++) {
-      const u = i / nz;
-      const z = side > 0 ? lerp(z1, z0, u) : lerp(z0, z1, u);
-      positions.push(side * (carBodyHalfWidthAt(spec, z, y) + offset), y, z);
-      uvs.push(u, v);
-      if (i < nz && j < ny) {
-        const a = j * (nz + 1) + i;
-        const b = a + 1;
-        const c = a + nz + 1;
-        const d = c + 1;
-        if (side > 0) indices.push(a, b, c, b, d, c);
-        else indices.push(a, c, b, b, c, d);
-      }
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  g.setIndex(indices);
-  g.computeVertexNormals();
-  return g;
-}
-
 const WHEEL_SEGMENTS = 18;
 
 /**
@@ -946,10 +886,6 @@ function buildWheelWell(spec, side, z) {
     return geo.scale(rx, ry, 1).rotateY(rotY).translate(x, y0, z);
   };
   return part(mergeGeometries([makeHalf(side * Math.PI * 0.5), makeHalf(-side * Math.PI * 0.5)]), CAR_PARTS.TRIM);
-}
-
-function buildSteerableWheelGeo(spec, side) {
-  return mergeGeometries(buildWheelParts(spec, side, false));
 }
 
 function buildMirrors(spec) {
@@ -1065,7 +1001,7 @@ function buildCarGeometry(spec, includeWheels = true) {
   return mergeGeometries(parts);
 }
 
-// A ~250-triangle stand-in for distant cars (a few pixels tall): the same body & glasshouse lofted from a handful of
+// A ~480-triangle stand-in for distant cars (a few pixels tall): the same body & glasshouse lofted from a handful of
 // coarse sections, dark wheel blocks and the taxi's roof sign. Same attributes (partId, uv, normal) as the full
 // model, so it renders with the same material and per-instance paint.
 function buildCarProxyGeometry(spec) {
@@ -1111,13 +1047,9 @@ export {
   CAR_PARTS,
   BODY_SPECS,
   carLayout,
-  carBodyHalfWidthAt,
-  carTipZ,
   taxiSignPlacement,
   polygonPlanes,
   carStyleCode,
-  buildCarSidePatch,
-  buildSteerableWheelGeo,
   buildCarGeometry,
   buildCarProxyGeometry,
   buildBodyLoft,

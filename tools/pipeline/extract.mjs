@@ -4,6 +4,7 @@
 // one pass (it is sorted: nodes, then ways, then relations).
 import fs from 'node:fs';
 import { createOSMStream } from 'osm-pbf-parser-node';
+import { roofLike } from './buildings.mjs';
 
 export const EXTRACT_URL = 'https://download.geofabrik.de/north-america/us/puerto-rico-latest.osm.pbf';
 
@@ -32,7 +33,7 @@ export const FILTERS = {
   'osm_extra.json': {
     way: (t) => among(t.highway, ['footway', 'path', 'pedestrian', 'steps', 'cycleway']) || t.railway === 'platform' || t.public_transport === 'platform'
       || t.amenity === 'parking' || among(t.barrier, ['fence', 'hedge', 'wall', 'retaining_wall', 'guard_rail', 'city_wall']) || t.historic === 'citywalls'
-      || among(t.waterway, ['river', 'stream', 'canal', 'ditch']) || among(t.man_made, ['bridge', 'pier']) || t.building === 'roof' || t.leisure === 'swimming_pool'
+      || among(t.waterway, ['river', 'stream', 'canal', 'ditch']) || among(t.man_made, ['bridge', 'pier']) || roofLike(t) || t.leisure === 'swimming_pool'
       || (t.building != null && (t['building:colour'] != null || t['building:material'] != null)),
     node: (t) => t.highway === 'stop' || t.railway === 'level_crossing' || t.emergency === 'fire_hydrant'
       || (t.tourism === 'information' && among(t.information, ['map', 'board'])) || t.leisure === 'picnic_table' || t.playground != null,

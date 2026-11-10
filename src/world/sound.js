@@ -9,7 +9,7 @@ const SONGS = ['audio/callejon-de-panderetas.m4a', 'audio/fiesta-de-la-memoria.m
 const LEVEL = 0.6; // the radio, against the rest
 
 export class CitySound {
-  constructor() { this.ctx = null; this.on = false; this.powered = 1; this.dark = false; }
+  constructor() { this.ctx = null; this.on = false; this.powered = 1; this.since = 0; this.thump = -1e9; this.failed = 0; }
 
   start() {
     if (this.ctx) { this.ctx.resume(); this.song.play().catch(() => {}); this.on = true; return; }
@@ -18,7 +18,11 @@ export class CitySound {
     this.master.gain.setTargetAtTime(0.9, ctx.currentTime, 1.2);
     // the radio: the song through a tone control (open, or the muffled radio of the apagón) and its own level
     this.track = 0; this.song = new Audio(SONGS[0]); this.song.preload = 'auto';
-    this.song.addEventListener('ended', () => { this.track = (this.track + 1) % SONGS.length; this.song.src = SONGS[this.track]; this.song.play().catch(() => {}); });
+    // (one after the other; one that will not load, the next: a song lost to the network ended the radio)
+    const next = () => { this.track = (this.track + 1) % SONGS.length; this.song.src = SONGS[this.track]; this.song.play().catch(() => {}); };
+    this.song.addEventListener('ended', next);
+    this.song.addEventListener('playing', () => { this.failed = 0; });
+    this.song.addEventListener('error', () => { if (++this.failed < SONGS.length) next(); });
     this.tone = ctx.createBiquadFilter(); this.tone.type = 'lowpass'; this.tone.frequency.value = 20000; this.tone.Q.value = 0.7;
     this.radio = ctx.createGain(); this.radio.gain.value = LEVEL;
     ctx.createMediaElementSource(this.song).connect(this.tone).connect(this.radio).connect(this.master);
@@ -35,8 +39,8 @@ export class CitySound {
 
   stop() { if (this.ctx) { this.ctx.suspend(); this.song.pause(); this.on = false; } }
 
-  // The grid failing: a deep thump, the crackle of the lines letting go, the radio dead; then, after a while,
-  // faint and dull, a radio on batteries somewhere down the street.
+  // The grid failing, heard: a deep thump, the crackle of the lines letting go (the radio dies with the power where
+  // the camera is, update).
   blackout() {
     if (!this.on || !this.ctx) return;
     const ctx = this.ctx, t = ctx.currentTime + 0.05;
@@ -47,11 +51,18 @@ export class CitySound {
     for (let i = 0; i < len; i++) d[i] = (Math.random() < 0.02 ? Math.random() * 2 - 1 : 0) * Math.exp(-i / (len * 0.35));
     const n = ctx.createBufferSource(); n.buffer = buf; const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
     const ng = ctx.createGain(); ng.gain.value = 0.3; n.connect(hp).connect(ng).connect(this.master); n.start(t);
+    this.thump = ctx.currentTime;
+  }
+  // The radio as the power has it: back, as it was; gone, dead (with the thump just heard) and, after a while, faint
+  // and dull, a radio on batteries somewhere down the street; gone already when the sound came on, or the clock was
+  // taken past the failure, faint and dull at once.
+  radioFor(on, now) {
     const r = this.radio.gain, f = this.tone.frequency;
-    r.cancelScheduledValues(t); r.setValueAtTime(r.value, t); r.linearRampToValueAtTime(0, t + 0.05);
-    f.cancelScheduledValues(t); f.setValueAtTime(650, t + 0.1);
-    r.setValueAtTime(0, t + 5); r.linearRampToValueAtTime(LEVEL * 0.4, t + 11);
-    this.dark = true;
+    r.cancelScheduledValues(now); r.setValueAtTime(r.value, now); f.cancelScheduledValues(now); f.setValueAtTime(f.value, now);
+    if (on) { r.setTargetAtTime(LEVEL, now, 0.6); f.setTargetAtTime(20000, now, 0.3); return; }
+    f.setValueAtTime(650, now + 0.1);
+    if (now - this.thump < 4) { r.linearRampToValueAtTime(0, now + 0.05); r.setValueAtTime(0, now + 5); r.linearRampToValueAtTime(LEVEL * 0.4, now + 11); }
+    else r.linearRampToValueAtTime(LEVEL * 0.4, now + 1.5);
   }
 
   // night 0..1; cars: how many near the camera; moving: their mean speed (m/s); height: the camera's above the
@@ -61,12 +72,11 @@ export class CitySound {
     const ctx = this.ctx, now = ctx.currentTime, up = Math.min(1, Math.max(0, (height - 30) / 900));
     const traffic = Math.min(1, Math.log1p(cars) / Math.log1p(400));
     this.road.gain.setTargetAtTime(0.12 * traffic * (1 - 0.75 * up) * (0.4 + 0.6 * Math.min(1, moving / 12)), now, 0.4);
-    // the power back (the clock taken back before the failure, or the ordinary morning): the radio as it was
-    if (powered > 0.5 && this.dark) {
-      this.dark = false;
-      const r = this.radio.gain, f = this.tone.frequency;
-      r.cancelScheduledValues(now); r.setTargetAtTime(LEVEL, now, 0.6);
-      f.cancelScheduledValues(now); f.setTargetAtTime(20000, now, 0.3);
-    }
+    // The power at the camera: gone, at once (the grid's first stumble); back (the clock taken back before the
+    // failure, or the ordinary morning) once it has held half a second (not each flicker of the stumble). It was
+    // the blackout's own work, undone in the same frame: the power still on where the flicker had it on.
+    const p = powered > 0.5 ? 1 : 0;
+    this.since = p === this.powered ? 0 : this.since + dt;
+    if (p !== this.powered && (p === 0 || this.since > 0.5)) { this.powered = p; this.since = 0; this.radioFor(p === 1, now); }
   }
 }

@@ -55,7 +55,7 @@ export function splitOutlineRoads({ outlines, edges, pos, idxRoad, walkLines = [
     return null;
   };
   for (const e of edges) {
-    if ((e.bridge && !e.span) || e.tunnel || e.highway.startsWith('motorway')) continue;
+    if ((e.bridge && !e.span) || (e.tunnel && !e.passage) || e.highway.startsWith('motorway')) continue; // (a passage through a building: paved, roadsurface.mjs)
     const pts = e.ids.map(pos);
     // width of the right-of-way around this edge
     const widths = [];

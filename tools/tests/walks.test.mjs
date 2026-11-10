@@ -8,6 +8,9 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '../../public/tiles');
 const areas = fs.existsSync(root) ? fs.readdirSync(root).filter((a) => fs.existsSync(path.join(root, a, 'walks.json'))) : [];
 if (!areas.length) console.log('walks: no compiled area has walks (node tools/pipeline/walkways.mjs --area=<id>); skipped');
+// (San Juan's walks, 283 blocks, are checked with WALKS_ALL=1; said so when not, so that a run that checked nothing
+// does not read as one that passed)
+for (const area of areas.filter((a) => a === 'sanjuan' && !process.env.WALKS_ALL)) console.log(`walks ${area}: skipped (large; WALKS_ALL=1 node tools/tests/walks.test.mjs checks it)`);
 for (const area of areas.filter((a) => a !== 'sanjuan' || process.env.WALKS_ALL)) {
   const dir = path.join(root, area), meta = JSON.parse(fs.readFileSync(path.join(dir, 'walks.json')));
   const roads = JSON.parse(fs.readFileSync(path.join(dir, 'roads.json')));
