@@ -239,7 +239,7 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     const masonry = /^(castle|fort|fortress|bunker)$/.test(t.building) || /^(castle|fort|citywalls|fortress)$/.test(t.historic ?? '') || t.castle_type === 'fortress';
     if (masonry) hint = (0x80000000 | STONE[Math.floor(seed * STONE.length)] | (3 << 24)) >>> 0;
     if (g?.gers) stats.withGers++;
-    const rec = { id: b.id, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured: measured && !capped, hint, heritage: inHeritage, masonry,
+    const rec = { id: b.id, skywalk, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured: measured && !capped, hint, heritage: inHeritage, masonry,
       roof: t['roof:shape'] ?? null, name: t.name ?? null, gers: g?.gers ?? null };
     out.push(rec);
     return rec;

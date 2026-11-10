@@ -26,14 +26,16 @@
 // continuous by construction), and by clearroads.mjs on an area compiled before, which also paves the slot.
 //
 // A building raised over the road (BFLAG.RAISED: a skywalk) is passed under, not cleared, where its base stands
-// PASS_ROAD metres or more over the road (`base`, below; src/shared/tileformat.js).
+// PASS metres or more over the road (`base`, below; src/shared/tileformat.js): what the client's cars and people
+// pass under (src/world/drive.js Walls). The road's level is the higher end of the centreline's segment, which on a
+// slope can be well above the road under the building: so the car's clearance here, not the skywalk's own PASS_ROAD.
 //
 // Not done here, and what it would take: a roofed passage (the upper floors carried over the slot): the slot's piece
 // of the footprint kept as a second, raised record at base + PASS_ROAD, and `covered` on the road (osm.mjs writes it)
 // to tell a passage from a street an outline was dropped on.
 import polygonClipping from 'polygon-clipping';
 import { carriageWidth } from './roadsplit.mjs';
-import { PASS_ROAD } from '../../src/shared/tileformat.js';
+import { PASS } from '../../src/shared/tileformat.js';
 
 export const ENTER = 0.5;       // metres of centreline inside a footprint: less is a corner brushed, not a road through it
 export const CLEARANCE = 0.75;  // metres kept clear beside the carriageway, each side
@@ -176,7 +178,7 @@ function insideLength(ax, az, bx, bz, polygons) {
 
 // The drawn roads that enter the polygons by ENTER metres or more: [{ ei, inside (m), x, z (the middle of the
 // longest stretch inside), through (false: the road only ends in there, at a dead end) }]. base: the building's base
-// where it is raised (BFLAG.RAISED): a road PASS_ROAD metres or more below it passes under.
+// where it is raised (BFLAG.RAISED): a road PASS metres or more below it passes under.
 export function entering(index, polygons, base = -Infinity) {
   const { edges, cells, segs, cell, degree } = index, box = bounds(polygons), seen = new Set(), hits = new Map();
   for (let i = Math.floor(box[0] / cell); i <= Math.floor(box[2] / cell); i++)
@@ -185,7 +187,7 @@ export function entering(index, polygons, base = -Infinity) {
         if (seen.has(si)) continue;
         seen.add(si);
         const o = si * 6, ax = segs[o], az = segs[o + 1], bx = segs[o + 2], bz = segs[o + 3], ei = segs[o + 4];
-        if (base - segs[o + 5] >= PASS_ROAD) continue;
+        if (base - segs[o + 5] >= PASS) continue;
         if (Math.max(ax, bx) < box[0] || Math.min(ax, bx) > box[2] || Math.max(az, bz) < box[1] || Math.min(az, bz) > box[3]) continue;
         const r = insideLength(ax, az, bx, bz, polygons);
         if (!r.inside) continue;

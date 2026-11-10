@@ -7,7 +7,9 @@
 //             off the terrain: they float over the ground or sink into it
 //   skywalks  OSM building=bridge (data/raw/<area>/osm_buildings.json) as drawn: raised, solid from the ground, or
 //             taken out of the road (NO_SOLID)
-//   paint     road-marking polygons whose middle lies on a sidewalk (they show through it from afar)
+//   paint     road-marking polygons lying under a sidewalk, 0.05 m² or more of one (they show through it from afar);
+//             byMiddle: those whose centroid is on one (the first count: a sliver cut to a curved kerb has its centroid
+//             outside itself, and a corner on the kerb line rounds onto the sidewalk)
 //   ads       invented billboards and screens, and how many fall where the client hides them (Old San Juan)
 //   fronts    drawn buildings reaching 0.3 m or more into the corridor of a car in the outer lane of an at-grade
 //             street (src/shared/roadway.js corridorOf), all streets and tertiary and above
@@ -22,6 +24,7 @@ import { sampleGrid } from '../../src/shared/terrain.js';
 import { makeProjection } from '../../src/shared/geo.js';
 import { corridorOf } from '../../src/shared/roadway.js';
 import { NO_ADS } from '../../src/shared/places.js';
+import polygonClipping from 'polygon-clipping';
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const TILES = arg('tiles', 'public/tiles'), RAW = arg('raw', 'data/raw');
@@ -39,6 +42,12 @@ const inRing = (x, z, r) => {
 };
 const inPolygon = (x, z, rings) => inRing(x, z, rings[0]) && !rings.slice(1).some((h) => inRing(x, z, h));
 const bbox = (r) => { let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity; for (let i = 0; i < r.length; i += 2) { x0 = Math.min(x0, r[i]); x1 = Math.max(x1, r[i]); z0 = Math.min(z0, r[i + 1]); z1 = Math.max(z1, r[i + 1]); } return [x0, z0, x1, z1]; };
+const crosses = (ax, az, bx, bz, cx, cz, dx, dz) => {
+  const d1 = (bx - ax) * (cz - az) - (bz - az) * (cx - ax), d2 = (bx - ax) * (dz - az) - (bz - az) * (dx - ax);
+  const d3 = (dx - cx) * (az - cz) - (dz - cz) * (ax - cx), d4 = (dx - cx) * (bz - cz) - (dz - cz) * (bx - cx);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+};
+const ringArea = (q) => { let a = 0; for (let i = 0; i + 1 < q.length; i++) a += q[i][0] * q[i + 1][1] - q[i + 1][0] * q[i][1]; return a / 2; };
 const centroid = (r) => { let a = 0, cx = 0, cz = 0; for (let i = 0, n = r.length; i < n; i += 2) { const j = (i + 2) % n, f = r[i] * r[j + 1] - r[j] * r[i + 1]; a += f; cx += (r[i] + r[j]) * f; cz += (r[i + 1] + r[j + 1]) * f; } return Math.abs(a) < 1e-9 ? [r[0], r[1]] : [cx / (3 * a), cz / (3 * a)]; };
 
 // ---------------------------------------------------------------- roads
@@ -113,7 +122,7 @@ function measureArea(id) {
     for (const mt of text.matchAll(/\{"type":"way","id":(\d+)[^{}]*"tags":\{[^{}]*"building":"bridge"[^{}]*\}/g)) bridges.add('w' + mt[1]);
   }
   const sky = [];
-  const paint = { marks: 0, onSidewalk: 0 }, ads = { all: 0, hidden: 0 }, fronts = { all: 0, major: 0, buildings: 0 };
+  const paint = { marks: 0, onSidewalk: 0, byMiddle: 0 }, ads = { all: 0, hidden: 0 }, fronts = { all: 0, major: 0, buildings: 0 };
   const [hx0, hz1] = proj.project(NO_ADS.west, NO_ADS.south), [hx1, hz0] = proj.project(NO_ADS.east, NO_ADS.north);
   for (const { tile, ids } of tiles()) {
     // paint on sidewalks
@@ -123,8 +132,31 @@ function measureArea(id) {
       if (a.kind !== AREA.MARK_WHITE && a.kind !== AREA.MARK_YELLOW) continue;
       for (const rings of a.polygons) {
         paint.marks++;
-        const [x, z] = centroid(rings[0]);
-        if (walks.some(([b, w]) => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3] && inPolygon(x, z, w))) paint.onSidewalk++;
+        const r = rings[0], [x, z] = centroid(r);
+        const on = (px, pz) => walks.filter(([b, w]) => px >= b[0] && px <= b[2] && pz >= b[1] && pz <= b[3] && inPolygon(px, pz, w));
+        if (on(x, z).length) paint.byMiddle++;
+        // (the sidewalks it may lie on: those its centroid or a corner is in, or with an edge across one of its edges: a
+        // mark across a sidewalk's corner)
+        const near = new Set(on(x, z));
+        for (let i = 0; i < r.length; i += 2) for (const w of on(r[i], r[i + 1])) near.add(w);
+        const mb = bbox(r);
+        for (const wb of walks) {
+          const [b, w] = wb;
+          if (near.has(wb) || b[0] > mb[2] || b[2] < mb[0] || b[1] > mb[3] || b[3] < mb[1]) continue;
+          if (w.some((h) => { for (let i = 0, j = h.length - 2; i < h.length; j = i, i += 2) {
+            const ax = h[j], az = h[j + 1], bx = h[i], bz = h[i + 1];
+            if (Math.max(ax, bx) < mb[0] || Math.min(ax, bx) > mb[2] || Math.max(az, bz) < mb[1] || Math.min(az, bz) > mb[3]) continue;
+            for (let k = 0, l = r.length - 2; k < r.length; l = k, k += 2) if (crosses(ax, az, bx, bz, r[l], r[l + 1], r[k], r[k + 1])) return true;
+          } return false; })) near.add(wb);
+        }
+        if (!near.size) continue;
+        const ring = []; for (let i = 0; i < r.length; i += 2) ring.push([r[i], r[i + 1]]); ring.push(ring[0]);
+        let under = 0;
+        for (const [, w] of near) {
+          const poly = w.map((h) => { const q = []; for (let i = 0; i < h.length; i += 2) q.push([h[i], h[i + 1]]); q.push(q[0]); return q; });
+          try { for (const piece of polygonClipping.intersection([ring], poly)) under += Math.abs(ringArea(piece[0])) - piece.slice(1).reduce((s2, h) => s2 + Math.abs(ringArea(h)), 0); } catch { /* (degenerate) */ }
+        }
+        if (under >= 0.05) paint.onSidewalk++;
       }
     }
     // ads

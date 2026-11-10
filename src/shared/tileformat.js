@@ -33,7 +33,8 @@ export const MATERIAL = { NONE: 0, TILE: 1, CONCRETE: 2, PLASTER: 3, BRICK: 4, M
 // RAISED: off the ground, its base at least PASS metres over it (a skywalk, OSM building=bridge; a part of a building
 // raised on min_height): its walls stop at its base (no sink into the ground), its underside is drawn, and what
 // passes beneath does not run into it (src/world/drive.js Walls goes by the walls' height). A road under one stays
-// open where the base clears the road by PASS_ROAD (tools/pipeline/roadclear.mjs).
+// open where the base clears the road by PASS (tools/pipeline/roadclear.mjs). A skywalk is raised PASS_ROAD at
+// least over the highest ground under it, a lorry's clearance (tools/pipeline/buildings.mjs).
 export const BFLAG = { LOD2: 1, NO_SOLID: 2, LATTICE: 4, MASONRY: 8, RAISED: 16 };
 export const PASS = 2.5, PASS_ROAD = 4.5;
 

@@ -280,10 +280,11 @@ for (const b of src.buildings) {
   // meshing.js); the roof stays where the height puts it above the middle of the building.
   const gc = ground(cx, cz), lowest = Math.min(gc, ...polys[0][0].map(([x, z]) => ground(x, z)));
   // (one raised off the ground, a skywalk or a raised part: its base where its tags put it over the ground at its middle,
-  // and on a slope over the highest ground under it, so that what passes beneath passes everywhere)
+  // and on a slope over the highest ground under it, so that what passes beneath passes everywhere; a skywalk's
+  // clearance is over the street it crosses, which may be the highest ground under it)
   const highest = Math.max(gc, ...polys[0][0].map(([x, z]) => ground(x, z)));
-  const raised = b.minHeight > 0 && Math.max(gc, highest - 1) + b.minHeight - highest >= PASS;
-  const foot = raised ? Math.max(gc, highest - 1) : Math.max(lowest, gc - 6);
+  const raised = b.minHeight > 0 && (b.skywalk || Math.max(gc, highest - 1) + b.minHeight - highest >= PASS);
+  const foot = raised ? (b.skywalk ? highest : Math.max(gc, highest - 1)) : Math.max(lowest, gc - 6);
   const base = foot + b.minHeight, height = raised ? b.height : b.height + (gc - foot);
   bstats.slope.push(gc - lowest);
   bstats.heights.push(b.height);
@@ -587,19 +588,30 @@ const worldLand = {
 const paint = buildMarkings({ edges: graph.edges, pos: graph.pos, idx, land: worldLand, inBounds });
 // The paint on the carriageway only: a mark reaching past the kerb (a crosswalk's bar, a line laid along the OSM
 // road where the kerb bends in) lay under the sidewalk and showed through it from twenty metres off. A mark with
-// every corner on the carriageway is kept as it is; any other, cut to the carriageway pieces it overlaps.
+// every corner on the carriageway and none on a sidewalk is kept as it is; any other, cut to the carriageway pieces
+// it overlaps, less the sidewalk pieces over them (roadsplit.mjs's sidewalks overlap the carriageway in places: at a
+// corner, where a kerb's ring crosses the road's, and the raised sidewalk covers the paint there).
 {
-  const clip = { whole: 0, cut: 0, gone: 0 }, kept = [], c = idx.carriageway.cell;
-  for (const m of paint.marks) {
-    if (m.ring.every(([x, z]) => idx.carriageway.has(x, z))) { kept.push(m); clip.whole++; continue; }
-    const xs = m.ring.map((p) => p[0]), zs = m.ring.map((p) => p[1]), items = new Set();
+  const clip = { whole: 0, cut: 0, gone: 0 }, kept = [];
+  const near = (index, ring) => {
+    const c = index.cell, xs = ring.map((p) => p[0]), zs = ring.map((p) => p[1]), items = new Set();
     for (let i = Math.floor(Math.min(...xs) / c); i <= Math.floor(Math.max(...xs) / c); i++)
       for (let j = Math.floor(Math.min(...zs) / c); j <= Math.floor(Math.max(...zs) / c); j++)
-        for (const it of idx.carriageway.grid.get(i + ',' + j) ?? []) items.add(it);
+        for (const it of index.grid.get(i + ',' + j) ?? []) items.add(it);
+    return [...items];
+  };
+  for (const m of paint.marks) {
+    const mx = m.ring.reduce((s, p) => s + p[0], 0) / m.ring.length, mz = m.ring.reduce((s, p) => s + p[1], 0) / m.ring.length;
+    const walk = idx.sidewalk.has(mx, mz) || m.ring.some(([x, z]) => idx.sidewalk.has(x, z));
+    if (!walk && m.ring.every(([x, z]) => idx.carriageway.has(x, z))) { kept.push(m); clip.whole++; continue; }
+    const walks = walk ? near(idx.sidewalk, m.ring).map((it) => it.rings.map(close)) : [];
     let n = 0;
-    for (const it of items) {
+    for (const it of near(idx.carriageway, m.ring)) {
       let pieces;
-      try { pieces = polygonClipping.intersection([close(m.ring)], it.rings.map(close)); } catch { continue; }
+      try {
+        pieces = polygonClipping.intersection([close(m.ring)], it.rings.map(close));
+        if (walks.length && pieces.length) pieces = polygonClipping.difference(pieces, ...walks);
+      } catch { continue; }
       for (const poly of pieces) {
         const ring = poly[0].slice(0, -1);
         if (ring.length >= 3 && Math.abs(areaEN(ring)) >= 0.02) { kept.push({ kind: m.kind, ring }); n++; }
@@ -608,7 +620,7 @@ const paint = buildMarkings({ edges: graph.edges, pos: graph.pos, idx, land: wor
     if (n) clip.cut++; else clip.gone++;
   }
   paint.marks = kept;
-  log(`paint on the carriageway: ${clip.whole} marks whole, ${clip.cut} cut at the kerb, ${clip.gone} off it left out`);
+  log(`paint on the carriageway: ${clip.whole} marks whole, ${clip.cut} cut at the kerb or a sidewalk over the road, ${clip.gone} off it left out`);
 }
 for (const m of paint.marks) {
   const ring = m.ring.map(([x, z]) => [r2(x), r2(z)]);
@@ -865,6 +877,61 @@ const furniture = placeFurniture(path.join(area.rawDir, 'osm_poi.json'), proj.pr
 for (const p of furniture.props) tileFor(p.x, p.z).props.push({ ...p, x: r2(p.x), z: r2(p.z) });
 for (const s of furniture.signs) tileFor(s.x, s.z).signs.push({ ...s, x: r2(s.x), y: r2(s.y), z: r2(s.z), w: r2(s.w), h: r2(s.h) });
 log(`street furniture (OSM): ${Object.entries(furniture.count).map(([k, v]) => `${propName[k]} ${v}`).join(', ')}`);
+
+// ---------------------------------------------------------------- paint under a sidewalk
+// Last, in each tile: what paint still reaches under a sidewalk (a corner of a car park bay's line, a mark on a deck)
+// cut back to the sidewalk's edge. The raised sidewalk is drawn over it, and from afar the paint showed through.
+{
+  let cut = 0, gone = 0;
+  const bboxOf = (ring) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } return [x0, z0, x1, z1]; };
+  for (const t of tiles.values()) {
+    const walks = t.areas.filter((a) => a.kind === AREA.SIDEWALK).flatMap((a) => a.polygons).map((rings) => ({ rings, box: bboxOf(rings[0]) }));
+    if (!walks.length) continue;
+    // (the sidewalks' edges by 4 m cell: a mark across a sidewalk's corner has neither a corner nor its middle on it)
+    const EC = 4, edgeCells = new Map();
+    walks.forEach((w, wi) => { for (const r of w.rings) for (let i = 0; i < r.length; i++) {
+      const [ax, az] = r[i], [bx, bz] = r[(i + 1) % r.length];
+      for (let gx = Math.floor(Math.min(ax, bx) / EC); gx <= Math.floor(Math.max(ax, bx) / EC); gx++)
+        for (let gz = Math.floor(Math.min(az, bz) / EC); gz <= Math.floor(Math.max(az, bz) / EC); gz++) {
+          const k = gx + ',' + gz; if (!edgeCells.has(k)) edgeCells.set(k, []); edgeCells.get(k).push(wi, ax, az, bx, bz);
+        }
+    } });
+    const cross = (ax, az, bx, bz, cx, cz, dx, dz) => {
+      const d1 = (bx - ax) * (cz - az) - (bz - az) * (cx - ax), d2 = (bx - ax) * (dz - az) - (bz - az) * (dx - ax);
+      const d3 = (dx - cx) * (az - cz) - (dz - cz) * (ax - cx), d4 = (dx - cx) * (bz - cz) - (dz - cz) * (bx - cx);
+      return d1 * d2 < 0 && d3 * d4 < 0;
+    };
+    const kept = [];
+    for (const a of t.areas) {
+      if (a.kind !== AREA.MARK_WHITE && a.kind !== AREA.MARK_YELLOW) { kept.push(a); continue; }
+      const ring = a.polygons[0][0], box = bboxOf(ring);
+      const cx = ring.reduce((s, p) => s + p[0], 0) / ring.length, cz = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+      const hit = new Set();
+      walks.forEach((w, wi) => { if (w.box[0] <= box[2] && w.box[2] >= box[0] && w.box[1] <= box[3] && w.box[3] >= box[1] &&
+        (inRings(cx, cz, w.rings) || ring.some(([x, z]) => inRings(x, z, w.rings)))) hit.add(wi); });
+      for (let gx = Math.floor(box[0] / EC); gx <= Math.floor(box[2] / EC); gx++)
+        for (let gz = Math.floor(box[1] / EC); gz <= Math.floor(box[3] / EC); gz++)
+          for (let e = edgeCells.get(gx + ',' + gz) ?? [], k = 0; k < e.length; k += 5) {
+            if (hit.has(e[k])) continue;
+            for (let i = 0; i < ring.length; i++) { const [px, pz] = ring[i], [qx, qz] = ring[(i + 1) % ring.length]; if (cross(px, pz, qx, qz, e[k + 1], e[k + 2], e[k + 3], e[k + 4])) { hit.add(e[k]); break; } }
+          }
+      if (!hit.size) { kept.push(a); continue; }
+      const over = [...hit].map((wi) => walks[wi]);
+      let pieces;
+      try { pieces = polygonClipping.difference(a.polygons.map((rings) => rings.map(close)), ...over.map((w) => w.rings.map(close))); } catch { kept.push(a); continue; }
+      let n = 0;
+      for (const poly of pieces) {
+        const r = poly[0].slice(0, -1).map(([x, z]) => [r2(x), r2(z)]);
+        if (r.length < 3 || Math.abs(areaEN(r)) < 0.02) continue;
+        if (areaEN(r) < 0) r.reverse();
+        kept.push({ kind: a.kind, code: a.code, polygons: [[r]] }); n++;
+      }
+      if (n) cut++; else gone++;
+    }
+    t.areas = kept;
+  }
+  log(`paint under a sidewalk: ${cut} marks cut back to its edge, ${gone} left out`);
+}
 
 // ---------------------------------------------------------------- write
 fs.rmSync(area.outDir, { recursive: true, force: true });
