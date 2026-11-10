@@ -5,6 +5,7 @@
 // the wires to a pole left out go with it), and a parked car may stand along the kerb, not out in the lanes.
 // Used by the tile worker (meshing.js) and by tools/audit/roadway.mjs, which counts what it leaves out.
 import { AREA, PROP } from './tileformat.js';
+import { carriageWidth } from './carriage.js';
 import VEHICLES from './vehicles.json' with { type: 'json' };
 
 const KERB = 0.4;     // metres inside the carriageway's edge a thing may still stand (its foot on the kerb line)
@@ -233,8 +234,11 @@ export function paintOf(e, lanes, width = pavedHalf(e, lanes)) {
 //   roads: roads.json; painted: lanes.json's edges (or null). SUMO's lanes on a one-way expressway are the painted
 //   ones (network.mjs): n of them, sw wide each (WIDEST at most), the main carriageway's paving `half` either side.
 // Returns [{ node, edge, n, sw, half, len, line: [[x, y, z, s], ...] }]: the expressway's centreline from the merge
-// (s = 0) to the end of the taper, in the way travelled; len: where the lane ends (the taper after it).
-export const ACCEL = 140, TAPER = 40;
+// (s = 0) to the end of the taper, in the way travelled; len: where the lane ends (the taper after it). Where the
+// ramp's line converges on the expressway's over the last stretch before the merge (most do), the line starts back
+// where the ramp's line reaches the lane (s < 0; approach() below), and the lane has { ramp: its edge, cutBack,
+// rampTail }: the ramp's shape from there on, alongside, which network.mjs gives SUMO.
+export const ACCEL = 140, TAPER = 40, APPROACH = 200;
 const WIDEST = 4.5;
 export function accelLanes(roads, painted = null) {
   const E = roads.edges, lanesOf = roadLanes(E), signals = new Set(roads.signals ?? []);
@@ -248,6 +252,9 @@ export function accelLanes(roads, painted = null) {
     (ins.get(b) ?? ins.set(b, []).get(b)).push(i); (outs.get(a) ?? outs.set(a, []).get(a)).push(i);
   });
   const grade = (e) => !e.bridge && !e.tunnel && !e.flyover && !e.span;
+  // (an avenue's carriageway as the compiler paved it, sidewalks beside it, which may be narrower than its paint: the
+  // lane's paving starts there; an expressway is paved whole, null)
+  const carriageHalf = (e) => (e.highway.startsWith('motorway') ? null : carriageWidth(e) / 2);
   // (an edge's centreline in the way travelled, [x, y, z] each)
   const line = (i) => { const e = E[i], p = []; for (let k = 0; k < e.pts.length; k += 3) p.push([e.pts[k], e.pts[k + 1], e.pts[k + 2]]); return e.oneway === -1 ? p.reverse() : p; };
   const out = [];
@@ -282,34 +289,140 @@ export function accelLanes(roads, painted = null) {
       cut.push([q[0] + (p[0] - q[0]) * f, q[1] + (p[1] - q[1]) * f, q[2] + (p[2] - q[2]) * f, stop]);
       break;
     }
-    out.push({ node, edge: o, n, sw, half: pavedHalf(eo, lanesOf(eo)).half, len, line: cut });
+    const lane = { node, edge: o, n, sw, half: pavedHalf(eo, lanesOf(eo)).half, cw: carriageHalf(eo), len, line: cut };
+    const ap = approach(mains[0], ramps[0], node, n);
+    if (ap) Object.assign(lane, { line: [...ap.line, ...cut], ramp: ramps[0], cutBack: ap.cutBack, rampTail: ap.rampTail, apSw: ap.sw, apHalf: ap.half, apCw: carriageHalf(E[mains[0]]) });
+    out.push(lane);
   }
   return out;
+
+  // The approach. OSM draws a ramp converging on the expressway's line and joining it at the node, so over its last
+  // stretch (at a slant of 5 degrees, the last 100 m) the ramp's line runs inside the expressway's outer lanes, and
+  // SUMO drove the ramp's cars there, beside and through the outer lane's, each blind to the other (PR-18 into
+  // Avenida Piñero at 7:30: 50 cars inside one another). Where the ramp comes in from the right, the lane starts
+  // where the ramp's line reaches it: from there the ramp runs alongside, its lane's centre a lane past the painted
+  // ones (the expressway's own before the node: they may be wider than after it). Returns null, or { line: the
+  // expressway's centreline from that point to the node, [x, y, z, s] with s < 0, cutBack: how far back from the
+  // node along the ramp's line it leaves it, rampTail: the ramp's line from there on, [x, y, z] each, sw and half:
+  // the expressway's lanes' width and its paving's half before the node }.
+  function approach(mi, ri, node, n) {
+    if (!grade(E[mi])) return null;
+    const { sw } = sumo(mi), off = (n / 2 + 0.5) * sw, start = (i) => (E[i].oneway === -1 ? E[i].b : E[i].a);
+    // (a line back from the node, through nodes where nothing else meets: [x, y, z, s], s from 0 down)
+    const back = (i0, ok) => {
+      const pts = []; let s = 0, i = i0;
+      for (;;) {
+        const P = line(i);
+        for (let k = P.length - 1; k >= 0; k--) {
+          const p = P[k];
+          if (pts.length) { const q = pts.at(-1), d = Math.hypot(p[0] - q[0], p[2] - q[2]); if (d < 0.01) continue; s -= d; }
+          pts.push([p[0], p[1], p[2], s]);
+        }
+        if (-s >= APPROACH) break;
+        const a = start(i), prev = ins.get(a) ?? [];
+        if (signals.has(a) || at.get(a) !== 2 || prev.length !== 1 || (outs.get(a) ?? []).length !== 1 || !ok(prev[0])) break;
+        i = prev[0];
+      }
+      return pts;
+    };
+    const M = back(mi, (j) => grade(E[j]) && !link(E[j]) && sumo(j).n === n).reverse(), R = back(ri, (j) => link(E[j]));
+    if (M.length < 2 || R.length < 2) return null;
+    // (signed distance of p from the expressway's line, to the right of the way travelled positive; and where along)
+    const from = (p) => {
+      let best = Infinity, d = 0, s = 0;
+      for (let k = 1; k < M.length; k++) {
+        const a = M[k - 1], b = M[k], dx = b[0] - a[0], dz = b[2] - a[2], l2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[2] - a[2]) * dz) / l2)), qx = a[0] + dx * t, qz = a[2] + dz * t;
+        const e = Math.hypot(p[0] - qx, p[2] - qz);
+        if (e < best) { best = e; d = Math.sign(-dz * (p[0] - a[0]) + dx * (p[2] - a[2]) || 1) * e; s = a[3] + (b[3] - a[3]) * t; }
+      }
+      return { d, s };
+    };
+    // back along the ramp from the node to where it is a lane's centre out from the painted lanes
+    let prev = from(R[0]);
+    for (let k = 1; k < R.length; k++) {
+      const cur = from(R[k]);
+      if (cur.d < -1) return null; // (a ramp from the left: its lane is not built)
+      if (cur.d >= off) {
+        // (where on this piece of the ramp it is `off` out, by halves: the distance is not straight along it)
+        const a = R[k - 1], b = R[k], P = (f) => [a[0] + (b[0] - a[0]) * f, 0, a[2] + (b[2] - a[2]) * f];
+        let lo = 0, hi = 1;
+        for (let it = 0; it < 24; it++) { const mid = (lo + hi) / 2; if (from(P(mid)).d >= off) hi = mid; else lo = mid; }
+        const f = hi, cutBack = -(a[3] + (b[3] - a[3]) * f), s0 = from(P(f)).s;
+        if (cutBack < 5 || -s0 < 5 || s0 <= M[0][3] + 0.5) return null; // (nothing to move, or the expressway's line ends first)
+        // the expressway's line from s0 to the node, and the ramp's tail alongside it
+        const L = [];
+        for (let j = 1; j < M.length; j++) {
+          const a = M[j - 1], b = M[j];
+          if (b[3] <= s0) continue;
+          if (!L.length) { const g = (s0 - a[3]) / ((b[3] - a[3]) || 1); L.push([a[0] + (b[0] - a[0]) * g, a[1] + (b[1] - a[1]) * g, a[2] + (b[2] - a[2]) * g, s0]); }
+          if (b[3] < -0.01) L.push(b);
+        }
+        if (!L.length) return null;
+        const rampTail = [...L, M.at(-1)].map((p, j, A) => {
+          const a = A[Math.max(0, j - 1)], b = A[Math.min(A.length - 1, j + 1)], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1;
+          return [p[0] - (dz / l) * off, p[1], p[2] + (dx / l) * off];
+        });
+        return { line: L, cutBack, rampTail, sw, half: pavedHalf(E[mi], lanesOf(E[mi])).half };
+      }
+      prev = cur;
+    }
+    return null;
+  }
 }
 // The paving of an acceleration lane: quads [x0, z0, x1, z1, x2, z2, x3, z3] (in the order round), from the
 // expressway's paved edge (a little inside it) out to its outer edge, narrowing over the taper. And its outer
 // edge line, as thin quads: { pave, line }
 export function accelPaving(lane, step = 4) {
-  const { line: L, len, n, sw, half } = lane, inner = Math.min(half, (n / 2) * sw) - 0.15, outer = (n / 2 + 1) * sw;
+  const { line: L, len, n, sw, half, cw = null, apSw = sw, apHalf = half, apCw = cw } = lane;
+  const inner = Math.min(half, (n / 2) * sw, cw ?? Infinity) - 0.15, outer = (n / 2 + 1) * sw;
+  // (before the node, the approach: from the expressway's own paving out a lane of its own width, then over the first
+  // 20 m after it to the acceleration lane's)
+  const innerA = Math.min(apHalf, (n / 2) * apSw, apCw ?? Infinity) - 0.15, outerA = (n / 2 + 1) * apSw, inn = (s) => (s < 0 ? innerA : inner);
   // (the lane's outer edge, by how far along: full to len, then narrowing)
-  const edge = (s) => (s <= len ? outer : outer - (outer - inner - 0.15) * Math.min(1, (s - len) / TAPER));
+  const edge = (s) => (s < 0 ? outerA : s < 20 ? outerA + (outer - outerA) * (s / 20) : s <= len ? outer : outer - (outer - inner - 0.15) * Math.min(1, (s - len) / TAPER));
   const at = (s) => {
     let k = 1; while (k < L.length - 1 && L[k][3] < s) k++;
     const a = L[k - 1], b = L[k], f = Math.max(0, Math.min(1, (s - a[3]) / ((b[3] - a[3]) || 1)));
     const dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1;
     return [a[0] + dx * f, a[2] + dz * f, -dz / l, dx / l]; // (x, z, and the normal to the right of the way: x east, z south)
   };
-  const total = L.at(-1)[3], pave = [], lines = [];
-  for (let s = 0; s < total - 0.01; s += step) {
+  // (and the strip kept clear of sidewalks and islands, src/shared/carriage.js: from the expressway's outer lane, which
+  // its own carriageway, of 3 m lanes, may not reach where it is painted wider, to the lane's outer edge)
+  const clearIn = (s) => Math.max(0, (n / 2 - 1) * (s < 0 ? apSw : sw)) + 0.1;
+  const total = L.at(-1)[3], pave = [], lines = [], clear = [];
+  for (let s = L[0][3]; s < total - 0.01; s += step) { // (from the approach, where there is one: s < 0)
     const t = Math.min(total, s + step), [x0, z0, nx0, nz0] = at(s), [x1, z1, nx1, nz1] = at(t);
-    const o0 = edge(s), o1 = edge(t);
-    pave.push([x0 + nx0 * inner, z0 + nz0 * inner, x1 + nx1 * inner, z1 + nz1 * inner, x1 + nx1 * o1, z1 + nz1 * o1, x0 + nx0 * o0, z0 + nz0 * o0]);
+    const o0 = edge(s), o1 = edge(t), i0 = inn(s), i1 = inn(t);
+    pave.push([x0 + nx0 * i0, z0 + nz0 * i0, x1 + nx1 * i1, z1 + nz1 * i1, x1 + nx1 * o1, z1 + nz1 * o1, x0 + nx0 * o0, z0 + nz0 * o0]);
+    const c0 = (clearIn(s) + o0 - 0.1) / 2, c1 = (clearIn(t) + o1 - 0.1) / 2, h = (o0 + o1 - 0.2 - clearIn(s) - clearIn(t)) / 4;
+    if (h >= 0.3) clear.push([x0 + nx0 * c0, z0 + nz0 * c0, x1 + nx1 * c1, z1 + nz1 * c1, h]);
     if (s < len + TAPER) {
       const a0 = o0 - 0.35, a1 = o1 - 0.35, b0 = a0 - 0.15, b1 = a1 - 0.15;
-      if (a0 > inner + 0.3 && a1 > inner + 0.3) lines.push([x0 + nx0 * b0, z0 + nz0 * b0, x1 + nx1 * b1, z1 + nz1 * b1, x1 + nx1 * a1, z1 + nz1 * a1, x0 + nx0 * a0, z0 + nz0 * a0]);
+      if (a0 > i0 + 0.3 && a1 > i1 + 0.3) lines.push([x0 + nx0 * b0, z0 + nz0 * b0, x1 + nx1 * b1, z1 + nz1 * b1, x1 + nx1 * a1, z1 + nz1 * a1, x0 + nx0 * a0, z0 + nz0 * a0]);
     }
   }
-  return { pave, line: lines };
+  return { pave, line: lines, clear };
+}
+
+// The acceleration lanes as carriageway segments (src/shared/carriage.js carriageSegs' form: [x0, z0, x1, z1, half
+// width, ...]), for the tile workers' carriage lookup to take the sidewalks, islands and their kerbs out from under
+// them: a lane on an avenue was paved under its sidewalk, and its cars drawn along the sidewalk, through its trees
+// (Avenida Piñero after the PR-18 ramp). accelPaving's clear strips, the lane's first and last pulled in by their
+// half width (the lookup's boxes reach that far past a segment's ends).
+export function accelCarriage(lanes) {
+  const out = [];
+  for (const l of lanes) {
+    const segs = accelPaving(l).clear;
+    if (!segs.length) continue;
+    const pull = (g, end) => {
+      const [x0, z0, x1, z1, h] = g, len = Math.hypot(x1 - x0, z1 - z0), f = Math.min(0.49, h / (len || 1));
+      if (end) { g[2] = x1 - (x1 - x0) * f; g[3] = z1 - (z1 - z0) * f; } else { g[0] = x0 + (x1 - x0) * f; g[1] = z0 + (z1 - z0) * f; }
+    };
+    pull(segs[0], false); pull(segs.at(-1), true);
+    for (const g of segs) out.push(...g);
+  }
+  return Float32Array.from(out);
 }
 
 // The acceleration lanes' paving and lines as the tiles take them: { pave, line } flat Float32Arrays of quads (8 numbers
@@ -355,6 +468,22 @@ export function accelTile(tile, quads, tileSize, on = null) {
   const areas = [...tile.areas];
   if (pave.length) areas.push({ kind: AREA.CARRIAGEWAY, code: 0, polygons: pave });
   if (line.length) areas.push({ kind: AREA.MARK_WHITE, code: 0, polygons: line });
+  // (what stood on the sidewalk the lane's paving takes, or at the old kerb: trees, posts, lights, parked cars, and the
+  // wires of a pole that goes; the paving's own quads have seams a thing may stand on, so not roadwayDepth's test)
+  let props = tile.props, wires = tile.wires;
+  if (on && props?.length) {
+    const gone = props.filter((p) => p.kind !== PROP.DECAL && on(p.x, p.z, 0));
+    if (gone.length) {
+      props = props.filter((p) => !gone.includes(p));
+      const poles = gone.filter((p) => p.kind === PROP.POLE), at = (x, z) => poles.some((p) => Math.abs(p.x - x) < 0.05 && Math.abs(p.z - z) < 0.05);
+      if (poles.length && wires?.length) {
+        const keep = [];
+        for (let i = 0; i < wires.length; i += 4) if (!at(wires[i], wires[i + 1]) && !at(wires[i + 2], wires[i + 3])) keep.push(wires[i], wires[i + 1], wires[i + 2], wires[i + 3]);
+        wires = Float32Array.from(keep);
+      }
+    }
+  }
+  const signs = on && tile.signs?.length ? tile.signs.filter((g) => !on(g.x, g.z, 0)) : tile.signs; // (a sign on the old island)
   let walls = tile.walls;
   if (on && walls?.length) {
     const keep = [];
@@ -364,5 +493,5 @@ export function accelTile(tile, quads, tileSize, on = null) {
     }
     if (keep.length !== walls.length) walls = Float32Array.from(keep);
   }
-  return { ...tile, areas, walls };
+  return { ...tile, areas, walls, props, wires, signs };
 }

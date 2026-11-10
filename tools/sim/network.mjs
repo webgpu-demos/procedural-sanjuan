@@ -217,9 +217,12 @@ if (flag('merge')) {
 // Acceleration lanes (src/shared/roadway.js accelLanes, which the client paves): where a ramp of one lane joins the
 // expressway, its first ACCEL metres a lane wider, that lane to the outside of the main lanes (which stay where they
 // are painted: the edge's line moved over by half a lane), the ramp into it and the main lanes on into theirs; at
-// its end the lane stops, and its cars change lanes before (as netconvert's own guessed ones do, --ramps).
+// its end the lane stops, and its cars change lanes before (as netconvert's own guessed ones do, --ramps). Before
+// the merge, where OSM draws the ramp converging across the outer lanes, the ramp runs alongside in the lane's line
+// from where it reaches it (the client paves that too): it was laid on the outer lane, and the two queued through
+// each other (PR-18 into Avenida Piñero, 50 cars inside one another at 7:30).
 const extraNodes = new Map(), connections = [];
-let accels = 0;
+let accels = 0, approaches = 0, approachLen = 0;
 if (flag('accel')) {
   const byStart = new Map();
   for (const e of mergedEdges) if (e.fast && e.spread === 'center' && !e.link) byStart.set(`${e.from}|${e.src}`, e);
@@ -228,6 +231,14 @@ if (flag('accel')) {
   for (const a of accelLanes(roads, painted)) {
     const me = byStart.get(`${a.node}|${a.edge}`);
     const main = mergedEdges.find((e) => e.to === a.node && e.fast && !e.link && e.spread === 'center'), ramp = mergedEdges.find((e) => e.to === a.node && e.link);
+    // the ramp's last stretch alongside the expressway, in the lane's line, where OSM draws it converging across the
+    // outer lanes (accelLanes' approach): cut back along its shape, then the tail (roadway.js gives it, x z y). (Also
+    // where the lane itself is not built below: the ramp then joins at the node from beside the outer lane.)
+    if (ramp && a.rampTail) {
+      const R = ramp.pts; let t = 0, j = R.length - 1;
+      for (; j > 0; j--) { const d = len2(R[j - 1], R[j]); if (t + d >= a.cutBack) break; t += d; }
+      if (j > 0) { ramp.pts = [...R.slice(0, j), ...a.rampTail.map(([x, y, z]) => [x, -z, y])]; approaches++; approachLen += -a.line[0][3]; }
+    }
     if (!me || !main || !ramp) continue;
     // where the lane ends, along the edge's line (SUMO's frame: x, -z, y)
     const P = me.pts; let s = 0, k = 1;
@@ -256,7 +267,7 @@ if (flag('accel')) {
     for (let j = 0; j < me.lanes; j++) connections.push([piece.id, me.id, j + 1, j]);
     accels++;
   }
-  log(`${accels} acceleration lanes (of ${accelLanes(roads, painted).length} the client paves)`);
+  log(`${accels} acceleration lanes (of ${accelLanes(roads, painted).length} the client paves); ${approaches} ramps alongside before them (${(approachLen / 1000).toFixed(1)} km)`);
 }
 
 // Nodes: lights (right on red, as Puerto Rico drives: after a stop, unless a sign says otherwise), and where two
