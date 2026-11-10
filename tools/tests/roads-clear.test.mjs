@@ -33,7 +33,7 @@ for (const id of Object.keys(AREAS)) {
       const polygons = pairs(b.polygons);
       for (const rings of polygons) solid.add(rings);
       if (b.flags & BFLAG.MASONRY) return;
-      const roadsIn = entering(index, polygons);
+      const roadsIn = entering(index, polygons, b.flags & BFLAG.RAISED ? b.base : -Infinity); // (a skywalk: passed under)
       if (roadsIn.length) { const r = roadsIn.reduce((p, q) => (q.inside > p.inside ? q : p)), e = roads.edges[r.ei]; inside.push(`${t.file} #${i}: ${e.highway}${e.name ? ` "${e.name}"` : ''} ${r.inside.toFixed(1)} m inside, at x ${r.x.toFixed(1)} z ${r.z.toFixed(1)}`); }
     });
   }

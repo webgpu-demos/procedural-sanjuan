@@ -189,7 +189,7 @@ export class Walker {
   // seats(x, z): the seat nearest (x, z) within reach, { x, z, heading } (facing out), or null (main.js: the crowd's)
   constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null, wet = () => false, seats = () => null }) {
     this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
-    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
+    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles, (x, z) => surface(x, z)); this.lift = lift; // (lift: the paving's height over the terrain)
     this.wet = wet; // (water no road crosses, and beyond the city: streamer.wet)
     this.seats = seats;
     this.on = false; this.label = 'A pie'; this.unit = 'km/h';
@@ -386,7 +386,7 @@ function bicycle() {
 export class Cyclist {
   constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null, wet = () => false }) {
     this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
-    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles); this.lift = lift; // (lift: the paving's height over the terrain)
+    this.surface = surface; this.sim = sim; this.walls = new Walls(tiles, (x, z) => surface(x, z)); this.lift = lift; // (lift: the paving's height over the terrain)
     this.wet = wet; // (water no road crosses, and beyond the city: streamer.wet)
     this.on = false; this.label = 'Bicicleta'; this.unit = 'km/h';
     this.model = bicycle(); this.model.visible = false; scene.add(this.model);

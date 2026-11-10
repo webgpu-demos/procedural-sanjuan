@@ -15,6 +15,7 @@ import { loftedCarMaterial, carDepth } from './carmaterial.js';
 import { wheelBlur } from './fleet.js';
 import { LAMP_LAYER, lampMaterial } from './lamplight.js';
 import { streetAt } from '../shared/decks.js';
+import { PASS } from '../shared/tileformat.js';
 
 const CELL = 1.5;              // wall grid (m)
 const WHEELBASE = 2.8, TOP = 44, BOOST = 58, REVERSE = 9;
@@ -22,8 +23,10 @@ const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a
 
 // The walls of the buildings near a point: their faces that stand up, each laid down as the cells of a grid
 // it runs through, built per tile as the tiles come near (tiles(): the scene's tile groups).
+// ground(x, z): the street's level; a wall whose foot stands PASS metres or more over it (a skywalk's, a raised
+// part's: BFLAG.RAISED) is passed under.
 export class Walls {
-  constructor(tiles) { this.tiles = tiles; this.cells = new Map(); }
+  constructor(tiles, ground = null) { this.tiles = tiles; this.ground = ground; this.cells = new Map(); }
   of(tile) {
     let cells = this.cells.get(tile.name);
     if (cells) return cells;
@@ -37,6 +40,7 @@ export class Walls {
         if (Math.abs(nor[a * 3 + 1]) > 0.3) continue; // (a roof)
         // the wall's footprint: the two corners farthest apart on the ground
         const P = [a, b, c].map((v) => [pos[v * 3], pos[v * 3 + 2]]);
+        if (this.ground && Math.min(pos[a * 3 + 1], pos[b * 3 + 1], pos[c * 3 + 1]) - this.ground((P[0][0] + P[1][0] + P[2][0]) / 3, (P[0][1] + P[1][1] + P[2][1]) / 3) >= PASS) continue;
         let i = 0, j = 1, best = -1;
         for (const [u, w] of [[0, 1], [1, 2], [0, 2]]) { const d = (P[u][0] - P[w][0]) ** 2 + (P[u][1] - P[w][1]) ** 2; if (d > best) { best = d; i = u; j = w; } }
         const len = Math.sqrt(best), steps = Math.max(1, Math.ceil(len / (CELL * 0.5)));
@@ -128,14 +132,16 @@ export class Overhead {
     if (this.budget-- <= 0) return null; // (two tiles a frame: a tile with towers on it takes milliseconds)
     const b = new THREE.Box3().setFromObject(tile), x0 = Math.floor(b.min.x), z0 = Math.floor(b.min.z);
     const w = Math.max(1, Math.ceil(b.max.x - x0)), h = Math.max(1, Math.ceil(b.max.z - z0));
-    let roof = null;
-    tile.traverse((o) => {
+    // (first the undersides of what is raised over the street, a skywalk: a car passing beneath one is in the open,
+    // seen from the side, and the raised building's own roof over it is not a roof over the street; then the roofs)
+    let roof = null, under = null;
+    for (const up of [false, true]) tile.traverse((o) => {
       if (!o.isMesh || !o.userData.facade) return;
       const pos = o.geometry.attributes.position.array, nor = o.geometry.attributes.normal.array, idx = o.geometry.index?.array;
       const n = idx ? idx.length : pos.length / 3;
       for (let t = 0; t < n; t += 3) {
         const a = idx ? idx[t] : t, bb = idx ? idx[t + 1] : t + 1, c = idx ? idx[t + 2] : t + 2;
-        if (nor[a * 3 + 1] < 0.3) continue; // (a wall)
+        if (up ? nor[a * 3 + 1] < 0.3 : nor[a * 3 + 1] > -0.9) continue; // (a wall; on the first pass, all but undersides)
         const ax = pos[a * 3], az = pos[a * 3 + 2], bx = pos[bb * 3], bz = pos[bb * 3 + 2], cx = pos[c * 3], cz = pos[c * 3 + 2];
         const d = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
         if (Math.abs(d) < 1e-6) continue;
@@ -145,9 +151,11 @@ export class Overhead {
           const px = x0 + (i + 0.5) * COVER, pz = z0 + (j + 0.5) * COVER;
           const u = ((bx - px) * (cz - pz) - (cx - px) * (bz - pz)) / d, v = ((cx - px) * (az - pz) - (ax - px) * (cz - pz)) / d;
           if (u < -1e-4 || v < -1e-4 || u + v > 1 + 1e-4) continue;
-          const y = u * pos[a * 3 + 1] + v * pos[bb * 3 + 1] + (1 - u - v) * pos[c * 3 + 1];
+          const y = u * pos[a * 3 + 1] + v * pos[bb * 3 + 1] + (1 - u - v) * pos[c * 3 + 1], k = j * w + i;
+          if (!up) { under ??= new Float32Array(w * h).fill(NaN); if (!(under[k] <= y)) under[k] = y; continue; }
+          if (under && y >= under[k] - 0.5) continue; // (the raised building's own roof)
           roof ??= new Float32Array(w * h).fill(NaN);
-          const k = j * w + i; if (!(roof[k] >= y)) roof[k] = y;
+          if (!(roof[k] >= y)) roof[k] = y;
         }
       }
     });
@@ -210,7 +218,7 @@ export class Driver {
     this.beams.instanceMatrix = this.mesh.instanceMatrix; this.beams.layers.set(LAMP_LAYER); this.beams.frustumCulled = false; this.beams.visible = false;
     scene.add(this.mesh, this.beams);
     this.m = new THREE.Matrix4();
-    this.walls = new Walls(tiles);
+    this.walls = new Walls(tiles, (x, z) => surface(x, z));
     this.view = null;
   }
 

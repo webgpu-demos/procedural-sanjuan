@@ -70,7 +70,7 @@ for (const t of manifest.tiles) {
   }
   for (const b of tile.buildings) {
     const ring = b.polygons[0]?.[0];
-    if (!ring || b.flags & BFLAG.NO_SOLID) continue; // (taken out of a road, clearroads.mjs: no floors to walk to)
+    if (!ring || b.flags & (BFLAG.NO_SOLID | BFLAG.RAISED)) continue; // (taken out of a road, clearroads.mjs; a skywalk: no floors to walk to from the street)
     const fp = Math.abs(ringArea(ring)), floors = b.storeys || Math.max(1, Math.round(b.height / 3.2));
     let cx = 0, cz = 0; for (let k = 0; k < ring.length; k += 2) { cx += ring[k]; cz += ring[k + 1]; }
     cx /= ring.length / 2; cz /= ring.length / 2;

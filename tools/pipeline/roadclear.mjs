@@ -25,13 +25,15 @@
 // Used by the compiler before the buildings are cut out of the roads (compile.mjs: the surface then comes out
 // continuous by construction), and by clearroads.mjs on an area compiled before, which also paves the slot.
 //
-// Not done here, and what it would take: a roofed passage (the upper floors carried over the slot). The tile format
-// has no building raised off the ground with a drawn underside: a building's walls run SINK metres below its base
-// and it has no floor (src/world/meshing.js). It would take a flag on the record (raised: no sink, the footprint
-// drawn again facing down at its base), the slot's piece of the footprint kept as a second record at base + 4.5 m,
-// and `covered` on the road (osm.mjs now writes it) to tell a passage from a street an outline was dropped on.
+// A building raised over the road (BFLAG.RAISED: a skywalk) is passed under, not cleared, where its base stands
+// PASS_ROAD metres or more over the road (`base`, below; src/shared/tileformat.js).
+//
+// Not done here, and what it would take: a roofed passage (the upper floors carried over the slot): the slot's piece
+// of the footprint kept as a second, raised record at base + PASS_ROAD, and `covered` on the road (osm.mjs writes it)
+// to tell a passage from a street an outline was dropped on.
 import polygonClipping from 'polygon-clipping';
 import { carriageWidth } from './roadsplit.mjs';
+import { PASS_ROAD } from '../../src/shared/tileformat.js';
 
 export const ENTER = 0.5;       // metres of centreline inside a footprint: less is a corner brushed, not a road through it
 export const CLEARANCE = 0.75;  // metres kept clear beside the carriageway, each side
@@ -133,8 +135,8 @@ export function roadIndex(edges, cell = 64) {
     if (!drawn(e)) return;
     const p = e.pts;
     for (let k = 3; k < p.length; k += 3) {
-      const si = segs.length / 5;
-      segs.push(p[k - 3], p[k - 1], p[k], p[k + 2], ei);
+      const si = segs.length / 6;
+      segs.push(p[k - 3], p[k - 1], p[k], p[k + 2], ei, Math.max(p[k - 2], p[k + 1])); // (and the road's level, the higher end)
       for (let i = Math.floor(Math.min(p[k - 3], p[k]) / cell); i <= Math.floor(Math.max(p[k - 3], p[k]) / cell); i++)
         for (let j = Math.floor(Math.min(p[k - 1], p[k + 2]) / cell); j <= Math.floor(Math.max(p[k - 1], p[k + 2]) / cell); j++) {
           const key = i * 100003 + j;
@@ -173,15 +175,17 @@ function insideLength(ax, az, bx, bz, polygons) {
 }
 
 // The drawn roads that enter the polygons by ENTER metres or more: [{ ei, inside (m), x, z (the middle of the
-// longest stretch inside), through (false: the road only ends in there, at a dead end) }]
-export function entering(index, polygons) {
+// longest stretch inside), through (false: the road only ends in there, at a dead end) }]. base: the building's base
+// where it is raised (BFLAG.RAISED): a road PASS_ROAD metres or more below it passes under.
+export function entering(index, polygons, base = -Infinity) {
   const { edges, cells, segs, cell, degree } = index, box = bounds(polygons), seen = new Set(), hits = new Map();
   for (let i = Math.floor(box[0] / cell); i <= Math.floor(box[2] / cell); i++)
     for (let j = Math.floor(box[1] / cell); j <= Math.floor(box[3] / cell); j++)
       for (const si of cells.get(i * 100003 + j) ?? []) {
         if (seen.has(si)) continue;
         seen.add(si);
-        const o = si * 5, ax = segs[o], az = segs[o + 1], bx = segs[o + 2], bz = segs[o + 3], ei = segs[o + 4];
+        const o = si * 6, ax = segs[o], az = segs[o + 1], bx = segs[o + 2], bz = segs[o + 3], ei = segs[o + 4];
+        if (base - segs[o + 5] >= PASS_ROAD) continue;
         if (Math.max(ax, bx) < box[0] || Math.min(ax, bx) > box[2] || Math.max(az, bz) < box[1] || Math.min(az, bz) > box[3]) continue;
         const r = insideLength(ax, az, bx, bz, polygons);
         if (!r.inside) continue;
@@ -200,13 +204,13 @@ export function entering(index, polygons) {
   return out;
 }
 
-// polygons: a building's footprint ([[outer, ...holes], ...], rings of [x, z], world metres); height: the building's (m).
-// Returns null where no drawn road enters it, else
+// polygons: a building's footprint ([[outer, ...holes], ...], rings of [x, z], world metres); height: the building's (m);
+// base: its base, for one raised off the ground (entering()). Returns null where no drawn road enters it, else
 //   { action: 'remove' | 'notch', polygons (the remainder: [] when removed), left (the share of the area that remains),
 //     pieces (how many), through, roads: entering()'s, corridor (the cleared strip, as the clipper has it), area }
 // or { action: 'failed' } where the clipper could not cut it (the building is left as it is).
-export function resolve(index, polygons, height) {
-  const roads = entering(index, polygons);
+export function resolve(index, polygons, height, base = -Infinity) {
+  const roads = entering(index, polygons, base);
   if (!roads.length) return null;
   const area = areaOf(polygons), box = bounds(polygons), through = roads.some((r) => r.through);
   const strips = roads.flatMap((r) => { const e = index.edges[r.ei]; return widened(line(e), corridorHalf(e), box); });
