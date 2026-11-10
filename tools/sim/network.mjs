@@ -12,13 +12,14 @@
 // junctions' shapes, and a piece between two close ones was left a metre or none long: a car could not stop on it,
 // so it waited across the junction behind, and the streets locked one another.)
 //
-// Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, plain.con.xml, merged.json, lanes.json, inside.json} and runs netconvert to
+// Writes data/sim/<area>/net/{plain.nod.xml, plain.edg.xml, plain.con.xml, merged.json, lanes.json, inside.json, source.json} and runs netconvert to
 // data/sim/<area>/<area>.net.xml.gz.
-// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--ramps] [--no-zip-ramps] [--no-accel] [--join=18]
+// Usage: node tools/sim/network.mjs [--area=sanjuan] [--no-check] [--no-merge] [--no-painted] [--no-zipper] [--no-ror] [--no-service] [--ramps] [--no-zip-ramps] [--no-accel] [--join=18]
 //        [--cluster=20] [--reach=45] [--netconvert=--opt,value,...]
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { resolveArea, ROOT } from '../pipeline/config.mjs';
 import { roadLanes, paintOf, accelLanes } from '../../src/shared/roadway.js';
 
@@ -27,7 +28,11 @@ const flag = (k) => !process.argv.includes(`--no-${k}`);
 const opt = (k, d) => { const a = process.argv.find((v) => v.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const tiles = path.join(ROOT, 'public/tiles', area.id), out = path.join(ROOT, 'data/sim', area.id);
 fs.mkdirSync(path.join(out, 'net'), { recursive: true });
-const roads = JSON.parse(fs.readFileSync(path.join(tiles, 'roads.json'), 'utf8'));
+const roadsText = fs.readFileSync(path.join(tiles, 'roads.json'));
+const roads = JSON.parse(roadsText);
+// the roads this network was built on, by their hash: run.py writes it into the run's index, tools/deploy.sh refuses a
+// run whose roads are not the tiles' (a run on other roads drives its cars off the painted lanes), simtraffic.js warns
+const source = { roads: crypto.createHash('sha1').update(roadsText).digest('hex') };
 const lanesFile = path.join(tiles, 'lanes.json');
 const painted = flag('painted') && fs.existsSync(lanesFile) ? JSON.parse(fs.readFileSync(lanesFile, 'utf8')).edges : null;
 const t0 = Date.now(), log = (m) => console.log(`${((Date.now() - t0) / 1000).toFixed(1).padStart(6)}s ${m}`);
@@ -93,7 +98,8 @@ roads.edges.forEach((e, i) => {
 // for 62 m, then 5; PR-18 into PR-22 at Hato Rey, 2 and 2 into 2 for 300 m, then 4. SUMO zips them lane by lane
 // there, and in the published morning the queues behind ran back half a kilometre and more with the road beyond
 // empty. Such a stretch (under 400 m) is given as many lanes as come into it, up to as many as go on beyond it.
-// (--no-pinch: as OSM has them)
+// The compiler now does the same (tools/pipeline/pinches.mjs), so that the tiles pave and paint what SUMO drives; this
+// is left as a guard, and finds none on tiles compiled since. (--no-pinch: as the roads have them)
 if (flag('pinch')) {
   const into = new Map(), outOf = new Map();
   for (const e of edges) if (e.fast) { (into.get(e.to) ?? into.set(e.to, []).get(e.to)).push(e); (outOf.get(e.from) ?? outOf.set(e.from, []).get(e.from)).push(e); }
@@ -133,6 +139,31 @@ if (flag('pinch')) {
     if (!changed) break;
   }
   log(`${n} expressway stretches narrowed to the lanes beyond them`);
+}
+
+// Where SUMO drives a road in more or fewer lanes than the tiles paint on it: the client fits each car into the
+// painted lanes (simtraffic.js relane, by the run's index.lanes), and where SUMO has more, two cars side by side in
+// SUMO are drawn in one lane, one inside the other (PR-18 at Hato Rey, 2026-11). Printed, the longest first; --lanes-out=<file>
+// writes them all.
+{
+  const len = (e) => { let s = 0; for (let k = 1; k < e.pts.length; k++) s += Math.hypot(e.pts[k][0] - e.pts[k - 1][0], e.pts[k][1] - e.pts[k - 1][1]); return s; };
+  const rows = [];
+  for (const e of edges) {
+    const r = roads.edges[e.src];
+    let paint;
+    if (e.fast && e.spread === 'center') paint = (painted?.[e.src] ?? paintOf(r, Math.max(1, lanesOf(r) || r.lanes || 1))).lanes;
+    else if (e.spread === 'center') paint = paintOf(r, e.lanes).lanes;
+    else continue; // (a two-way street: SUMO's lanes either side of the line, the client places them as SUMO does)
+    if (paint === e.lanes) continue;
+    const m = e.pts[e.pts.length >> 1];
+    rows.push({ id: e.id, name: e.name || r.highway, sumo: e.lanes, paint, len: Math.round(len(e)), at: [Math.round(m[0]), Math.round(-m[1])], fast: e.fast });
+  }
+  rows.sort((a, b) => b.len - a.len);
+  const more = rows.filter((r) => r.sumo > r.paint), km = (rs) => (rs.reduce((s, r) => s + r.len, 0) / 1000).toFixed(1);
+  log(`lanes, SUMO's against the paint, one-way roads: ${rows.length} differ (${km(rows)} km); SUMO has more on ${more.length} ` +
+    `(${km(more)} km; expressway ${more.filter((r) => r.fast).length}, ${km(more.filter((r) => r.fast))} km)`);
+  for (const r of more.filter((r) => r.fast).slice(0, 12)) log(`  ${r.id.padEnd(8)} ${String(r.name).slice(0, 28).padEnd(28)} SUMO ${r.sumo} paint ${r.paint} ${String(r.len).padStart(5)} m at (${r.at})`);
+  if (opt('lanes-out', '')) fs.writeFileSync(opt('lanes-out', ''), JSON.stringify(rows));
 }
 
 const signals = new Set(roads.signals);
@@ -335,6 +366,7 @@ fs.writeFileSync(path.join(out, 'net/plain.con.xml'), ['<connections>', ...conne
 fs.writeFileSync(path.join(out, 'net/merged.json'), JSON.stringify(merged));
 fs.writeFileSync(path.join(out, 'net/lanes.json'), JSON.stringify(laneTable));
 fs.writeFileSync(path.join(out, 'net/inside.json'), JSON.stringify(inside));
+fs.writeFileSync(path.join(out, 'net/source.json'), JSON.stringify(source));
 log(`plain network: ${used.size - nodeId.size + clusters.length} nodes (${lights} with lights, ${zips} zippers), ` +
   `${mergedEdges.length - dropped} directed edges from ${roads.edges.length} roads`);
 
@@ -356,3 +388,6 @@ execFileSync(bin, [
   ...(opt('netconvert', '') ? opt('netconvert', '').split(',') : []),
 ], { stdio: 'inherit' });
 log(`netconvert -> ${path.relative(ROOT, netFile)} (${(fs.statSync(netFile).size / 1e6).toFixed(1)} MB)`);
+// what the network must pass before a run is made on it (tools/sim/checknet.py: no junction link starting behind
+// its lane); it fails the build (--no-check: built anyway, for a look at what fails)
+if (flag('check')) execFileSync(path.join(ROOT, '.venv-sim/bin/python'), [path.join(ROOT, 'tools/sim/checknet.py'), netFile], { stdio: 'inherit' });

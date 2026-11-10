@@ -23,6 +23,7 @@ import { buildHeightGrid, sampleGrid, demSource, FAR_DEM } from './terrain.mjs';
 import { applyLidar, LIDAR } from './lidar.mjs';
 import { PolyIndex, readLand, clipRing, placeProps, inRings } from './landscape.mjs';
 import { fitLanes } from './lanefit.mjs';
+import { widenPinches } from './pinches.mjs';
 import { NO_ADS } from '../../src/shared/places.js';
 import { buildMarkings } from './markings.mjs';
 import { splitOutlineRoads } from './roadsplit.mjs';
@@ -349,6 +350,11 @@ const graph = buildRoadGraph(osm, proj.project, inBounds);
   const f = fitLanes(graph.edges, graph.pos, allBuildings.filter((b) => !(b.flags & BFLAG.RAISED)));
   const w = f.widths.sort((a, b) => a - b);
   log(`untagged two-way main streets: ${f.roads} edges; ${f.two} given two lanes, ${f.four} kept four (${f.open} with no buildings both sides, ${f.byWidth} by their mapped width); wall to wall median ${w.length ? w[w.length >> 1].toFixed(1) : '-'} m`);
+}
+// the expressway's stretches narrower than both what joins them and what follows: as wide as what joins them (pinches.mjs)
+{
+  const w = widenPinches(graph.edges, graph.pos);
+  log(`expressway pinches at joins: ${w.length} widened${w.length ? ` (${w.map((p) => `${p.edge.ref ?? p.edge.name ?? p.edge.highway} ${p.from}->${p.to}`).join(', ')})` : ''}`);
 }
 // road level per node: the ground, or above it on bridges and elevated expressways
 const { level, spans } = profileRoads(graph.edges, graph.pos, ground, wet);

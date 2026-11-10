@@ -28,7 +28,7 @@ import polygonClipping from 'polygon-clipping';
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
 const TILES = arg('tiles', 'public/tiles'), RAW = arg('raw', 'data/raw');
-const AREAS = arg('areas', fs.readdirSync(TILES).filter((d) => fs.existsSync(path.join(TILES, d, 'manifest.json'))).join(',')).split(',');
+const AREAS = arg('areas') === '' ? [] : arg('areas', fs.readdirSync(TILES).filter((d) => fs.existsSync(path.join(TILES, d, 'manifest.json'))).join(',')).split(',');
 const out = { tiles: TILES, areas: {} };
 
 // ---------------------------------------------------------------- geometry
@@ -205,7 +205,9 @@ async function measureRun(dir) {
     teleports: +(index.stats?.teleports?.total ?? NaN), teleportsBy: index.stats?.teleports,
   };
   const valFile = path.join(dir, 'validation.json');
-  if (fs.existsSync(valFile)) { const val = JSON.parse(fs.readFileSync(valFile, 'utf8')); r.counted = { ratio: +val.all.ratio.toFixed(3), r2: +val.all.r2.toFixed(3), geh5: +val.all.geh5.toFixed(3), n: val.all.n }; }
+  if (fs.existsSync(valFile)) { const val = JSON.parse(fs.readFileSync(valFile, 'utf8').replace(/\bNaN\b/g, 'null')); // (a run before the counted hours: r² NaN)
+    const f3 = (v) => (v == null ? null : +v.toFixed(3));
+    r.counted = { ratio: f3(val.all.ratio), r2: f3(val.all.r2), geh5: f3(val.all.geh5), n: val.all.n }; }
   // why each car drives, and from where
   const tripsFile = path.join(dir, 'trips.bin');
   const trips = fs.existsSync(tripsFile) ? fs.readFileSync(tripsFile) : null;

@@ -18,7 +18,7 @@ files = os.path.join(SIM, DEMAND, 'trips.xml') + (',' + buses if os.path.exists(
 cmd = [os.path.join(ROOT, '.venv-sim/bin/duarouter'), '-n', os.path.join(SIM, f'{AREA}.net.xml.gz'),
        '-r', files, '-o', os.path.join(SIM, DEMAND, 'routes.rou.xml'),
        '--routing-algorithm', 'CH', '--ignore-errors', '--no-warnings', '--no-step-log', '--repair',
-       '--write-trips.junctions', 'false', '--departlane', 'best', '--departspeed', 'max']
+       '--write-trips.junctions', 'false']  # (each trip says how it sets off and arrives: demand.py)
 taz = os.path.join(SIM, DEMAND, 'taz.add.xml')  # (trips from beyond the edge: their municipio's gates, demand.py)
 extra = [f for f in (stops, taz) if os.path.exists(f)]
 if extra: cmd += ['--additional-files', ','.join(extra)]
