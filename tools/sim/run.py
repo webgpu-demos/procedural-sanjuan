@@ -35,7 +35,7 @@ BEGIN, END = 4.5 * 3600, float(args.get('end', 10.25)) * 3600
 APAGON_AT = 5.75 * 3600  # (5:45: still dark, the city lit; sunrise in late October is about 6:19 AST; the rush still to come)
 CROSS, ALONG, RISE, MAX_GAP = 0.3, 1.5, 0.6, 30.0
 WINDOW = 150                  # seconds of the morning per file (a rush-hour one decodes to ~40 MB; it must divide APAGON_AT - BEGIN)
-TYPES = ['compact', 'sedan', 'suv', 'pickup', 'truck', 'bus']  # (src/world/traffic.js TYPES, in order)
+TYPES = list(json.load(open(os.path.join(ROOT, 'src/shared/vehicles.json')))['types'])  # (src/world/traffic.js TYPES, in order)
 t0 = time.time()
 def log(m): print(f'{time.time() - t0:7.1f}s {m}', flush=True)
 os.chdir(WORK)
@@ -178,7 +178,16 @@ for batch in reader:
     P = np.column_stack([x, y, z])
     # a track per car, split where it teleports or goes missing for more than a second
     newv = np.r_[True, v[1:] != v[:-1]]
-    first = newv | np.r_[False, (np.diff(t) > 1.5) | (np.hypot(np.diff(x), np.diff(y)) > 60)]
+    dt, dd = np.diff(t), np.hypot(np.diff(x), np.diff(y))
+    # (and where SUMO sets a car down a little further on to clear a jam: a step of a second, 9 m or more, 8 m/s faster
+    # than the steps before and after it; a car that had stood for minutes shot 20 to 50 m on in a second. The client
+    # parted such tracks itself, src/world/simworker.js unlunge, for the runs made before this.)
+    sp = dd / np.maximum(dt, 1e-3)
+    same = ~newv[1:]                                                  # step k: sample k to k + 1, of one car
+    before = np.r_[np.inf, np.where(same[:-1], sp[:-1], np.inf)]      # (no step before: no cut)
+    after = np.r_[np.where(same[1:], sp[1:], np.inf), np.inf]
+    lunge = same & (dt <= 1.05) & (dd >= 9) & (sp - before > 8) & (sp - after > 8)
+    first = newv | np.r_[False, (dt > 1.5) | (dd > 60) | lunge]
     kidx = np.flatnonzero(simplify(t, P, first)); KN = np.column_stack([t[kidx], P[kidx]])
     starts = np.flatnonzero(first); ends = np.r_[starts[1:], len(t)]
     ks, ke = np.searchsorted(kidx, starts), np.searchsorted(kidx, ends)
@@ -345,6 +354,7 @@ json.dump({'version': 1, 'scenario': SCEN, 'begin': BEGIN, 'end': END, 'window':
            'apagon': APAGON_AT if apagon else None, 'stats': stats, 'peak': peak,
            'lanes': netjson('lanes.json'),  # (each one-way expressway road: SUMO's lanes on it and their width; simtraffic.js relane)
            'levels': 'roads',  # (network.mjs built the network on roads.json's levels as they are: simtraffic.js raise)
+           'roads': netjson('source.json').get('roads'),  # (the sha1 of the roads.json the network was built on: tools/deploy.sh)
            'tripinfo': {'count': len(ti), 'meanDuration': float(np.mean([v[0] for v in ti.values()])) if ti else 0,
                         'meanTimeLoss': float(np.mean([v[1] for v in ti.values()])) if ti else 0}},
           open(os.path.join(OUT, 'index.json'), 'w'))

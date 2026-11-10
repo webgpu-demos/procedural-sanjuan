@@ -29,9 +29,11 @@ function boatGeometry() {
   ]);
 }
 
+const TURN = 0.08; // rad a second: a ferry's turn (half a turn in 40 s)
+
 export class Ferries {
-  static async load(url) {
-    const list = await fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  static async load(url) { // (or the file's contents, fetched already: a promise of them)
+    const list = typeof url === 'string' ? await fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null) : await url;
     return list?.length ? new Ferries(list) : null;
   }
   constructor(list) {
@@ -68,14 +70,27 @@ export class Ferries {
     let s = 0, moving = !!trip;
     if (trip) s = (T - trip.depart) / Math.max(1, trip.arrive - trip.depart);
     else { trip = [...this.trips].reverse().find((t) => t.arrive < T); s = 1; if (!trip) { trip = this.trips[0]; s = 0; } }
-    // easing out of the pier and into the next
-    const e = s < 0.12 ? (s / 0.12) ** 2 * 0.06 : s > 0.88 ? 1 - ((1 - s) / 0.12) ** 2 * 0.06 : 0.06 + (s - 0.12) / 0.76 * 0.88;
+    // easing out of the pier and into the next: speeding up evenly over the first 12% of the time, as evenly slowing
+    // down over the last, cruising between (at the speed the speeding up reaches: it was 16% faster, a step)
+    const A = 0.12, c = 1 / (1 - A);
+    const e = s < A ? c * s * s / (2 * A) : s > 1 - A ? 1 - c * (1 - s) ** 2 / (2 * A) : c * (s - A / 2);
     const d = e * trip.cum.at(-1);
     let i = 1; while (i < trip.cum.length - 1 && trip.cum[i] < d) i++;
     const a = trip.pts[i - 1], b = trip.pts[i], f = (d - trip.cum[i - 1]) / Math.max(1e-6, trip.cum[i] - trip.cum[i - 1]);
     const t = shared.uTime.value;
     this.boat.position.set(a.x + (b.x - a.x) * f, seaLevel + 0.15 + Math.sin(t * 0.9) * 0.12, a.z + (b.z - a.z) * f);
-    const heading = Math.atan2(b.x - a.x, b.z - a.z);
+    // (turned as a boat turns, at most TURN a second of the clock, and round at the pier before it leaves for the
+    // other side: it was swung about in a frame as it left)
+    let want = Math.atan2(b.x - a.x, b.z - a.z);
+    if (!moving) {
+      const next = this.trips.find((n) => n.depart > T);
+      if (next && next.depart - T < 120 && next.pts.length > 1) want = Math.atan2(next.pts[1].x - next.pts[0].x, next.pts[1].z - next.pts[0].z);
+    }
+    const dT = this.T == null ? Infinity : T - this.T;
+    this.T = T;
+    if (this.heading == null || !(dT >= 0 && dT < 60)) this.heading = want; // (the first time, or the clock moved on or back)
+    else { const dh = Math.atan2(Math.sin(want - this.heading), Math.cos(want - this.heading)); this.heading += Math.max(-TURN * dT, Math.min(TURN * dT, dh)); }
+    const heading = this.heading;
     this.boat.rotation.set(Math.sin(t * 0.7) * 0.012, heading, Math.sin(t * 0.55) * 0.025, 'YXZ');
     this.wake.position.copy(this.boat.position).setY(seaLevel + 0.02); this.wake.rotation.y = heading;
     this.wake.material.opacity = moving && s > 0.05 && s < 0.95 ? 0.55 : 0;

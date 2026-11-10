@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import { AREA, PROP, BARRIER } from '../../src/shared/tileformat.js';
 import { hash, forEachAlong, inRings } from './landscape.mjs';
+import { roofLike } from './buildings.mjs';
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const num = (v) => { const n = Number.parseFloat(v); return Number.isFinite(n) ? n : null; };
@@ -129,7 +130,7 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
       if (rail == null || !inBounds(cx, cz)) continue; // no visible track beside it: an underground platform
       out.structures.platforms.push({ ring: ring.map(([x, z]) => [r2(x), r2(z)]), y: r2(rail + 0.95), covered: t.covered === 'yes' || Math.abs(ringArea(ring)) > 250 });
       tally('platform');
-    } else if (t.building === 'roof' && w.closed && !hidden(t)) {
+    } else if (roofLike(t) && w.closed && !hidden(t)) { // (building=roof, "roof;yes" and the like, carports: buildings.mjs)
       const ring = openRing(w.pts), cx = ring.reduce((s, p) => s + p[0], 0) / ring.length, cz = ring.reduce((s, p) => s + p[1], 0) / ring.length;
       if (!inBounds(cx, cz)) continue;
       // A roof far above the ground is part of a larger structure (a platform high in a tower or a stadium),
@@ -152,12 +153,15 @@ export function buildExtras({ ways, points }, { idx, ground, inBounds, rails, ro
     const { cx, cz, ax, az, a, b } = rect, sx = -az, sz = ax; // long axis (ax, az), short axis (sx, sz)
     const at = (u, v) => [cx + ax * u + sx * v, cz + az * u + sz * v];
     const inside = (p) => inRings(p[0], p[1], [ring]) && !idx.building.has(p[0], p[1]);
+    // (and no sidewalk across it, along either side: a lot's outline often runs out to the street over the sidewalk,
+    // a strip of it narrower than a bay, and its lines showed through the sidewalk there, its cars parked on it)
+    const walked = (u, v) => { for (const du of [0, 2.5]) for (let dv = 0; dv <= 5; dv += 0.5) { const [x, z] = at(u + du, v + dv); if (idx.sidewalk.has(x, z)) return true; } return false; };
     // rows of bays across the short axis: a row against each side, then pairs of rows between aisles
     const rows = [], full = 0.15 + 0.35 * hash(w.id, 7, 1); // how full this lot is
     for (let v = -b + 0.3, k = 0; v + 5 <= b - 0.2; k++) { rows.push(v); v += k % 2 === 0 ? 5 + 6 : 5; }
     for (const v of rows) for (let u = -a + 0.4; u + 2.5 <= a - 0.3; u += 2.5) {
       const corners = [at(u, v), at(u + 2.5, v), at(u + 2.5, v + 5), at(u, v + 5)];
-      if (!corners.every(inside)) continue;
+      if (!corners.every(inside) || walked(u, v)) continue;
       // the two long sides of the bay, as paint
       for (const du of [0, 2.5]) out.marks.push({ kind: AREA.MARK_WHITE, ring: [at(u + du - 0.05, v), at(u + du + 0.05, v), at(u + du + 0.05, v + 5), at(u + du - 0.05, v + 5)] });
       const h = hash(Math.round(u * 7 + w.id), Math.round(v * 13), 3);

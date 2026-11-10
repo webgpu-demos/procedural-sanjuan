@@ -2,16 +2,18 @@
 node_modules/
 dist/
 
-# raw downloads (PLATEAU CityGML and textures, OSM, GSI DEM): several GB per area - re-create with `npm run fetch`
+# raw downloads (OSM, FEMA USA Structures, terrain tiles, the USGS lidar DEM: 5 GB for the municipality) - re-create with `npm run fetch`
 data/raw/
 data/preview/
 *.part
+# compiled tiles as they were before a tool changed them in place (tools/pipeline/clearroads.mjs keeps each file's copy)
+data/tiles-backup/
 
 # compiled city - re-create with `npm run compile`
 public/tiles/
 # CC0 textures - re-create with `node tools/assets/fetch_textures.mjs`
 public/textures/
-# GSI aerial photo tiles - re-create with `npm run fetch`
+# USGS aerial photo tiles - re-create with `npm run fetch`
 public/ortho/
 
 # local settings and secrets
@@ -36,6 +38,10 @@ desktop.ini
 # traffic simulation: Python environment and working files (re-create with npm run sim:setup / the sim scripts)
 .venv-sim/
 data/sim/
+data/sim-archive/
 
 # audio previews rendered for review
 samples/
+
+# camera moves rendered by tools/render/flythrough.mjs
+data/renders/

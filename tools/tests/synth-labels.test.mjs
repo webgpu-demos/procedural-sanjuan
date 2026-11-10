@@ -32,8 +32,13 @@ assert.notEqual(at(3, 21)[1], at(6, 21)[1], 'the two cars are two instances');
 
 // tarp packing, read back as tarp.js's GLSL does
 const [cx, cz, packed, w] = packTarp(12.5, -40.25, 3.46, 1.2, 2.0);
-const hx = Math.floor(packed / 1000 + 0.0001) / 10, hz = (packed - Math.floor(packed / 1000 + 0.0001) * 1000) / 10;
+const unpack = (s) => { const z = Math.floor(s + 0.5); return [Math.floor(z / 1000 + 0.0001) / 10, (z - Math.floor(z / 1000 + 0.0001) * 1000) / 10]; };
+const [hx, hz] = unpack(packed);
 assert.deepEqual([cx, cz, hx, hz], [12.5, -40.25, 3.5, 1.2]);
+// (it reaches the fragment shader interpolated, the same at a building's every vertex but for a few ulps either way)
+const big = packTarp(0, 0, 99.9, 99.9, 0)[2], ulp = 2 ** (Math.floor(Math.log2(big)) - 23);
+for (const e of [-4, -1, 1, 4]) assert.deepEqual(unpack(Math.fround(big + e * ulp)), [99.9, 99.9]);
+for (const e of [-0.3, 0.3]) assert.deepEqual(unpack(packed + e), [3.5, 1.2]);
 assert.ok(Math.abs(w - 4 - 2.0) < 1e-9 && w > 3.5);
 assert.ok(Math.abs(packTarp(0, 0, 1, 1, -0.5)[3] - 4 - (Math.PI - 0.5)) < 1e-9, 'angles folded into 0..pi');
 

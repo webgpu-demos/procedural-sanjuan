@@ -55,15 +55,16 @@ export function readPlaces(file, project) {
 // Billboards and LED screens on commercial buildings that face a street — thickest around `centre` (the
 // area's origin), thinning out with distance; `density` scales the whole (1: a Tokyo shopping street).
 // Call after placeSigns (it prepares the walls). buildings: as for placeSigns, plus usage.
-export function placeAds(buildings, centre = [0, 0], density = 1) {
-  const ads = [];
+// centres: [[x, z], ...] (or one [x, z]): the busiest streets, the ads thinning out with the distance from the nearest.
+export function placeAds(buildings, centres = [0, 0], density = 1) {
+  const ads = [], at = typeof centres[0] === 'number' ? [centres] : centres;
   buildings.forEach((b, bi) => {
     if (!(b.usage >= 401 && b.usage <= 404) && b.usage !== 413 && b.usage !== 414) return;
     if (b.height < 12 || !b.walls) return;
     const walls = b.walls.filter((w) => w.street && w.len >= 4.5).sort((p, q) => q.len - p.len);
     walls.slice(0, 2).forEach((w, wi) => {
       const mx = w.ax + w.dx * w.len / 2, mz = w.az + w.dz * w.len / 2;
-      const d = Math.hypot(mx - centre[0], mz - centre[1]);
+      const d = Math.min(...at.map(([cx, cz]) => Math.hypot(mx - cx, mz - cz)));
       const h1 = hash('ad' + bi + ':' + wi), h2 = hash('kind' + bi + ':' + wi), h3 = hash('roof' + bi + ':' + wi);
       const chance = density * (d < 220 ? 0.9 : d < 500 ? 0.5 : d < 900 ? 0.2 : 0.07);
       if (h1 < chance) {

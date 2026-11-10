@@ -5,9 +5,11 @@ import { Soup, sections } from './rails.js';
 import { lampUniforms } from './lamplight.js';
 import { shared } from './materials.js';
 import { pavedHalf, roadLanes, paintOf } from '../shared/roadway.js';
+import { PAD_BACK, PAD_EASE, PAD_STEP } from '../shared/terrain.js';
 
 export { pavedHalf, roadLanes, paintOf };
 
+const LIT = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary']); // (landscape.mjs: the lit roads)
 const DECK_ABOVE = 2.0;   // road level this far above the ground gets a deck on piers; lower, a walled ramp
 export const RAMP_ABOVE = 0.35; // below this the road is the ordinary ground surface (simtraffic.js drives the same decks)
 const PIER_SPACING = 27, STEP = 3;
@@ -64,6 +66,52 @@ export function landDecks(roads, ground, reach = 15, most = 1.5) {
     }
   }
   return landed;
+}
+
+// Where a deck lands on a road the tiles drape on the ground, the ground held level with it (src/shared/terrain.js
+// padField: the pads, for grid.pads, in the workers and here). The deck is flat across and the elevation model is
+// not: along an embankment's top it has a crown, and the deck at its end, landed on the road's middle, stood up to
+// 0.7 m over the road at its edges, a step across the lanes with the ground showing under it (PR-22 under the
+// opening's ride). Run after landDecks (and mergeDecks), before the ground is used for anything else; ground: the
+// terrain as it is. Returns the pads.
+export function deckPads(roads, ground) {
+  const onGround = new Set();
+  for (const e of roads.edges) if (!leftOut(e) && !e.tunnel) { onGround.add(e.a); onGround.add(e.b); }
+  const lanesOf = roadLanes(roads.edges), pads = [];
+  for (const e of roads.edges) {
+    if (!leftOut(e)) continue;
+    const p = e.pts, n = p.length / 3;
+    if (n < 2) continue;
+    for (const [k0, dir, node] of [[0, 1, e.a], [n - 1, -1, e.b]]) {
+      if (!onGround.has(node)) continue;
+      const x = p[k0 * 3], y0 = p[k0 * 3 + 1], z = p[k0 * 3 + 2];
+      if (Math.abs(ground(x, z) - y0) > 0.05) continue; // (only where it is landed: not a cutting, nor a structure in the terrain)
+      // its way in, and its level on, from the first 10 m of it
+      let s = 0, k = k0, gx = 0, gz = 0, gy = 0;
+      const level = [[0, y0]];
+      while (k + dir >= 0 && k + dir < n && s < 10) {
+        const a = k * 3, b = (k + dir) * 3, L = Math.hypot(p[b] - p[a], p[b + 2] - p[a + 2]);
+        s += L; gx += p[b] - p[a]; gz += p[b + 2] - p[a + 2]; level.push([s, p[b + 1]]); k += dir;
+      }
+      const T = Math.hypot(gx, gz);
+      if (T < 1) continue;
+      const tx = gx / T, tz = gz / T, [sl, yl] = level.at(-1), grade = sl > 0 ? (yl - y0) / sl : 0;
+      const half = pavedHalf(e, lanesOf(e)).half + 0.25;
+      // (only where the deck's edges stand off the road as drawn: 0.1 m or more, up to a metre; more is a deck the
+      // terrain has a structure in, or a road the elevation model has wrong, left as they are)
+      let step = 0;
+      for (let l = -half + 0.3; l <= half - 0.3; l += 0.5) step = Math.max(step, Math.abs(ground(x - tz * l, z + tx * l) - y0));
+      if (step < 0.1 || step > 1) continue;
+      // on under the deck while it stands within a metre of the ground (the abutment's fill), up to 12 m
+      let fwd = 0;
+      for (let d = 1; d <= 12; d++) { if (y0 + grade * d - ground(x + tx * d, z + tz * d) > 1) break; fwd = d; }
+      const back = [];
+      for (let d = 0; d <= PAD_BACK + PAD_EASE + PAD_STEP; d += PAD_STEP) back.push(ground(x - tx * d, z - tz * d));
+      back[0] = y0;
+      pads.push([x, z, tx, tz, half, y0, grade, fwd, ...back]);
+    }
+  }
+  return pads;
 }
 
 export function structureEdges(edges, ground) {
@@ -131,7 +179,8 @@ export function overDecks(footprints, PROP) {
 
 // paving: the tiles' road and paint materials (materials.js): a bridge at grade is paved with them, as the road up to
 // it is, so that it reads as the same road and not as a patch of another colour
-export async function buildFlyovers(roads, ground, depth = null, paving = null) { // (roads: roads.json, or its url)
+// decks: the decks as drawn (roadlevel.js DrawnDecks), for where two merge
+export async function buildFlyovers(roads, ground, depth = null, paving = null, decks = null) { // (roads: roads.json, or its url)
   const { edges } = typeof roads === 'string' ? await (await fetch(roads)).json() : roads;
   const concrete = [0.6, 0.6, 0.58], asphalt = [0.3, 0.3, 0.32], paint = [0.9, 0.9, 0.87], barrier = [0.7, 0.72, 0.72], sidewalk = [0.55, 0.55, 0.53];
   const soup = new Soup();
@@ -157,9 +206,15 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null) 
 
   const built = structureEdges(edges, ground);
   const lanesOf = roadLanes(edges);
+  // street lights on the decks of the roads the tiles light (tools/pipeline/landscape.mjs: the expressway and the
+  // avenues, at the kerb every 17 m, either side in turn), on their parapets: [x, z, facing, level]. The tiles
+  // leave the bridges out, and the lit road ended in the dark at every deck, the opening's ride on PR-22 above all
+  const lights = [];
   for (const e of edges) {
     if (e.tunnel) continue;
     const expressway = e.highway.startsWith('motorway');
+    const lit = !e.span && e.highway !== 'motorway_link' && LIT.has(e.highway.replace('_link', ''));
+    let nextLight = 8, lightN = 0;
     // Structures are built for flyovers, for the expressway ramps that climb up to them (structureEdges), and
     // (underside only) for street-level spans. Every other road is the ground surface from the tiles, even where
     // its level and the terrain disagree by a little.
@@ -187,33 +242,64 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null) 
       // (dashes 5 m on, 5 m off, as markings.mjs paints them)
       const dashed = Math.floor(a.s / 5) % 2 === 0;
       const c = width.carriage / 2, side = width.half - c > 0.3 && !expressway ? 'sidewalk' : 'asphalt';
+      // (a dual carriageway's two decks overlapping at the median: either paved up to the line between their
+      // carriageways, one barrier on it; roadlevel.js DrawnDecks.medians)
+      const sd = decks?.sideOf(e, i), med = (s) => sd?.[s > 0 ? 1 : 0] ?? null, line = (s) => med(s)?.m ?? null;
+      const cut = (s) => Math.min(c, line(s) ?? Infinity), outer = (s) => line(s) ?? width.half;
+      const painted = (l) => (!l.dashed || dashed) && !(line(l.o >= 0 ? 1 : -1) != null && Math.abs(l.o) > line(l.o >= 0 ? 1 : -1) - 0.3);
+      // (a sidewalk over another deck's carriageway, the same way at its level, where a ramp joins the avenue on the
+      // bridge: carriageway, no kerb; the cars on the ramp had driven along the avenue's sidewalk)
+      const merging = (s) => {
+        if (!decks || side !== 'sidewalk') return false;
+        const o = s * (c + outer(s)) / 2, p = at(a, o, 0), q = at(b, o, 0), L = Math.hypot(q[0] - p[0], q[2] - p[2]) || 1;
+        return decks.paved((p[0] + q[0]) / 2, (p[2] + q[2]) / 2, (p[1] + q[1]) / 2, e, (q[0] - p[0]) / L, (q[2] - p[2]) / L);
+      };
+      const walk = [-1, 1].map((s) => side === 'sidewalk' && line(s) == null && !merging(s)), walks = (s) => walk[s > 0 ? 1 : 0];
       if (paving) {
         // the carriageway and (a street's) sidewalks, as the tiles pave them either side, in their materials
-        pave(a, b, -c, c, 'asphalt');
-        for (const s of [-1, 1]) pave(a, b, s * c, s * width.half, side);
-        if (side === 'sidewalk') for (const s of [-1, 1]) sweep(a, b, [[s * c, 0.06], [s * c, 0.2]], sidewalk); // (the kerb)
-        for (const l of lines) if (!l.dashed || dashed) pave(a, b, l.o - 0.075, l.o + 0.075, l.yellow ? 'yellow' : 'paint');
+        pave(a, b, -cut(-1), cut(1), 'asphalt');
+        for (const s of [-1, 1]) if (outer(s) > c) pave(a, b, s * c, s * outer(s), walks(s) ? 'sidewalk' : 'asphalt');
+        for (const s of [-1, 1]) if (walks(s)) sweep(a, b, [[s * c, 0.06], [s * c, 0.2]], sidewalk); // (the kerb)
+        for (const l of lines) if (painted(l)) pave(a, b, l.o - 0.075, l.o + 0.075, l.yellow ? 'yellow' : 'paint');
       } else {
-        sweep(a, b, [[-c, 0], [c, 0]], asphalt);
-        for (const s of [-1, 1]) sweep(a, b, [[s * c, 0], [s * width.half, 0]], side === 'sidewalk' ? sidewalk : asphalt);
-        for (const l of lines) if (!l.dashed || dashed) sweep(a, b, [[l.o - 0.075, 0.015], [l.o + 0.075, 0.015]], l.yellow ? [0.88, 0.66, 0.12] : paint);
+        sweep(a, b, [[-cut(-1), 0], [cut(1), 0]], asphalt);
+        for (const s of [-1, 1]) if (outer(s) > c) sweep(a, b, [[s * c, 0], [s * outer(s), 0]], walks(s) ? sidewalk : asphalt);
+        for (const l of lines) if (painted(l)) sweep(a, b, [[l.o - 0.075, 0.015], [l.o + 0.075, 0.015]], l.yellow ? [0.88, 0.66, 0.12] : paint);
       }
-      // parapets, with a taller noise barrier on the expressway's flyovers
+      // parapets, with a taller noise barrier on the expressway's flyovers; none on a side that lies on the paving
+      // of another deck at its level, where a ramp merges or forks (the cars changing from one to the other drove
+      // through the parapet between them)
       const top = expressway && !e.grade ? 1.9 : 1.0;
       for (const s of [-1, 1]) {
+        const md = med(s);
+        if (md) {
+          if (md.draw) sweep(a, b, [[s * (md.m - 0.2), 0], [s * (md.m - 0.2), 0.85], [s * (md.m + 0.2), 0.85], [s * (md.m + 0.2), 0]], concrete);
+          continue;
+        }
+        if (decks) {
+          const p = at(a, s * (w - 0.125), 0), q = at(b, s * (w - 0.125), 0), L = Math.hypot(q[0] - p[0], q[2] - p[2]) || 1;
+          if (decks.paved((p[0] + q[0]) / 2, (p[2] + q[2]) / 2, (p[1] + q[1]) / 2, e, (q[0] - p[0]) / L, (q[2] - p[2]) / L)) continue;
+        }
         sweep(a, b, [[s * (w - 0.25), 0], [s * (w - 0.25), 0.9], [s * w, 0.9]], concrete);
         if (top > 1) sweep(a, b, [[s * (w - 0.1), 0.9], [s * (w - 0.1), top]], barrier);
+        if (lit && a.s >= nextLight - 0.01 && (lightN % 2 ? 1 : -1) === s) {
+          const p = at(a, s * (w - 0.45), 0);
+          lights.push([p[0], p[2], Math.atan2(-a.n[0] * s, -a.n[2] * s), p[1]]);
+        }
       }
+      if (lit && a.s >= nextLight - 0.01) { lightN++; nextLight += 17; }
+      // (its outer faces, to the median's line under the paving where the other deck runs on beside it)
+      const el = line(-1) ?? w, er = line(1) ?? w, tl = line(-1) != null ? -0.05 : 0.9, tr = line(1) != null ? -0.05 : 0.9;
       if (e.grade) {
         // a slab on its abutments: its edge and underside show over the creek or the dip it crosses
-        sweep(a, b, [[-w, 0.9], [-w, -0.4], [-w * 0.8, -1.1], [w * 0.8, -1.1], [w, -0.4], [w, 0.9]], concrete);
+        sweep(a, b, [[-el, tl], [-el, -0.4], [-el * 0.8, -1.1], [er * 0.8, -1.1], [er, -0.4], [er, tr]], concrete);
       } else if (Math.min(a.h, b.h) > DECK_ABOVE) {
         // box girder: outer faces and the underside
-        sweep(a, b, [[-w, 0.9], [-w, -0.5], [-w * 0.55, -1.5], [w * 0.55, -1.5], [w, -0.5], [w, 0.9]], concrete);
+        sweep(a, b, [[-el, tl], [-el, -0.5], [-el * 0.55, -1.5], [er * 0.55, -1.5], [er, -0.5], [er, tr]], concrete);
       } else {
         // ramp on fill between retaining walls
-        sweep(a, b, (c) => [[-w, 0.9], [-w, -Math.max(c.h, 0) - 0.4]], concrete);
-        sweep(a, b, (c) => [[w, -Math.max(c.h, 0) - 0.4], [w, 0.9]], concrete);
+        sweep(a, b, (c) => [[-el, tl], [-el, -Math.max(c.h, 0) - 0.4]], concrete);
+        sweep(a, b, (c) => [[er, -Math.max(c.h, 0) - 0.4], [er, tr]], concrete);
       }
     }
     // piers every 27 m where the deck stands high, each at the nearest place clear of the lanes of the roads
@@ -298,6 +384,7 @@ export async function buildFlyovers(roads, ground, depth = null, paving = null) 
   const mesh = soup.mesh(material);
   mesh.name = 'flyovers';
   mesh.userData.footprints = footprints;
+  mesh.userData.lights = lights;
   for (const [g, m, name] of [[paved.road, paving?.road, 'bridge decks'], [paved.paint, paving?.paint, 'bridge deck paint']]) {
     if (!m || !g.position.length) continue;
     const geo = new THREE.BufferGeometry();

@@ -34,12 +34,13 @@ function roadAttrs(t) {
     : (t.highway === 'motorway' || t.highway === 'motorway_link' || t.junction === 'roundabout') && t.oneway !== 'no' ? 1 : 0;
   // Untagged lanes: per direction for major roads; minor two-way streets are one shared lane.
   let lanes = intTag(t.lanes);
-  if (lanes == null) {
+  const guessed = lanes == null; // (lanefit.mjs settles a main street's from the room between its buildings)
+  if (guessed) {
     const perDir = link ? 1 : DEFAULT_LANES[hw] ?? 1;
     lanes = oneway ? perDir : MINOR.has(hw) ? 1 : perDir * 2;
   }
   return {
-    highway: t.highway, oneway, lanes,
+    highway: t.highway, oneway, lanes, guessed,
     lanesForward: intTag(t['lanes:forward']), lanesBackward: intTag(t['lanes:backward']),
     maxspeed: speedTag(t.maxspeed) ?? DEFAULT_SPEED[hw] ?? 40, maxspeedTagged: speedTag(t.maxspeed) != null,
     // lane arrows, left to right in the direction of travel ("left;through|through|right")
@@ -49,6 +50,13 @@ function roadAttrs(t) {
     bridge: t.bridge && t.bridge !== 'no' ? 1 : 0,
     tunnel: t.tunnel && t.tunnel !== 'no' ? 1 : 0,
     name: t.name ?? null, nameEn: t['name:en'] ?? null, ref: t.ref ?? null,
+    // Roads under a building. A passage through one (tunnel=building_passage, 25 ways in San Juan) is at street
+    // level: it stays a tunnel here (the simulation's network and the client read `tunnel`), and `passage` lets the
+    // compiler pave it and open the building over it (roadclear.mjs). `covered` (covered=*, 363 ways) is kept for
+    // what could roof such a slot one day; nothing reads it yet. Written only where set: roads.json is as it was
+    // for every other road.
+    ...(t.tunnel === 'building_passage' ? { passage: 1 } : {}),
+    ...(t.covered && t.covered !== 'no' ? { covered: 1 } : {}),
   };
 }
 

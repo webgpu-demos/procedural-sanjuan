@@ -6,21 +6,26 @@ import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import GUI from 'lil-gui';
 import { makeProjection } from './shared/geo.js';
+import { NO_ADS } from './shared/places.js';
 import { createMaterials, shared } from './world/materials.js';
 import { loadTextures } from './world/textures.js';
-import { Streamer } from './world/streamer.js';
+import { Streamer, frozen } from './world/streamer.js';
+import { chunked } from './world/chunks.js';
 import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
-import { buildFlyovers, overDecks, landDecks } from './world/flyovers.js';
+import { buildFlyovers, overDecks, landDecks, deckPads } from './world/flyovers.js';
+import { DrawnDecks, mergeDecks } from './world/roadlevel.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
-import { laneDepth, mergeApproaches } from './shared/roadway.js';
+import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
-import { Driver, placeOnRoad } from './world/drive.js';
+import { Driver, placeOnRoad, Overhead } from './world/drive.js';
+import { carriageSegs } from './shared/carriage.js';
 import { Walker, Cyclist, Flyer } from './world/player.js';
+import { People } from './world/people.js';
 import { Hud } from './hud.js';
 import { SimSignals } from './world/simsignals.js';
 import { Experience } from './experience.js';
@@ -32,13 +37,14 @@ import { buildSurroundings } from './world/far.js';
 import { buildShore } from './world/water.js';
 import { buildNightRoads } from './world/nightroads.js';
 import { renderSources } from './sources.js';
-import { Environment } from './world/environment.js';
+import { Environment, installShadowFade } from './world/environment.js';
 import { Atmosphere } from './world/atmosphere.js';
 import { createBirds, MAX_BIRDS } from './world/birds.js';
 import { LampLight, installLampLight } from './world/lamplight.js';
 import { parseLatLon, parseSeaLevel, parseGers, garitaLink } from './shared/twin.js';
 
 installLampLight(); // (before any material is compiled)
+installShadowFade();
 
 const params = new URLSearchParams(location.search);
 // (Old San Juan was an area of its own, around the same origin: its links, views included, open in the municipality)
@@ -65,7 +71,9 @@ const USAGE = {
 };
 
 // ---------------------------------------------------------------- renderer, scene, camera
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+// (no multisampled canvas: the scene is drawn into the composer's buffers, and the canvas takes one triangle with the
+// finished picture on it. The edges are smoothed in the last pass: atmosphere.js.)
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // (the frame-rate governor sets it from here on)
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -79,6 +87,10 @@ renderer.shadowMap.autoUpdate = false; // (redrawn when needed: see the frame lo
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
+// (the scene itself never moves: left to update its own matrix, it marked itself changed on every render, four a frame,
+// and three then worked out the world matrix of every object in it again, the frozen tiles' thousands too: streamer.js
+// frozen. Now only what moves, or is new, is worked out.)
+scene.matrixAutoUpdate = false;
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight || 1, 1, 60000); // (a page opened without a size: fitView below)
 const controls = new MapControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -113,14 +125,50 @@ const clockTime = {
   tick(dt) { if (!this.live && this.rate) this.hour = (this.hour + (dt * this.rate) / 3600 + 24) % 24; },
 };
 
-const materials = createMaterials(await loadTextures(renderer));
+// (the textures and the area's manifest and terrain fetched together: one after the other, each waited on the other)
+const textures = loadTextures(renderer);
 const props = new Props();
 const signs = new Signs();
-const streamer = new Streamer(scene, materials, props, signs, { base: `tiles/${AREA}`, radius: Number(params.get('radius')) || 1e5 });
+const streamer = new Streamer(scene, null, props, signs, { base: `tiles/${AREA}`, radius: Number(params.get('radius')) || 1e5 });
 let baseRadius = 1e5; // (the area's streaming radius, before the governor's reach)
+// The sun's shadow map drawn with the trees' lighter shapes (props.js shadowAs: a full tree as its lighter one, a
+// lighter one as its simple crown), swapped in for its redraw and back: three draws into it what the picture's camera
+// sees, as it is, and has no way to draw one thing for the shadow and another for the picture.
+{
+  const sm = renderer.shadowMap, render = sm.render.bind(sm), kept = [];
+  sm.render = (lights, scn, cam) => {
+    if (!sm.autoUpdate && !sm.needsUpdate) return render(lights, scn, cam);
+    for (const t of streamer.tiles.values()) {
+      for (const g of [t.trees?.near, t.trees?.mid]) {
+        if (!g?.visible) continue;
+        for (const m of g.children) {
+          const s = m.userData.shadowAs;
+          if (!s) continue;
+          kept.push(m, m.geometry, m.material, m.castShadow);
+          if (s[0]) { m.geometry = s[0]; if (s[1]) m.material = s[1]; } else m.castShadow = false;
+        }
+      }
+    }
+    try { render(lights, scn, cam); } finally {
+      for (let i = 0; i < kept.length; i += 4) { const m = kept[i]; m.geometry = kept[i + 1]; m.material = kept[i + 2]; m.castShadow = kept[i + 3]; }
+      kept.length = 0;
+    }
+  };
+}
 const VIEW_RADIUS = 1000; // metres: full tiles around the focus, when the whole city is not loaded at once
 loader.set(0.08, 'terrain');
-const manifest = await streamer.init();
+const [manifest, materials] = await Promise.all([streamer.init(), textures.then(createMaterials)]);
+streamer.materials = materials;
+// (and what start-up waits on later, asked for now: the simulated morning and its lights, speeds and ferries, and
+// the structures, each a file of its own that was fetched only when the step before it was done)
+const SIM_BASE = `tiles/${AREA}/sim/${params.get('scenario') || 'morning'}`, WANT_SIM = params.get('sim') !== '0';
+const early = {
+  structures: manifest.structures ? fetch(`tiles/${AREA}/${manifest.structures}`).then((r) => r.json()) : null,
+  signals: WANT_SIM ? fetch(`${SIM_BASE}/signals.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
+  speeds: WANT_SIM ? fetch(`${SIM_BASE}/speeds.bin`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null) : null,
+  ferries: WANT_SIM ? fetch(`tiles/${AREA}/sim/ferries.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
+};
+early.structures?.catch(() => {}); // (an error is reported where it is awaited)
 // A large area (the whole municipality) streams: full detail around the view, plain blocks out to 7 km, the
 // photo-draped ground beyond (far.js). It is never loaded whole.
 const LARGE = manifest.stream != null || manifest.tiles.length > 600;
@@ -133,7 +181,7 @@ if (LARGE) {
 loader.set(0.14, 'railways and roads');
 const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
 { // (no billboards or LED screens in the colonial city: Old San Juan, west of Puerta de Tierra)
-  const [x0, z1] = proj.project(-66.1245, 18.4600), [x1, z0] = proj.project(-66.1040, 18.4725);
+  const [x0, z1] = proj.project(NO_ADS.west, NO_ADS.south), [x1, z0] = proj.project(NO_ADS.east, NO_ADS.north);
   signs.noAds = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
 }
 // A raised sea (?sea=, Garita's sea-level scenario): the sea's surface at that height, over everything lower. It is
@@ -151,7 +199,10 @@ const FLOOD = parseSeaLevel(params.get('sea'), manifest.sea ?? 0);
   scene.add(plain);
 }
 // the ground of the tiles not loaded, and of the island around the area (far.js)
-buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj).then((far) => far && scene.add(far));
+// (cut in pieces: whole, the island's mesh was drawn wherever the camera looked; chunks.js)
+buildSurroundings(`tiles/${AREA}`, `ortho/${AREA}/far`, manifest, proj).then((far) => far && scene.add(frozen(chunked(far, { max: 20000 }))));
+const DECK_CELL = 512; // metres: the squares the deck lamps are built in (below)
+let deckLightCells = []; // (their groups, culled with the tiles' small things: cullSmall)
 // how far the sea lies from the land, for its shallows and its surf (water.js)
 // (with the sea raised, its shore is where the ground meets the new level: the shallows and the surf follow it inland)
 buildShore(streamer.grid, FLOOD != null ? { ...manifest, sea: FLOOD } : manifest, `tiles/${AREA}`).catch((e) => console.warn('shore:', e.message));
@@ -174,29 +225,84 @@ const [roads, rails, lanes] = await Promise.all([
   fetch(`tiles/${AREA}/lanes.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
 ]);
 roads.lanes = lanes;
+// the acceleration lanes where ramps join the expressway (src/shared/roadway.js, on the roads as compiled: the
+// simulation's network has them in the same places, tools/sim/network.mjs): paved in the tiles, driven by the cars
+const accel = accelQuads(accelLanes(roads, lanes?.edges ?? null));
 // (the expressway's height without the humps the elevation model's overpass ridges put in it, and the bridges that
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
 landDecks(roads, (x, z) => streamer.ground(x, z)); // (decks flush with the streets they meet: world/flyovers.js)
+mergeDecks(roads, (x, z) => streamer.ground(x, z)); // (a ramp at the expressway's level where their decks overlap: world/roadlevel.js)
+streamer.pads(deckPads(roads, (x, z) => streamer.ground(x, z))); // (and the ground level with a deck where it lands on it)
+// the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
+const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
+streamer.carriage(carriageSegs(roads)); // (no median's paving across a road it meets: src/shared/carriage.js)
+streamer.accel(accel); drawnDecks.ground.accel = accelLookup(accel.pave); // (and the acceleration lanes paved, and stood on)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
+// (the city-wide meshes in a few pieces, so that what is out of view, the shadow map's above all, is not drawn:
+// world/chunks.js; the trains move)
+for (const c of [...railways.children]) if (c !== railways.userData.trains.group) chunked(c);
 scene.add(railways);
 {
-  const flyovers = await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint });
-  scene.add(flyovers);
+  const flyovers = chunked(await buildFlyovers(roads, (x, z) => streamer.ground(x, z), streamer.laneDepth, { road: materials.deck, paint: materials.deckPaint }, drawnDecks));
+  scene.add(frozen(flyovers));
   streamer.under = overDecks(flyovers.userData.footprints, PROP); // (nothing on the ground standing up through a deck)
+  // (the street lights on the decks: flyovers.js; the tiles light the roads up to them)
+  const lights = flyovers.userData.lights, rows = new Float32Array(lights.length * 6), level = new Map();
+  lights.forEach(([x, z, rot, y], k) => { rows.set([PROP.LIGHT, 0, rot, x, z, 1], k * 6); level.set(Math.fround(x) + ',' + Math.fround(z), y); });
+  if (lights.length) {
+    // (in squares of DECK_CELL, each its own instanced meshes: built as one, the city's deck lamps were drawn whole
+    // wherever the camera looked, three culling an instanced mesh by the bounds of all its instances. Their posts are
+    // culled like the tiles' street furniture, cullSmall; the lit heads are left, as the tiles' are, for the night.)
+    const cells = new Map();
+    for (let k = 0; k < lights.length; k++) {
+      const key = Math.floor(rows[k * 6 + 3] / DECK_CELL) + ',' + Math.floor(rows[k * 6 + 4] / DECK_CELL);
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key).push(k);
+    }
+    const deckLights = new THREE.Group();
+    deckLights.name = 'deck lights';
+    for (const [key, ks] of cells) {
+      const cellRows = new Float32Array(ks.length * 6);
+      ks.forEach((k, j) => cellRows.set(rows.subarray(k * 6, k * 6 + 6), j * 6));
+      const g = props.build(cellRows, [], (x, z) => level.get(x + ',' + z) ?? streamer.ground(x, z)).group;
+      g.name = 'deck lights';
+      const [cx, cz] = key.split(',').map(Number);
+      g.userData.centre = [(cx + 0.5) * DECK_CELL, (cz + 0.5) * DECK_CELL];
+      deckLights.add(g);
+    }
+    // (no shadows: the posts are thinner than the shadow map's texels, and they were 150 thousand triangles in every
+    // redraw of it)
+    deckLights.traverse((o) => { o.castShadow = false; });
+    scene.add(frozen(deckLights));
+    deckLightCells = deckLights.children;
+  }
 }
-if (manifest.structures) scene.add(await buildStructures(`tiles/${AREA}/${manifest.structures}`, (x, z) => streamer.ground(x, z), streamer.laneDepth));
+if (manifest.structures) scene.add(frozen(chunked(await buildStructures(early.structures, (x, z) => streamer.ground(x, z), streamer.laneDepth))));
 if (LARGE) setTimeout(() => buildNightRoads(roads, manifest.extent ?? manifest.bounds), 0); // (the streets' lights from afar, on the distant ground; off the loading's way)
-const traffic = new Traffic(roads, streamer.surface);
+const traffic = new Traffic(roads, streamer.surface, drawnDecks);
+traffic.eye = camera.position; // (the level of detail of its cars)
+// (and what is in the picture, within 700 m: a car starting again does so somewhere else: traffic.js spawnCar)
+const viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4(), seen = new THREE.Sphere(new THREE.Vector3(), 4);
+traffic.sees = (x, y, z) => seen.center.set(x, y, z).distanceToSquared(camera.position) < 700 * 700 && viewFrustum.intersectsSphere(seen);
+let people = null, peopleOn = true, peopleCars = [], peopleCarsAt = 0; // (people on foot: loadPeople below)
 if (params.get('cars') != null) traffic.count = Math.min(MAX_CARS, Number(params.get('cars')) || 0);
 if (params.get('traffic') !== '0') scene.add(traffic.group);
 // The simulated morning (tools/sim): every car a trip SUMO drove. Without a time in the link it opens on it,
 // running in real time from before dawn.
-let sim = params.get('sim') === '0' ? null : await SimTraffic.load(`tiles/${AREA}/sim/${params.get('scenario') || 'morning'}`, streamer.surface, roads, (x, z) => streamer.ground(x, z));
+let sim = WANT_SIM ? await SimTraffic.load(SIM_BASE, streamer.surface, roads, (x, z) => streamer.ground(x, z), drawnDecks) : null;
+// A run made on other roads than these tiles' drives its cars off the painted lanes (tools/deploy.sh refuses to
+// publish one): in development, said in the console. (The run's index has the sha1 of the roads.json it was made on.)
+if (import.meta.env.DEV && sim?.index.roads) {
+  fetch(`tiles/${AREA}/${manifest.roads}`).then((r) => r.arrayBuffer()).then((b) => crypto.subtle.digest('SHA-1', b)).then((d) => {
+    const hex = [...new Uint8Array(d)].map((v) => v.toString(16).padStart(2, '0')).join('');
+    if (hex !== sim.index.roads) console.warn(`the simulated run was made on other roads (${sim.index.roads.slice(0, 8)}) than these tiles' (${hex.slice(0, 8)}): run tools/sim again on this roads.json`);
+  }).catch(() => {});
+}
 // its signals: the heads at the junctions show what the simulation's lights showed (before any tile is built)
-const simSignals = sim && await fetch(`${sim.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).then((j) => j && new SimSignals(j, roads)).catch(() => null);
+const simSignals = sim && await early.signals.then((j) => j && new SimSignals(j, roads)).catch(() => null);
 if (simSignals) { props.signalSlot = (x, z, rot) => simSignals.slot(x, z, rot); props.mats.lens.uniforms.uSig.value = simSignals.texture; }
 if (sim) {
   scene.add(sim.group);
@@ -205,19 +311,19 @@ if (sim) {
 }
 const simOn = () => sim && clockTime.hour * 3600 >= sim.begin && clockTime.hour * 3600 < sim.end;
 // the jam map: the main roads coloured by the simulation's speeds
-const speedMap = sim && await fetch(`${sim.base}/speeds.bin`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => b && new SpeedMap(sim.index, b, roads, (x, z) => streamer.ground(x, z))).catch(() => null);
+const speedMap = sim && await early.speeds.then((b) => b && new SpeedMap(sim.index, b, roads, (x, z) => streamer.ground(x, z))).catch(() => null);
 if (speedMap) scene.add(speedMap.mesh);
 // the lancha across the bay, on its timetable
-const ferries = sim && await Ferries.load(`tiles/${AREA}/sim/ferries.json`);
+const ferries = sim && await Ferries.load(early.ferries);
 if (ferries) scene.add(ferries.group);
 // Another run of the morning (the apagón): its cars and its signals in place of the current ones.
 async function setScenario(name) {
-  const next = await SimTraffic.load(`tiles/${AREA}/sim/${name}`, streamer.surface, roads, (x, z) => streamer.ground(x, z));
+  const next = await SimTraffic.load(`tiles/${AREA}/sim/${name}`, streamer.surface, roads, (x, z) => streamer.ground(x, z), drawnDecks);
   if (!next) return false;
   const lights = await fetch(`${next.base}/signals.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   if (sim) { scene.remove(sim.group); next.followed = sim.followed; sim.dispose(); }
   next.headlights = sim?.headlights ?? next.headlights;
-  sim = next; scene.add(sim.group);
+  sim = next; scene.add(sim.group); sim.covers = overhead;
   if (lights && simSignals) simSignals.setTimeline(lights.timeline);
   const speeds = await fetch(`${sim.base}/speeds.bin`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
   if (speeds && speedMap) speedMap.setSpeeds(sim.index, speeds);
@@ -251,9 +357,9 @@ controls.update();
 // shadows' sharpness; when there is room again (57 or more for a while) they come back the same way, and a step
 // back up that does not hold is tried again only after longer. ?quality=high keeps everything, low starts lean.
 const governor = (() => {
-  const top = Math.min(devicePixelRatio, 1.5), lean = { ao: false, reflect: false, dof: false }; // (2x costs a quarter more for little)
-  // (detail: how far off the small things are drawn, as a share of the full distance; reach: how far out the city
-  // is streamed in full, as a share of the area's radius: a machine that keeps up sees more of it)
+  const top = Math.min(devicePixelRatio, 1.5), lean = { ao: false, reflect: false, dof: false, aa: false }; // (2x costs a quarter more for little)
+  // (detail: how far off the small things are drawn, and the full trees, as a share of the full distance; reach: how
+  // far out the city is streamed in full, as a share of the area's radius: a machine that keeps up sees more of it)
   const LEVELS = [
     { ratio: top, reach: 1.4 },
     { ratio: top, clouds: 'low', reach: 1.4 },
@@ -263,17 +369,21 @@ const governor = (() => {
     { ratio: 1, clouds: 'off', ...lean, detail: 0.6 },
     { ratio: 1, clouds: 'off', ...lean, shadow: 2048, detail: 0.5 },
     { ratio: 0.8, clouds: 'off', ...lean, shadow: 1024, detail: 0.4 },
+    // (and for a GPU that is slower still, or slowed: on an M3 hot or busy the view over PR-22 held at 30 a second at
+    // the step above with its main thread at a third of the frame, and only fewer pixels and triangles helped)
+    { ratio: 0.65, clouds: 'off', ...lean, shadow: 1024, detail: 0.33 },
+    { ratio: 0.5, clouds: 'off', ...lean, shadow: 1024, detail: 0.25 },
   ];
   const q = params.get('quality');
   // (it starts a little lean and earns the rest: a slow first minute is worse than a plain one)
-  const g = { auto: q !== 'high', level: q === 'low' ? 5 : q === 'high' ? 0 : 2, times: [], settle: 2, slow: 0, fast: 0, upWait: 5, raisedAt: -1e9 };
+  const g = { auto: q !== 'high', level: q === 'low' ? 5 : q === 'high' ? 0 : 2, times: [], settle: 2, slow: 0, fast: 0, upWait: 5, raisedAt: -1e9, ao: true, aoWanted: true };
   g.apply = () => {
     const L = LEVELS[g.level];
-    g.detail = L.detail ?? 1;
+    g.detail = L.detail ?? 1; streamer.detail = g.detail;
     if (!params.get('radius')) streamer.radius = baseRadius * (L.reach ?? 1);
     if (renderer.getPixelRatio() !== L.ratio) { renderer.setPixelRatio(L.ratio); renderer.setSize(innerWidth, innerHeight); atmosphere.setSize(innerWidth, innerHeight); }
-    atmosphere.limit({ clouds: L.clouds ?? 'ultra', reflect: L.reflect !== false, dof: L.dof !== false });
-    ao.enabled = L.ao !== false;
+    atmosphere.limit({ clouds: L.clouds ?? 'ultra', reflect: L.reflect !== false, dof: L.dof !== false, aa: L.aa !== false });
+    g.ao = L.ao !== false; ao.enabled = g.ao && g.aoWanted;
     const size = L.shadow ?? 4096;
     if (env.sun.shadow.mapSize.x !== size) { env.sun.shadow.mapSize.set(size, size); env.sun.shadow.map?.dispose(); env.sun.shadow.map = null; }
   };
@@ -281,19 +391,30 @@ const governor = (() => {
   // opening is playing: a change of resolution mid-shot shows; it waits for the next cut to black)
   g.update = (dt, busy, hold = false) => {
     if (!g.auto || document.hidden || !(dt > 0)) return;
+    // (a step up streams the city further out: the frames in which those tiles come in are not the new step's own,
+    // and judged by them it was taken straight back; waited out, for 20 s at the most)
+    if (g.tiles > 0) { g.tiles = streamer.pending ? g.tiles - dt : 0; g.times.length = 0; g.settle = 1; return; }
     g.times.push(dt); if (g.times.length > 45) g.times.shift();
     if ((g.settle -= dt) > 0 || busy || g.times.length < 45) return;
-    const typical = [...g.times].sort((a, b) => a - b)[22]; // (the median: a tile arriving is one slow frame, not a slow scene)
-    g.slow = typical > 1 / 45 ? g.slow + dt : 0;
-    g.fast = typical < 1 / 57 ? g.fast + dt : 0;
+    // (judged by its slow frames, not the median: on a 60 Hz screen a frame a little over 16.7 ms waits for the
+    // next refresh and shows for 33, and a median of 18 ms was half the frames at 30 a second, a stutter the median
+    // passed as smooth. Slow: one frame in ten past 22 ms (a tile arriving is one, not four). Room to spare: nineteen
+    // in twenty within 17.5 ms.)
+    const sorted = [...g.times].sort((a, b) => a - b), typical = sorted[22], p90 = sorted[40], p95 = sorted[42];
+    g.slow = p90 > 1 / 45 ? g.slow + dt : 0;
+    g.fast = p95 < 1 / 57 ? g.fast + dt : 0;
     const now = performance.now() / 1000;
     if (hold) return;
+    // (the wait before the next try at a step up comes back down, halved for every half minute without a slow spell:
+    // one failed try, in a heavy view long ago, left every later one two minutes apart for the rest of the visit)
+    g.calm = g.slow === 0 ? (g.calm ?? 0) + dt : 0;
+    if (g.upWait > 5 && g.calm > 30) { g.upWait = Math.max(5, g.upWait / 2); g.calm = 0; }
     if (g.slow > 1 && g.level < LEVELS.length - 1) {
       if (now - g.raisedAt < 6) g.upWait = Math.min(120, g.upWait * 2); // (the step up did not hold)
       g.level = Math.min(LEVELS.length - 1, g.level + (typical > 1 / 25 ? 2 : 1)); // (far too slow: two steps at once)
       g.apply(); g.settle = 1.5; g.slow = g.fast = 0; g.times.length = 0;
     } else if (g.fast > g.upWait && g.level > 0) {
-      g.level--; g.apply(); g.settle = 2; g.slow = g.fast = 0; g.times.length = 0; g.raisedAt = now;
+      g.level--; g.apply(); g.settle = 2; g.slow = g.fast = 0; g.times.length = 0; g.raisedAt = now; g.tiles = 20;
     }
   };
   g.apply();
@@ -305,16 +426,18 @@ let guiState, clockText, guiPanel;
 {
   // the compiled areas (tools/pipeline/compile.mjs keeps the list); another city is another page load
   const areas = await fetch('tiles/areas.json').then((r) => (r.ok ? r.json() : null)).catch(() => null) ?? [{ id: AREA, name: manifest.name }];
-  const trains = railways.userData.trains.group, AO = ao.configuration.intensity;
+  const trains = railways.userData.trains.group;
   const state = {
     city: AREA,
     get info() { return document.getElementById('hud').style.display !== 'none'; }, set info(v) { document.getElementById('hud').style.display = v ? '' : 'none'; },
 
     get traffic() { return !!traffic.group.parent; }, set traffic(v) { if (v) scene.add(traffic.group); else scene.remove(traffic.group); },
+    get people() { return peopleOn; }, set people(v) { peopleOn = v; if (people) people.enabled = v; },
     get trains() { return trains.visible; }, set trains(v) { trains.visible = v; },
     get photo() { return orthoWanted; }, set photo(v) { orthoWanted = v; shared.uOrthoOn.value = v && orthoLoaded ? 1 : 0; },
     shadowsWanted: true, get shadows() { return this.shadowsWanted; }, set shadows(v) { this.shadowsWanted = v; },
-    get occlusion() { return ao.configuration.intensity > 0; }, set occlusion(v) { ao.configuration.intensity = v ? AO : 0; },
+    // (the pass itself off: at no strength it still ran, at its full cost)
+    get occlusion() { return governor.aoWanted; }, set occlusion(v) { governor.aoWanted = v; ao.enabled = v && governor.ao; },
     bloom: true,
     // the whole city at once, or only what lies within the view radius of the point looked at (fewer tiles: more frames)
     wholeCity: !params.get('radius') && !LARGE, near: Number(params.get('radius')) || (LARGE ? streamer.radius : VIEW_RADIUS),
@@ -351,6 +474,7 @@ let guiState, clockText, guiPanel;
     f.add(sim, 'headlights', 0, 20, 0.5).name('car headlights');
   }
   gui.add(state, 'traffic');
+  gui.add(state, 'people').name('people on foot');
   gui.add(traffic, 'count', 0, MAX_CARS, 10).name('cars');
   gui.add(traffic, 'highway', 0, 20, 0.5).name('highway traffic');
   gui.add(traffic, 'headlights', 0, 20, 0.5).name('car headlights');
@@ -444,9 +568,12 @@ function shareView() {
 // ---------------------------------------------------------------- input
 const keys = new Set();
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']); // (Space: the handbrake, not a focused button)
+// Text or a number being typed into the panel (a clicked checkbox or button keeps the focus too, and the keys
+// still belong to the scene)
+const typing = () => { const el = document.activeElement; return el?.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number'); };
 addEventListener('keydown', (e) => {
-  const el = document.activeElement, typing = el?.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number');
-  if (typing) return; // a number being typed into the panel
+  const el = document.activeElement;
+  if (typing()) return;
   // A panel control that was clicked keeps the keyboard: the arrow keys would then step its slider or its
   // city list instead of moving the view. Movement keys always belong to the scene.
   if (MOVE_KEYS.has(e.code)) { e.preventDefault(); if (el && el !== document.body) el.blur(); }
@@ -503,7 +630,11 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     const vid = sim.pick(raycaster.ray, clockTime.hour * 3600, Math.max(4, camera.position.distanceTo(controls.target) * 0.012));
     if (vid != null) { ride(vid); return; }
   }
-  const hit = raycaster.intersectObjects(scene.children, true).find((h) => h.object.userData.facade);
+  // (the facades of the tiles, not the whole scene: every mesh of every tile, its roads and its trees at all three
+  // levels of detail, was tried triangle by triangle on each click)
+  const facades = [];
+  for (const t of streamer.tiles.values()) for (const o of t.group?.children ?? []) if (o.userData.facade) facades.push(o);
+  const hit = raycaster.intersectObjects(facades, false)[0];
   picked = hit ? streamer.buildingAt(hit) : null;
   if (picked) {
     // where the building stands, for Garita: the point hit, half a metre inside when it is on a wall (Garita finds the
@@ -575,9 +706,24 @@ function stopRiding() { setMode('explore'); if (!sim) return; sim.followed = nul
 // and out of it again, Esc back to exploring. Each way has its camera rigs (V cycles: chase, close, first person,
 // cinematic). Where you were, and how, is kept for the next visit.
 const tiles = () => scene.children.filter((o) => o.name.startsWith('tile '));
+// the roofs drawn over the streets: a simulated car under one, where the simulation's roads and the city's buildings
+// do not agree, fades out (simtraffic.js)
+const overhead = new Overhead(tiles, manifest.tileSize);
+if (sim) sim.covers = overhead;
 const lift = (x, z) => streamer.lift(x, z); // (how high the paving stands: what stands on it is not sunk in it)
-const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift });
-const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
+drawnDecks.lift = lift; // (the cars on it too)
+// People on foot (world/people.js): their walks and avatars load once the city around the view has (?people=0: none;
+// ?people=2: twice as many)
+const PEOPLE = params.get('people') == null ? 1 : Number(params.get('people'));
+function loadPeople() {
+  if (!(PEOPLE > 0)) return;
+  People.load({ base: `tiles/${AREA}`, surface: streamer.surface, lift, renderer })
+    .then((p) => { if (!p) return; people = p; p.density = PEOPLE; p.enabled = peopleOn; scene.add(p.group); })
+    .catch((e) => console.warn('the people stay at home:', e));
+}
+const wet = (x, z) => streamer.wet(x, z); // (the water's edge, and the city's: no driving out to sea)
+const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet });
+const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet, seats: (x, z) => people?.seatNear(x, z) ?? null }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
 // What you run into (collide.js): the street's things come with the tiles; the vehicles round you are gathered
 // each frame (the simulated cars near you, the traffic, the car you left). And what you are, to them: the
@@ -654,6 +800,7 @@ function setMode(next, at = null) {
   }
   leave();
   mode = next;
+  keys.clear(); // (a key held into the change, or a touch button rebuilt under the finger, never sees its keyup)
   players[next].start(place.x, place.z, place.heading, next === 'fly' ? (from.y ?? streamer.ground(from.x, from.z)) + 70 : place.y);
   Object.assign(chase, { on: true, fresh: true, heading: place.heading });
   applyRig();
@@ -676,11 +823,20 @@ function savePlace() {
     localStorage.setItem(`procedural-sanjuan:place:${AREA}`, JSON.stringify(p));
   } catch { /* storage unavailable */ }
 }
-function savedPlace() { try { return JSON.parse(localStorage.getItem(`procedural-sanjuan:place:${AREA}`)); } catch { return null; } }
+// (checked: storage from an older build, or edited, gave a mode with no player, or a place at NaN, and the page then
+// opened black on every visit)
+function savedPlace() {
+  try {
+    const p = JSON.parse(localStorage.getItem(`procedural-sanjuan:place:${AREA}`)), b = manifest.bounds;
+    if (!p || !(p.mode === 'explore' || p.mode in players) || !Number.isFinite(p.x) || !Number.isFinite(p.z)) return null;
+    if (p.x < b.minX || p.x > b.maxX || p.z < b.minZ || p.z > b.maxZ) return null;
+    return { mode: p.mode, x: p.x, z: p.z, heading: Number.isFinite(p.heading) ? p.heading : 0 };
+  } catch { return null; }
+}
 addEventListener('pagehide', savePlace);
 let nextSave = 0;
 addEventListener('keydown', (e) => {
-  if (e.repeat || document.activeElement?.tagName === 'INPUT' || xp?.directing || hud?.mapOpen) return;
+  if (e.repeat || typing() || xp?.directing || xp?.titleUp || hud?.mapOpen) return;
   // E: into a car (from exploring or on foot), out of it on foot beside it; Esc: back to exploring
   if (e.code === 'KeyE' && mode !== 'fly') {
     if (mode === 'car') { // out of the driver's door (on the left; the right if a wall is there)
@@ -804,7 +960,7 @@ const xp = sim && params.get('xp') !== '0' && !(llView && params.get('xp') == nu
 const hud = new Hud({
   roads, proj, name: manifest.name, simulated: !!sim, bounds: manifest.bounds,
   get mode() { return mode; },
-  setMode: (m) => { if (!xp?.directing) setMode(m); },
+  setMode: (m) => { if (!xp?.directing && !xp?.titleUp) setMode(m); },
   cycleCamera, cameraName: () => (active() ? CAMERAS[cameraIndex][1] : chase.on ? 'Siguiendo un carro' : 'Mapa'),
   view: () => active()?.view ?? null,
   focus: () => ({ x: controls.target.x, z: controls.target.z }),
@@ -825,22 +981,27 @@ const hud = new Hud({
   const setDebug = (show) => { guiPanel?.show(show); document.getElementById('hud').style.display = show ? '' : 'none'; };
   setDebug(params.get('debug') === '1');
   addEventListener('keydown', (e) => {
-    if (e.code !== 'KeyG' || document.activeElement?.tagName === 'INPUT') return;
+    if (e.code !== 'KeyG' || typing()) return;
     setDebug(!!guiPanel?._hidden);
   });
 }
 
 // ---------------------------------------------------------------- loop
 const readout = document.getElementById('hud'); // (the technical readout: G)
-const clock = new THREE.Clock();
+const timer = new THREE.Timer(); timer.connect(document); // (a hidden tab's time does not count: no jump on return)
 let frames = 0, fpsTime = 0, fps = 0;
 
-let loading = true, shadowKey = '', shadowFrame = 0, detailFrame = 0;
+let loading = true, shadowAt = null, shadowFrame = 0, detailFrame = 0, trainClock = null;
 const streamFocus = new THREE.Vector3(), STREAM_AHEAD = 450;
-// how far small things are drawn (m), times the governor's detail: parked cars, street furniture and lamps
-const FAR_PARKED = 1300, FAR_SMALL = 1000;
+// how far small things are drawn (m), times the governor's detail: parked cars, street furniture and lamps; and
+// where a parked car's stand-in gives way to its box (props.js parkedBox)
+const FAR_PARKED = 1300, FAR_SMALL = 1000, NEAR_PARKED = 350;
+// (and the lane lines: 15 cm wide, a quarter of a pixel at 650 m, where they only shimmer; each tile's are a few
+// thousand triangles, and a Mac's GPU pays for triangles more than for pixels)
+const FAR_PAINT = 650;
 // Small things are not drawn far off: parked cars beyond 1.3 km and street furniture beyond 1 km are a pixel or
-// two each, yet most of the draw calls of a wide view (the governor brings them nearer on a slow machine)
+// two each, yet most of the draw calls of a wide view (the governor brings them nearer on a slow machine). Each is
+// drawn from a tile's distance `from` (m) to `to`.
 function cullSmall() {
   const size = manifest.tileSize, c = camera.position, up = Math.max(0, c.y - streamer.ground(c.x, c.z));
   for (const tile of scene.children) {
@@ -848,20 +1009,65 @@ function cullSmall() {
     if (!tile.userData.small) {
       tile.userData.small = [];
       tile.traverse((o) => {
+        if (o.material === materials.paint) tile.userData.small.push([o, 0, FAR_PAINT]);
+        if (o.userData.roofs) tile.userData.small.push([o, 0, FAR_SMALL]); // (tanks and the like on the roofs: streamer.js)
         if (!o.isInstancedMesh) return;
         const key = String((Array.isArray(o.material) ? o.material[0] : o.material).customProgramCacheKey?.() ?? '');
-        if (key.startsWith('car-parked')) tile.userData.small.push([o, FAR_PARKED]);
-        else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, FAR_SMALL]);
+        if (o.userData.parked) tile.userData.small.push(o.userData.parked === 'near' ? [o, 0, NEAR_PARKED] : [o, NEAR_PARKED, FAR_PARKED]);
+        // (a far tree's crown: its simple one out to FAR_SMALL, the one of a few triangles past it, props.js)
+        else if (o.userData.crown) tile.userData.small.push(o.userData.crown === 'distant' ? [o, FAR_SMALL, Infinity] : [o, 0, FAR_SMALL]);
+        else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, 0, FAR_SMALL]);
       });
       const [x, z] = tile.name.slice(5).split('_').map(Number);
       tile.userData.centre = [(x + 0.5) * size, (z + 0.5) * size];
     }
     const [x, z] = tile.userData.centre, d = Math.max(0, Math.hypot(x - c.x, z - c.z, up) - size * 0.7);
-    for (const [o, far] of tile.userData.small) o.visible = d < far * governor.detail;
+    const k = d / governor.detail;
+    for (const [o, from, to] of tile.userData.small) o.visible = k >= from && k < to;
+  }
+  for (const g of deckLightCells) {
+    if (!g.userData.small) {
+      g.userData.small = [];
+      g.traverse((o) => {
+        if (!o.isInstancedMesh) return;
+        const key = String((Array.isArray(o.material) ? o.material[0] : o.material).customProgramCacheKey?.() ?? '');
+        if (!/lamp-head|lamp-quad/.test(key)) g.userData.small.push(o);
+      });
+    }
+    const [x, z] = g.userData.centre, d = Math.max(0, Math.hypot(x - c.x, z - c.z, up) - DECK_CELL * 0.7);
+    for (const o of g.userData.small) o.visible = d / governor.detail < FAR_SMALL;
   }
 }
+// ?perf: a graph of the last four seconds of frames (the time from one to the next, with the 60 and 30 fps lines) and
+// what the main thread spent on each part of one (smoothed), for when the picture stutters
+const perf = params.has('perf') ? (() => {
+  const W = 240, H = 64, box = document.createElement('div'), cv = document.createElement('canvas'), txt = document.createElement('pre');
+  Object.assign(box.style, { position: 'fixed', left: '8px', top: '8px', zIndex: 100000, background: 'rgba(0,0,0,0.65)', color: '#fff', font: '11px/1.35 ui-monospace,monospace', padding: '6px 8px', borderRadius: '6px', pointerEvents: 'none' });
+  cv.width = W; cv.height = H; txt.style.margin = '4px 0 0'; box.append(cv, txt); document.body.append(box);
+  const g = cv.getContext('2d'), gaps = new Float32Array(W), parts = {};
+  let n = 0, t = 0, last = 0, shadowDraw = 0, plainDraw = 0;
+  return {
+    start() { const now = performance.now(); if (last) gaps[n++ % W] = now - last; last = t = now; },
+    lap(name) { const now = performance.now(); parts[name] = (parts[name] ?? now - t) * 0.95 + (now - t) * 0.05; t = now; },
+    draw(shadow) {
+      const now = performance.now(), d = now - t; t = now;
+      if (shadow) shadowDraw = shadowDraw * 0.9 + d * 0.1; else plainDraw = plainDraw * 0.95 + d * 0.05;
+      if (n % 6) return;
+      g.clearRect(0, 0, W, H);
+      const y = (ms) => H - Math.min(H, (ms / 50) * H);
+      g.strokeStyle = 'rgba(255,255,255,0.35)'; for (const ms of [16.7, 33.3]) { g.beginPath(); g.moveTo(0, y(ms)); g.lineTo(W, y(ms)); g.stroke(); }
+      for (let i = 0; i < W; i++) { const v = gaps[(n + i) % W]; g.fillStyle = v > 34 ? '#f55' : v > 17.5 ? '#fc4' : '#5d5'; g.fillRect(i, y(v), 1, H - y(v)); }
+      const s = [...gaps].filter((v) => v > 0).sort((a, b) => a - b), q = (f) => (s[Math.floor(s.length * f)] ?? 0).toFixed(1);
+      txt.textContent = `frame ${q(0.5)} ms · 95% ${q(0.95)} · worst ${(s.at(-1) ?? 0).toFixed(0)}\n` +
+        Object.entries(parts).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ') + `\ndraw ${plainDraw.toFixed(1)} · with shadows ${shadowDraw.toFixed(1)} · level ${governor.level}`;
+    },
+  };
+})() : null;
+
 function frame(_, manual) {
-  const dt = manual ?? Math.min(clock.getDelta(), 0.1); // (manual: a step driven from outside, for testing with the page hidden)
+  if (manual == null) timer.update(_);
+  const dt = manual ?? Math.min(timer.getDelta(), 0.1); // (manual: a step driven from outside, for testing with the page hidden)
+  perf?.start();
   renderer.info.reset();
   clockTime.tick(sim && simOn() && !sim.ready(clockTime.hour * 3600) ? 0 : dt); // (the clock waits for the cars' next window)
   const directed = xp?.directing;
@@ -871,6 +1077,15 @@ function frame(_, manual) {
   if (!chase.on && !directed) controls.target.y = streamer.ground(controls.target.x, controls.target.z);
   const floor = streamer.ground(camera.position.x, camera.position.z) + 2;
   if (camera.position.y < floor) camera.position.y = floor;
+  // The near plane: 1 m near the ground; further off the higher the camera is over the city (from 150 m up, clear of
+  // its tallest roofs: a fifth of the height above that, to 100 m), where the depth buffer's steps are what tell a
+  // path from the lawn it lies 1.5 cm over (with the plane at 1 m they are 6 cm at a kilometre and 1.6 m at five, and
+  // the paths in the parks, the pitches and the paint shimmered in every view from the air); and 0.15 m in first
+  // person, where a wall or a passer-by a metre off was cut open.
+  {
+    const up = camera.position.y - floor, near = mode !== 'explore' && cameraId() === 'pov' ? 0.15 : THREE.MathUtils.clamp((up - 150) * 0.2, 1, 100);
+    if (Math.abs(near - camera.near) > camera.near * 0.08) { camera.near = near; camera.updateProjectionMatrix(); atmosphere.cameraChanged(); }
+  }
 
   // (streamed round a point ahead of what is looked at, the further the higher the camera: a wide view from
   // above is a long way across, and what is in front of the eye matters more than what is behind it)
@@ -882,23 +1097,44 @@ function frame(_, manual) {
   }
   streamer.update(streamFocus, camera.position);
   if (++detailFrame % 15 === 0) cullSmall();
+  perf?.lap('tiles');
   // the loading screen stays until the tiles around the view are in
   if (loading) {
     const size = manifest.tileSize, wanted = manifest.tiles.filter((t) => Math.hypot((t.x + 0.5) * size - controls.target.x, (t.z + 0.5) * size - controls.target.z) <= Math.min(streamer.radius, 900)).length || 1;
     const got = Math.min(1, streamer.stats.loaded / wanted);
     loader.set(0.2 + 0.8 * got, `city tiles ${streamer.stats.loaded} / ${manifest.tiles.length}`);
-    if (got >= 1) { loading = false; loader.hide(); xp?.showTitle(Number(sim?.index.stats?.vehicles?.inserted) || sim?.index.tripinfo?.count); }
+    if (got >= 1) { loading = false; loader.hide(); loadPeople(); xp?.showTitle(Number(sim?.index.stats?.vehicles?.inserted) || sim?.index.tripinfo?.count); }
   }
   props.update(dt);
   props.mats.wire.uniforms.uPx.value = renderer.domElement.height * 0.5 * camera.projectionMatrix.elements[5];
   signs.update();
-  railways.userData.trains.update(dt, env.night);
   // the simulated morning while it lasts; the cars around the camera otherwise
   const simulating = simOn();
+  // (the trains on the clock the cars keep: the simulation's while it runs, paused with it and as fast; else real time)
+  {
+    const T = clockTime.hour * 3600, step = trainClock == null ? 0 : T - trainClock;
+    trainClock = T;
+    railways.userData.trains.update(simulating ? Math.max(0, Math.min(step, 5)) : dt, env.night);
+  }
   traffic.group.visible = !simulating;
-  if (traffic.group.parent && !simulating) traffic.update(dt, controls.target);
+  if (traffic.group.parent && !simulating) {
+    viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    traffic.update(dt, controls.target);
+  }
   if (sim) { sim.rate = clockTime.rate; if (simulating) sim.update(clockTime.hour * 3600, camera, dt); else sim.hide(); }
   if (simSignals) { props.mats.lens.uniforms.uSigOn.value = simulating ? 1 : 0; if (simulating) simSignals.update(clockTime.hour * 3600); }
+  perf?.lap('cars');
+  // people on foot, round what is looked at (the cars round them: for crossing the street)
+  if (people) {
+    if (simulating) peopleCars = sim.cars ?? [];
+    else if ((peopleCarsAt -= dt) <= 0) {
+      peopleCarsAt = 0.25; peopleCars = [];
+      if (traffic.group.parent) for (const o of traffic.near(camera.position.x, camera.position.z, 420)) peopleCars.push(o.x, o.z, o.heading, o.speed);
+    }
+    people.update(dt, { camera, focus: directed || chase.on ? null : controls.target, hour: clockTime.hour, T: clockTime.hour * 3600, cars: peopleCars, signals: simulating ? simSignals : null, detail: governor.detail,
+      player: (mode === 'walk' || mode === 'bike') ? active()?.view : null });
+  }
+  perf?.lap('people');
   // the one being played: on foot, in the car, in the air (the simulated cars round it fade rather than pass through)
   const player = active();
   aroundYou(player, simulating);
@@ -918,25 +1154,41 @@ function frame(_, manual) {
   env.update(dt);
   env.follow(controls.target, camera);
   // Shadows: faded out once the sun is down (the moon's, at this strength, would not show) and then not drawn at
-  // all; by day the map is drawn again when its frustum moves, else every third frame (for the cars): it is a
-  // whole second pass over the city. (The light keeps casting: switching that recompiles every material.)
+  // all; by day the map is drawn every third frame (for the cars), and at once when it no longer covers the view
+  // well: its frustum grown or shrunk, or the focus gone a sixth of the way to its edge. It is a whole second pass
+  // over the city, and moving it at every step drew it every frame of a flight or a drive. (Between redraws the
+  // materials keep the matrix it was drawn with, which three updates only when it draws the map: the shadows stay
+  // where they fell, the map a frame or two behind the view.) (The light keeps casting: switching that recompiles
+  // every material.)
   env.sun.castShadow = guiState.shadowsWanted;
   env.sun.shadow.intensity = Math.min(1, env.daylight / 0.15);
   {
-    const p = env.sun.target.position, key = `${p.x},${p.z},${env.shadowExtent}`;
+    const p = env.sun.target.position, ext = env.shadowExtent, at = shadowAt;
+    const moved = !at || at.ext !== ext || Math.hypot(p.x - at.x, p.z - at.z) > ext / 6;
     // (and once at the start, by night too: until the map exists the materials' shadow samplers are given a
     // texture of the wrong kind, and their draws fail)
-    renderer.shadowMap.needsUpdate = !env.sun.shadow.map || (env.sun.shadow.intensity > 0 && (key !== shadowKey || ++shadowFrame % 3 === 0));
-    shadowKey = key;
+    // (every third frame only where a car's shadow is more than a texel or two, the map's ground up to 400 m across;
+    // wider, every sixth, and from the air, a texel over a metre, every twelfth: a whole second pass over the city on
+    // every third frame is also a frame in three half as long again as the others, which reads as a stutter and
+    // which the governor above takes for a slow machine)
+    const every = ext <= 400 ? 3 : ext <= 1000 ? 6 : 12;
+    renderer.shadowMap.needsUpdate = !env.sun.shadow.map || (env.sun.shadow.intensity > 0 && (moved || ++shadowFrame % every === 0));
+    if (renderer.shadowMap.needsUpdate) shadowAt = { x: p.x, z: p.z, ext };
   }
+  perf?.lap('rest');
   lampLight.update(scene, controls.target, camera.position, env.night);
+  perf?.lap('lamps');
   atmosphere.bloom.intensity = guiState.bloom ? env.bloom * 3 : 0;
+  const shadowed = renderer.shadowMap.needsUpdate && env.sun.castShadow;
   atmosphere.render(dt);
+  perf?.draw(shadowed);
   if (manual == null) governor.update(dt, loading, xp?.directing && !xp.fading);
   if (!loading) updateViewLink(performance.now());
 
   frames++; fpsTime += dt;
   if (fpsTime >= 0.5) { fps = frames / fpsTime; frames = 0; fpsTime = 0; }
+  if (manual == null) requestAnimationFrame(frame);
+  if (readout.style.display === 'none') return; // (the readout, G: written only while it shows)
   const s = streamer.stats, info = renderer.info.render;
   const [lon, lat] = proj.unproject(controls.target.x, controls.target.z);
   readout.textContent =
@@ -945,15 +1197,15 @@ function frame(_, manual) {
     `${fps.toFixed(0)} fps${governor.level ? ` (quality step ${governor.level})` : ''} · ${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)}M tris\n` +
     `tiles ${s.loaded}/${manifest.tiles.length}${streamer.pending ? ` (+${streamer.pending})` : ''} · ${s.buildings} buildings\n` +
     (sim && simOn() ? `simulated: ${sim.stats.active.toLocaleString()} cars on the road · ${sim.stats.near} near · ${clockTime.rate}×\n` : '') +
+    (people ? `people on foot: ${people.stats.people} (${people.stats.target} wanted) · ${people.stats.drawn} drawn\n` : '') +
     (picked ? `\n▸ ${USAGE[picked.usage] ?? 'usage ' + picked.usage}, ${picked.height.toFixed(1)} m` +
       `${picked.storeys ? `, ${picked.storeys} floors` : ''}, base ${picked.base.toFixed(1)} m` +
       `${picked.osm ? `\n  OSM ${picked.osm}` : ''}${picked.gers ? `${picked.osm ? ' · ' : '\n  '}GERS ${picked.gers.slice(0, 8)}…` : ''}\n` : '') +
-    `\ndrag pan · right-drag rotate · wheel zoom\nWASD move (shift fast) · N day/night · click building`;
-  if (manual == null) requestAnimationFrame(frame);
+    `\ndrag pan · right-drag rotate · wheel zoom\nWASD move (shift fast) · N sound · G this panel · click building`;
 }
 requestAnimationFrame(frame);
 
-window.__app = { scene, camera, controls, streamer, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
+window.__app = { THREE, scene, camera, controls, streamer, accel, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, get people() { return people; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
   proj, manifest,
   // synthetic drone images with labels (src/synth/synth.js; tools/synth/export.mjs), made on first use
   get synth() { return (synthApi ??= import('./synth/synth.js').then(({ Synth }) => new Synth(window.__app))); } };

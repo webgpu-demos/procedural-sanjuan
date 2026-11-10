@@ -1,0 +1,12 @@
+{
+  "about": "One table of the vehicles' sizes and the lanes' width, read by the simulation (tools/sim/demand.py, gtfs.py, run.py) and the client (src/world/traffic.js TYPES, src/shared/roadway.js corridorOf). length and width: the drawn bodies' (fleet.js), so that SUMO spaces its cars as they are drawn. The types in the order the runs number them.",
+  "lane": 3.0,
+  "types": {
+    "compact": { "length": 4.15, "width": 1.78 },
+    "sedan": { "length": 4.5, "width": 1.86 },
+    "suv": { "length": 4.7, "width": 1.94 },
+    "pickup": { "length": 5.7, "width": 2.05 },
+    "truck": { "length": 5.9, "width": 2.0 },
+    "bus": { "length": 12.3, "width": 2.6 }
+  }
+}

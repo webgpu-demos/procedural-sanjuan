@@ -5,6 +5,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { encodeTile, decodeTile, AREA, BFLAG, PROP } from '../../src/shared/tileformat.js';
 import { makeProjection } from '../../src/shared/geo.js';
+import { buildingMesh } from '../../src/world/meshing.js';
 import { ROOT, AREAS } from '../pipeline/config.mjs';
 
 let passed = 0;
@@ -32,6 +33,18 @@ test('encode -> decode round trip', () => {
   assert.deepEqual([...out.wires], [0, 0, 30, -2.5]);
 });
 
+test('a raised building (a skywalk) is meshed with no walls below its base and an underside', () => {
+  const ring = [[0, 0], [12, 0], [12, -3], [0, -3]];
+  const tile = { tx: 0, tz: 0, buildings: [{ usage: 0, storeys: 1, flags: BFLAG.RAISED, base: 15.5, height: 3, measuredHeight: -1, polygons: [[ring]] }], areas: [] };
+  const b = decodeTile(encodeTile(tile).slice().buffer).buildings[0];
+  assert.equal(b.flags & BFLAG.RAISED, BFLAG.RAISED);
+  const { position: pos, normal: nor } = buildingMesh([b], 0, 0);
+  let low = Infinity, down = 0;
+  for (let i = 0; i < pos.length; i += 3) { low = Math.min(low, pos[i + 1]); if (nor[i + 1] < -0.9) down++; }
+  assert.ok(low >= 15.5 - 1e-3, `lowest vertex ${low}`);
+  assert.ok(down >= 6, `${down} vertices facing down`);
+});
+
 test('local projection', () => {
   const proj = makeProjection(-66.11656, 18.4653); // Plaza de Armas, Old San Juan
   assert.deepEqual(proj.project(-66.11656, 18.4653), [0, -0]);
@@ -49,7 +62,10 @@ for (const id of Object.keys(AREAS)) {
     const areaEN = (r) => { let s = 0; for (let i = 0, n = r.length / 2; i < n; i++) { const j = (i + 1) % n; s += r[j * 2] * r[i * 2 + 1] - r[i * 2] * r[j * 2 + 1]; } return s / 2; };
     let nB = 0;
     for (const tl of m.tiles) {
-      const t = decodeTile(new Uint8Array(fs.readFileSync(path.join(dir, tl.file))).buffer);
+      const bytes = new Uint8Array(fs.readFileSync(path.join(dir, tl.file))), t = decodeTile(bytes.buffer);
+      // decoded and encoded again, the same bytes: what lets a tool change one thing in a compiled tile and leave
+      // the rest as it was (tools/pipeline/clearroads.mjs)
+      assert.ok(Buffer.compare(Buffer.from(encodeTile(t)), Buffer.from(bytes)) === 0, `${tl.file}: decode -> encode does not give it back`);
       assert.equal(t.buildings.length, tl.buildings);
       assert.equal(t.props.length, tl.props);
       for (const p of t.props) assert.ok(Number.isFinite(p.x) && Number.isFinite(p.z) && p.scale > 0);

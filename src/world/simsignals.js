@@ -10,8 +10,10 @@ const STATE = { G: 0, g: 0, y: 1, Y: 1, r: 2, R: 2, u: 2, s: 2, o: 3, O: 3, w: 3
 export class SimSignals {
   // signals: signals.json; roads: roads.json (the edges SUMO's "e<i>" / "r<i>" are made from)
   constructor(signals, roads) {
-    this.links = signals.links; this.timeline = signals.timeline;
+    this.links = signals.links; this.timeline = signals.timeline; this.roads = roads;
     this.heads = [];              // slot -> { tl, link } or null
+    this.slots = new Map();       // 'tl:link' -> its slot (a head is placed again each time its tile is built)
+    this.linksOf = new Map();     // SUMO edge id -> its links (with netconvert's added ramp pieces), looked up once
     this.data = new Uint8Array(SIZE * 32);
     this.texture = new THREE.DataTexture(this.data, SIZE, 32, THREE.RedFormat, THREE.UnsignedByteType);
     this.texture.needsUpdate = true;
@@ -45,14 +47,50 @@ export class SimSignals {
         if (d < bestD) { bestD = d; best = e; }
       }
     if (!best) return -1;
-    const edge = best.along ? `e${best.i}` : best.oneway === -1 ? `e${best.i}` : `r${best.i}`;
-    // (a ramp's last stretch is a piece netconvert added: "e<i>-AddedOffRampEdge")
-    const links = this.links[edge] ?? Object.entries(this.links).find(([k]) => k.startsWith(edge + '-'))?.[1];
+    const links = this.linksFor(best.along ? `e${best.i}` : best.oneway === -1 ? `e${best.i}` : `r${best.i}`);
     if (!links?.length) return -1;
     const [tl, link] = links.find((l) => l[2] === 's') ?? links[0];
     if (!this.timeline[tl]) return -1;
-    this.heads.push({ tl, link });
-    return this.heads.length - 1;
+    // (one slot per light: the heads of a tile built again, or two heads showing the same light, share it; the
+    // texture holds SIZE x 32)
+    const key = tl + ':' + link;
+    let s = this.slots.get(key);
+    if (s === undefined) {
+      if (this.heads.length >= this.data.length) return -1;
+      s = this.heads.length; this.heads.push({ tl, link }); this.slots.set(key, s);
+    }
+    return s;
+  }
+
+  // the links of a SUMO edge (a ramp's last stretch is a piece netconvert added: "e<i>-AddedOffRampEdge")
+  linksFor(id) {
+    let l = this.linksOf.get(id);
+    if (l === undefined) {
+      l = this.links[id] ?? Object.entries(this.links).find(([k]) => k.startsWith(id + '-'))?.[1] ?? null;
+      this.linksOf.set(id, l);
+    }
+    return l;
+  }
+
+  // The lights for the traffic arriving at road node `node` along roads.json edge `edge` at time T (for people
+  // waiting to cross it, src/world/people.js): 'g' going (green, yellow), 'r' stopped, 'o' dark (no power), or null
+  // where the simulation has no light for it (or no traffic arrives that way: a one-way leaving the junction)
+  approach(edge, node, T) {
+    const e = this.roads.edges[edge];
+    if (!e) return null;
+    const atB = e.b === node;
+    if (atB ? e.oneway === -1 : e.oneway === 1) return null;
+    const id = atB || e.oneway === -1 ? `e${edge}` : `r${edge}`;
+    const links = this.linksFor(id);
+    if (!links?.length) return null;
+    const [tl, link] = links.find((l) => l[2] === 's') ?? links[0], line = this.timeline[tl];
+    if (!line) return null;
+    const { states, changes } = line;
+    let k = this.cursor.get(tl) ?? 0;
+    while (k < changes.length - 1 && changes[k + 1][0] <= T) k++;
+    while (k > 0 && changes[k][0] > T) k--;
+    const st = STATE[states[changes[k][1]][link]] ?? 2;
+    return st === 3 ? 'o' : st === 2 ? 'r' : 'g';
   }
 
   // Another run of the same network (the apagón): the same heads and links, another history of the lights.

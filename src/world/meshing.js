@@ -4,7 +4,7 @@ import earcut from 'earcut';
 import { clearRoadway } from '../shared/roadway.js';
 import { AREA, SPORT, BARRIER, MATERIAL, BFLAG } from '../shared/tileformat.js';
 import { sampleGrid } from '../shared/terrain.js';
-import { KIND, CAT, WALL, GROUND } from './constants.js';
+import { KIND, CAT, WALL, GROUND, WET } from './constants.js';
 import { buildTower } from './tower.js';
 import { createDraper } from './drape.js';
 import { decalMesh } from './decals.js';
@@ -115,8 +115,10 @@ const ROAD_STYLE = {
   [AREA.SIDEWALK]: { lift: 0.2, color: lin([0.63, 0.61, 0.58]), layer: GROUND.PAVERS, kerb: true },
   [AREA.ISLAND]: { lift: 0.22, color: lin([0.36, 0.47, 0.27]), layer: GROUND.GRASS, kerb: true },
   [AREA.OTHER]: { lift: 0.05, color: lin([0.45, 0.45, 0.45]), layer: GROUND.CONCRETE },
-  [AREA.PARK]: { lift: 0.02, color: lin([0.4, 0.5, 0.28]), layer: GROUND.GRASS },
-  [AREA.WOOD]: { lift: 0.02, color: lin([0.3, 0.4, 0.23]), layer: GROUND.GRASS },
+  [AREA.PARK]: { lift: 0.015, color: lin([0.4, 0.5, 0.28]), layer: GROUND.GRASS },
+  // (a wood in a park over it, and a path or a pitch in a park a full centimetre or two over it: at the same
+  // height, or half a centimetre apart, they fought for the depth beyond a few hundred metres, a speckle)
+  [AREA.WOOD]: { lift: 0.025, color: lin([0.3, 0.4, 0.23]), layer: GROUND.GRASS },
   [AREA.PITCH]: { lift: 0.025, color: lin([0.63, 0.56, 0.43]), layer: GROUND.CONCRETE },
   [AREA.WATER]: { lift: 0.08, color: lin([0.12, 0.3, 0.32]), layer: GROUND.WATER },
   [AREA.MARK_WHITE]: { lift: 0.15, color: lin([0.9, 0.9, 0.87]), layer: GROUND.CONCRETE },
@@ -158,11 +160,18 @@ const DRAPE_EDGE = 6;
 // cut (src/world/channels.js): the ground cover is taken out from over the channels (not the streets: where one
 // crosses a channel, the channel stops at it).
 const CUT = new Set([AREA.PARK, AREA.WOOD, AREA.OTHER, AREA.PITCH, AREA.BEACH, AREA.PATH, AREA.PLAZA, AREA.PARKING, AREA.STEPS]);
-export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(grid, surface), cut = null) {
+// ground: a draper on the terrain alone, for what never stands on a bridge — the water, the beach, the woods: a deck's
+// corridor holds everything in it at the deck's level (src/shared/decks.js), and had raised the lagoon under a bridge
+// at street level up to the deck, drawn over its road (0.08 m up to the carriageway's 0.06: the lane lines, kerbs and
+// islands stood out of it)
+const LOW = (a, style) => style.layer === GROUND.WATER || a.kind === AREA.BEACH || a.kind === AREA.WOOD;
+// the paving taken out of the carriageways (clear: src/shared/carriage.js carriageLookup), its kerbs with it
+const CLEAR = new Set([AREA.SIDEWALK, AREA.ISLAND, AREA.TACTILE, AREA.PLAZA]);
+export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(grid, surface), cut = null, ground = null, clear = null) {
   const pos = new Buf(), nor = new Buf(), col = new Buf(), lay = new Buf();
   let deck = -1; // deck of the parapet being meshed
-  const emit = (p, style) => {
-    const y = drape.height(p[0], p[1]) + style.lift;
+  const emit = (p, style, on = drape) => {
+    const y = on.height(p[0], p[1]) + style.lift;
     pos.push(p[0], y, p[1]); nor.push(...groundNormal(grid, p[0], p[1])); col.push(...style.color); lay.push(style.layer);
   };
   // Vertical walls are independent of the ground-layer triangulation.
@@ -205,19 +214,26 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
     if (deck < 0) barrier(walls[i], walls[i + 1], walls[i + 2], walls[i + 3], -deck);
     else parapet(walls[i], walls[i + 1], walls[i + 2], walls[i + 3]);
   }
+  // (the road's plain outline is drawn only in a tile without carriageways: elsewhere the carriageways, sidewalks and
+  // islands over it cover all but 0.01% of it, measured over a fifth of the city's tiles, and it was a fifth of the
+  // tiles' road triangles, drawn and hidden, and 2 cm under the carriageway it fought with it for the depth far off.
+  // The lifts under the paving, liftRaster, still have it.)
+  const outline = !areas.some((a) => a.kind === AREA.CARRIAGEWAY);
   for (const a of areas) {
-    const style = styleOf(a), cutting = cut && CUT.has(a.kind);
+    if (a.kind === AREA.ROAD && !outline) continue;
+    const style = styleOf(a), cutting = cut && CUT.has(a.kind) ? cut : clear && CLEAR.has(a.kind) ? clear.cut : null, on = ground && LOW(a, style) ? ground : drape;
+    const kept = clear && CLEAR.has(a.kind) ? (x0, z0, x1, z1) => !clear.inside((x0 + x1) / 2, (z0 + z1) / 2) : null;
     for (const rings of a.polygons) {
-      for (const [p, q, r] of triangulate(rings)) drape.triangle(p, q, r, (a, b, c) => {
-        const pieces = cutting ? cut([a, b, c]) : null;
-        if (!pieces) { emit(a, style); emit(b, style); emit(c, style); return; }
-        for (const piece of pieces) for (let k = 1; k + 1 < piece.length; k++) { emit(piece[0], style); emit(piece[k], style); emit(piece[k + 1], style); }
+      for (const [p, q, r] of triangulate(rings)) on.triangle(p, q, r, (a, b, c) => {
+        const pieces = cutting ? cutting([a, b, c]) : null;
+        if (!pieces) { emit(a, style, on); emit(b, style, on); emit(c, style, on); return; }
+        for (const piece of pieces) for (let k = 1; k + 1 < piece.length; k++) { emit(piece[0], style, on); emit(piece[k], style, on); emit(piece[k + 1], style, on); }
       });
       if (style.kerb) for (const ring of rings) {
         const n = ring.length / 2;
         for (let k = 0; k < n; k++) drape.segment(
           [ring[k * 2], ring[k * 2 + 1]], [ring[((k + 1) % n) * 2], ring[((k + 1) % n) * 2 + 1]],
-          (a, b) => kerb(a[0], a[1], b[0], b[1], style.lift));
+          (a, b) => { if (!kept || kept(a[0], a[1], b[0], b[1])) kerb(a[0], a[1], b[0], b[1], style.lift); });
       }
     }
   }
@@ -285,7 +301,8 @@ function flatRoofColour(r) {
 // Window bay width (m) per category; a whole number of bays is fitted to each wall.
 const BAY = { [CAT.HOUSE]: 3.4, [CAT.APARTMENT]: 3.3, [CAT.MIXED]: 3.2, [CAT.COMMERCIAL]: 3.0, [CAT.PUBLIC]: 3.4, [CAT.GLASS]: 1.5, [CAT.INDUSTRIAL]: 6.0 };
 const HINT_LAYER = { [MATERIAL.TILE]: WALL.TILE, [MATERIAL.CONCRETE]: WALL.CONCRETE, [MATERIAL.PLASTER]: WALL.PLASTER, [MATERIAL.BRICK]: WALL.BRICK, [MATERIAL.METAL]: WALL.SIDING };
-const SINK = 4; // walls run this far below the base so they meet sloping ground
+const SINK = 4; // walls run this far below the base so they meet sloping ground (not a raised one's: BFLAG.RAISED)
+const sinkOf = (b) => (b.flags & BFLAG.RAISED ? 0 : SINK);
 
 const ringArea = (r) => { let s = 0; for (let i = 0, n = r.length / 2; i < n; i++) { const j = (i + 1) % n; s += r[j * 2] * r[i * 2 + 1] - r[i * 2] * r[j * 2 + 1]; } return s / 2; };
 
@@ -352,15 +369,24 @@ function finishOf(b, i, tx, tz) {
 
 // Distant buildings: plain prisms in their wall colour under a flat roof, and nothing else — no windows,
 // parapets or rooftop equipment (the material draws a few lit windows at night). Indexed, positions /
-// normals / colours only.
+// normals / colours only. The triangles come in three runs, by how far off a building still shows (BLOCK_LOD):
+// `index` is the big ones, then the middling, then the small, and `cuts` where the second and third begin, so
+// that a chunk far off draws only the first run or two (streamer.js).
+export const BLOCK_LOD = [
+  { area: 150, height: 12 }, // small: a house (a pixel or two from 2.5 km, over the photo of its own roof)
+  { area: 400, height: 20 }, // middling: a walk-up, a shop
+];
 export function blockMesh(buildings, tx, tz) {
-  const pos = new Buf(1 << 14), nor = new Buf(1 << 14), col = new Buf(1 << 14), idx = [];
+  const pos = new Buf(1 << 14), nor = new Buf(1 << 14), col = new Buf(1 << 14), runs = [[], [], []];
   let v = 0;
   buildings.forEach((b, i) => {
+    if (b.flags & BFLAG.NO_SOLID) return; // (taken out of a road, tools/pipeline/clearroads.mjs: its record only keeps the others' index)
+    const area = Math.abs(b.polygons.reduce((s, rings) => s + rings.reduce((t, r) => t + ringArea(r), 0), 0));
+    const idx = runs[area < BLOCK_LOD[0].area && b.height < BLOCK_LOD[0].height ? 2 : area < BLOCK_LOD[1].area && b.height < BLOCK_LOD[1].height ? 1 : 0];
     // (its roof as near: coated white, bare concrete, now and then red or green; it was its walls' colour, lightened,
     // and from the air the low city was confetti of lilac, mint and pink)
     const { wallCol } = finishOf(b, i, tx, tz), roofCol = b.flags & BFLAG.MASONRY ? wallCol.map((c) => c * 0.82) : lin(flatRoofColour(roofRnd(i, tx, tz)));
-    const top = b.base + b.height, bottom = b.base - SINK;
+    const top = b.base + b.height, bottom = b.base - sinkOf(b), raised = (b.flags & BFLAG.RAISED) !== 0;
     for (const rings of b.polygons) {
       for (const r of rings) {
         const n = r.length / 2;
@@ -379,23 +405,39 @@ export function blockMesh(buildings, tx, tz) {
         for (const [x, z] of [p, q, t]) { pos.push(x, top, z); nor.push(0, 1, 0); col.push(...roofCol); }
         idx.push(v, v + 1, v + 2);
         v += 3;
+        if (!raised) continue; // (and the underside of one raised over the street: a skywalk)
+        for (const [x, z] of [p, t, q]) { pos.push(x, b.base, z); nor.push(0, -1, 0); col.push(...wallCol.map((c) => c * 0.6)); }
+        idx.push(v, v + 1, v + 2);
+        v += 3;
       }
     }
   });
-  return { position: pos.done(), normal: nor.done(), color: col.done(), index: v > 65535 ? Uint32Array.from(idx) : Uint16Array.from(idx) };
+  const all = runs[0].concat(runs[1], runs[2]);
+  return { position: pos.done(), normal: nor.done(), color: col.done(), index: v > 65535 ? Uint32Array.from(all) : Uint16Array.from(all), cuts: [runs[0].length, runs[0].length + runs[1].length] };
 }
 
 export function buildingMesh(buildings, tx, tz) {
   const pos = new Buf(1 << 16), nor = new Buf(1 << 16), col = new Buf(1 << 16), fac = new Buf(1 << 16), bld = new Buf(1 << 16), pho = new Buf(1 << 15);
+  // What stands on the roofs (water tanks, air conditioners, stair housings) goes into a mesh of its own, which the
+  // view leaves out beyond a kilometre or so (main.js, as the other small things): at that distance it is less than a
+  // pixel, and a city of houses each with a tank on its roof is a lot of triangles.
+  const main = { pos, nor, col, fac, bld, pho };
+  const detail = { pos: new Buf(1 << 14), nor: new Buf(1 << 14), col: new Buf(1 << 14), fac: new Buf(1 << 14), bld: new Buf(1 << 14), pho: new Buf(1 << 13) };
+  let into = main;
   let pu = -1, pv = -1; // photo coordinates of the vertices being added (-1: none)
   const ends = new Buf(1 << 12);
   const photo = { pos: new Buf(1 << 12), nor: new Buf(1 << 12), uv: new Buf(1 << 12) }; // roofs with an aerial photo
 
   buildings.forEach((b, i) => {
+    // A building taken out of a road (BFLAG.NO_SOLID, tools/pipeline/clearroads.mjs) is not drawn, and with no walls
+    // nothing runs into it (drive.js reads the walls off this mesh). It still has its place in `ends`, with no
+    // vertices of its own, so a picked vertex finds the same building as before (streamer.js buildingAt) and
+    // `info` and the tile's ids stay in step.
+    if (b.flags & BFLAG.NO_SOLID) { ends.push(pos.length / 3); return; }
     const { material, cat, seed, wallCol, wallLayer, k: used } = finishOf(b, i, tx, tz);
     let k = used;
     const rnd = () => hash3(i * 31 + k++, tx * 13 + 5, tz * 17 + 3);
-    const top = b.base + b.height, bottom = b.base - SINK;
+    const sink = sinkOf(b), top = b.base + b.height, bottom = b.base - sink;
     const outer = b.polygons[0][0];
     const area = b.polygons.reduce((s, rings) => s + rings.reduce((t, r) => t + ringArea(r), 0), 0);
 
@@ -418,8 +460,9 @@ export function buildingMesh(buildings, tx, tz) {
 
     // One vertex. (u, v) feed the window grid; kind / bay / layer select the shading (see materials.js).
     const vtx = (x, y, z, n, c, u, v, kind, bay, layer) => {
-      pos.push(x, y, z); nor.push(n[0], n[1], n[2]); col.push(c[0], c[1], c[2]);
-      fac.push(u, v, floorH, seed); bld.push(wallH, cat + 8 * layer, kind, bay); pho.push(pu, pv);
+      const o = into;
+      o.pos.push(x, y, z); o.nor.push(n[0], n[1], n[2]); o.col.push(c[0], c[1], c[2]);
+      o.fac.push(u, v, floorH, seed); o.bld.push(wallH, cat + 8 * layer, kind, bay); o.pho.push(pu, pv);
     };
     // Triangle and quad with the winding chosen to face `ref`.
     const tri = (p, q, r, ref, c, kind, layer) => {
@@ -439,6 +482,12 @@ export function buildingMesh(buildings, tx, tz) {
       quad(P(-1, 1, y0), P(1, 1, y0), P(1, 1, y1), P(-1, 1, y1), [-dz, 0, dx], c, KIND.SOLID, layer);
       quad(P(1, -1, y0), P(1, 1, y0), P(1, 1, y1), P(1, -1, y1), [dx, 0, dz], c, KIND.SOLID, layer);
       quad(P(-1, -1, y0), P(-1, 1, y0), P(-1, 1, y1), P(-1, -1, y1), [-dx, 0, -dz], c, KIND.SOLID, layer);
+    };
+    // Upright drum (a hexagonal prism: it is seen from above, and there are a great many) on y0, without a bottom face.
+    const drum = (cx, cz, y0, y1, r, c, layer) => {
+      const P = (s, y) => [cx + r * Math.cos(s * Math.PI / 3), y, cz + r * Math.sin(s * Math.PI / 3)];
+      for (let s = 0; s < 6; s++) quad(P(s, y0), P(s + 1, y0), P(s + 1, y1), P(s, y1), [Math.cos((s + 0.5) * Math.PI / 3), 0, Math.sin((s + 0.5) * Math.PI / 3)], c, KIND.SOLID, layer);
+      for (let s = 1; s < 5; s++) tri(P(0, y1), P(s, y1), P(s + 1, y1), [0, 1, 0], c, KIND.SOLID, layer);
     };
 
     // ---- LOD2: a surveyed shell's own walls and roof planes replace everything generated below
@@ -526,10 +575,10 @@ export function buildingMesh(buildings, tx, tz) {
           const nrm = [-dz, 0, dx]; // outward for CCW outlines and CW holes (see tileformat.js)
           const bays = len < 1.8 || masonry ? 0 : Math.max(1, Math.round(len / BAY[cat])), bay = bays ? len / bays : 0;
           const yT = wallTop + parapet, vT = yT - b.base;
-          vtx(x0, bottom, z0, nrm, wallCol, 0, -SINK, KIND.WALL, bay, wallLayer);
-          vtx(x1, bottom, z1, nrm, wallCol, bays, -SINK, KIND.WALL, bay, wallLayer);
+          vtx(x0, bottom, z0, nrm, wallCol, 0, -sink, KIND.WALL, bay, wallLayer);
+          vtx(x1, bottom, z1, nrm, wallCol, bays, -sink, KIND.WALL, bay, wallLayer);
           vtx(x1, yT, z1, nrm, wallCol, bays, vT, KIND.WALL, bay, wallLayer);
-          vtx(x0, bottom, z0, nrm, wallCol, 0, -SINK, KIND.WALL, bay, wallLayer);
+          vtx(x0, bottom, z0, nrm, wallCol, 0, -sink, KIND.WALL, bay, wallLayer);
           vtx(x1, yT, z1, nrm, wallCol, bays, vT, KIND.WALL, bay, wallLayer);
           vtx(x0, yT, z0, nrm, wallCol, 0, vT, KIND.WALL, bay, wallLayer);
           if (parapet) quad([x0, wallTop, z0], [x1, wallTop, z1], [x1, yT, z1], [x0, yT, z0], [dz, 0, -dx], inner, KIND.SOLID, wallLayer);
@@ -539,6 +588,10 @@ export function buildingMesh(buildings, tx, tz) {
       }
       if (!roof) for (const [p, q, s] of triangulate(rings)) {
         for (const [x, z] of [p, q, s]) vtx(x, wallTop, z, [0, 1, 0], flatRoof, 0, wallH, KIND.FLAT_ROOF, 0, WALL.ROOF);
+      }
+      // the underside of one raised over the street (a skywalk, a raised part): its soffit, in the walls' colour shaded
+      if (!sink) for (const [p, q, s] of triangulate(rings)) {
+        for (const [x, z] of [p, s, q]) vtx(x, b.base, z, [0, -1, 0], inner, 0, 0, KIND.SOLID, 0, wallLayer);
       }
     }
 
@@ -583,6 +636,7 @@ export function buildingMesh(buildings, tx, tz) {
         const hx = 1.6 + rnd() * 1.2, hz = 1.5 + rnd() * 0.8, p = place(Math.hypot(hx, hz));
         if (p) box(p[0], p[1], wallTop, wallTop + 2.7 + rnd() * 0.9, hx, hz, dx, dz, wallCol, wallLayer);
       }
+      into = detail; // (the stair housing stays with the building: big enough to see from afar)
       const count = Math.min(cat === CAT.GLASS ? 5 : 7, Math.floor(area / 120) + 1);
       for (let e = 0; e < count; e++) {
         const type = rnd();
@@ -601,27 +655,82 @@ export function buildingMesh(buildings, tx, tz) {
         }
       }
     }
+    into = detail;
+    // ---- on a house's flat roof (most of Puerto Rico's): a plastic water tank, the tinaco, black, blue or beige; on
+    // some a solar water heater beside it, a dark collector tilted to the south under its white tank
+    if (cat === CAT.HOUSE && !roof && !masonry && area > 30) {
+      const rings = b.polygons[0];
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (let e = 0; e < outer.length; e += 2) { x0 = Math.min(x0, outer[e]); x1 = Math.max(x1, outer[e]); z0 = Math.min(z0, outer[e + 1]); z1 = Math.max(z1, outer[e + 1]); }
+      const place = (half, taken) => {
+        for (let t = 0; t < 8; t++) {
+          const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0);
+          if (insideRings(x, z, rings) && edgeDistance(x, z, rings) > half + 0.35 && (!taken || Math.hypot(x - taken[0], z - taken[1]) > half + 1.6)) return [x, z];
+        }
+        return null;
+      };
+      let tank = null;
+      if (rnd() < 0.7) {
+        const r = 0.5 + rnd() * 0.15, h = 1.2 + rnd() * 0.4, pick = rnd();
+        const c = lin(pick < 0.55 ? [0.07, 0.07, 0.075] : pick < 0.75 ? [0.16, 0.3, 0.55] : [0.78, 0.74, 0.64]);
+        tank = place(r);
+        if (tank) drum(tank[0], tank[1], wallTop, wallTop + 0.15 + h, r, c, WALL.PLASTER); // (its stand hidden by the parapet)
+      }
+      if (area > 55 && rnd() < 0.3) {
+        const p = place(1.1, tank);
+        if (p) {
+          const [x, z] = p, y = wallTop + 0.3, rise = 0.5, back = z - 0.5, front = z + 0.5;
+          const L0 = [x - 1, y, front], L1 = [x + 1, y, front], H0 = [x - 1, y + rise, back], H1 = [x + 1, y + rise, back];
+          quad(L0, L1, H1, H0, [0, 0.9, 0.45], lin([0.05, 0.08, 0.15]), KIND.SOLID, WALL.CONCRETE); // the collector's glass
+          quad(H0, H1, [x + 1, wallTop, back], [x - 1, wallTop, back], [0, 0, -1], lin([0.5, 0.5, 0.5]), KIND.SOLID, WALL.CONCRETE);
+          box(x, back - 0.1, y + rise, y + rise + 0.42, 1.05, 0.21, 1, 0, lin([0.86, 0.86, 0.84]), WALL.PLASTER); // its tank
+        }
+      }
+    }
+    into = main;
 
-    // ---- balconies on the sunny (or longest) side of apartment blocks
-    if ((cat === CAT.APARTMENT || cat === CAT.MIXED) && floors >= 2 && fronts.length) {
+    // ---- balconies on the sunny (or longest) side of apartment blocks: a concrete parapet; and on most of the
+    // colonial city's buildings (mixed use), the old city's kind: a thin slab on corbels with an iron railing, the
+    // railing painted by the facade shader (KIND.RAILING: bars over the shaded wall behind; this vertex colour is
+    // that wall's)
+    const colonial = cat === CAT.MIXED;
+    if ((cat === CAT.APARTMENT || colonial) && floors >= 2 && fronts.length && (!colonial || rnd() < 0.75)) {
       const score = (f) => f.len * (0.65 + 0.35 * f.nrm[2]);
       const main = fronts.reduce((m, f) => (score(f) > score(m) ? f : m));
-      const depth = 1.05, c = rnd() < 0.6 ? wallCol.map((v) => v + (1 - v) * 0.35) : lin([0.5, 0.51, 0.52]);
+      const depth = colonial ? 0.8 : 1.05, slab = colonial ? 0.16 : 0.12, rail = colonial ? 1.0 : 1.08;
+      const c = rnd() < 0.6 ? wallCol.map((v) => v + (1 - v) * 0.35) : lin([0.5, 0.51, 0.52]);
       for (const f of fronts) {
         if (f.nrm[0] * main.nrm[0] + f.nrm[2] * main.nrm[2] < 0.85 || f.len < 4) continue;
-        const { dx, dz, nrm } = f, inset = 0.3;
+        const { dx, dz, nrm } = f, inset = 0.3, len = f.len - 2 * inset;
         const ax = f.x0 + dx * inset, az = f.z0 + dz * inset, bx = f.x0 + dx * (f.len - inset), bz = f.z0 + dz * (f.len - inset);
-        const ox = nrm[0] * depth, oz = nrm[2] * depth;
+        const ox = nrm[0] * depth, oz = nrm[2] * depth, back = [-nrm[0], 0, -nrm[2]];
         for (let fl = 1; fl < floors; fl++) {
-          const y0 = b.base + fl * floorH - 0.12, y1 = y0 + 1.2;
+          const y0 = b.base + fl * floorH - 0.12, ys = y0 + slab, y1 = ys + rail;
           if (y1 > wallTop - 0.4) break;
           const A = (y) => [ax, y, az], B = (y) => [bx, y, bz], C = (y) => [bx + ox, y, bz + oz], D = (y) => [ax + ox, y, az + oz];
           quad(A(y0), B(y0), C(y0), D(y0), [0, -1, 0], c, KIND.SOLID, WALL.PLASTER);            // slab underside
-          quad(A(y0 + 0.12), B(y0 + 0.12), C(y0 + 0.12), D(y0 + 0.12), [0, 1, 0], c, KIND.SOLID, WALL.PLASTER); // floor
-          quad(D(y0), C(y0), C(y1), D(y1), nrm, c, KIND.SOLID, WALL.PLASTER);                     // front panel
-          quad(D(y0), C(y0), C(y1), D(y1), [-nrm[0], 0, -nrm[2]], inner, KIND.SOLID, WALL.PLASTER);
-          quad(A(y0), D(y0), D(y1), A(y1), [-dx, 0, -dz], c, KIND.SOLID, WALL.PLASTER);           // side panels
-          quad(B(y0), C(y0), C(y1), B(y1), [dx, 0, dz], c, KIND.SOLID, WALL.PLASTER);
+          quad(A(ys), B(ys), C(ys), D(ys), [0, 1, 0], c, KIND.SOLID, WALL.PLASTER);              // floor
+          if (colonial) {
+            quad(D(y0), C(y0), C(ys), D(ys), nrm, c, KIND.SOLID, WALL.PLASTER);                   // the slab's edge
+            quad(A(y0), D(y0), D(ys), A(ys), [-dx, 0, -dz], c, KIND.SOLID, WALL.PLASTER);
+            quad(B(y0), C(y0), C(ys), B(ys), [dx, 0, dz], c, KIND.SOLID, WALL.PLASTER);
+            quad(D(ys), C(ys), C(y1), D(y1), nrm, wallCol, KIND.RAILING, WALL.PLASTER);         // the railing
+            quad(D(ys), C(ys), C(y1), D(y1), back, wallCol, KIND.RAILING, WALL.PLASTER);
+            quad(A(ys), D(ys), D(y1), A(y1), [-dx, 0, -dz], wallCol, KIND.RAILING, WALL.PLASTER);
+            quad(B(ys), C(ys), C(y1), B(y1), [dx, 0, dz], wallCol, KIND.RAILING, WALL.PLASTER);
+            // corbels under the slab, about two metres apart (not over the shopfronts: they hung in front of the
+            // sign bands)
+            const n = fl > 1 ? Math.max(2, Math.round(len / 2) + 1) : 0;
+            for (let k2 = 0; k2 < n; k2++) {
+              const t = (k2 + 0.5) / n * len, cx = ax + dx * t + nrm[0] * depth * 0.3, cz = az + dz * t + nrm[2] * depth * 0.3;
+              box(cx, cz, y0 - 0.18, y0, 0.06, depth * 0.3, dx, dz, c, WALL.PLASTER);
+            }
+          } else {
+            quad(D(y0), C(y0), C(y1), D(y1), nrm, c, KIND.SOLID, WALL.PLASTER);                   // front panel
+            quad(D(y0), C(y0), C(y1), D(y1), back, inner, KIND.SOLID, WALL.PLASTER);
+            quad(A(y0), D(y0), D(y1), A(y1), [-dx, 0, -dz], c, KIND.SOLID, WALL.PLASTER);         // side panels
+            quad(B(y0), C(y0), C(y1), B(y1), [dx, 0, dz], c, KIND.SOLID, WALL.PLASTER);
+          }
         }
       }
     }
@@ -631,36 +740,44 @@ export function buildingMesh(buildings, tx, tz) {
     position: pos.done(), normal: nor.done(), color: col.done(), aFacade: fac.done(), aBldg: bld.done(), aPhoto: pho.done(),
     // first vertex index after each building (for picking: vertex -> building)
     ends: ends.done(), triangles: pos.length / 9,
+    details: { position: detail.pos.done(), normal: detail.nor.done(), color: detail.col.done(), aFacade: detail.fac.done(), aBldg: detail.bld.done(), aPhoto: detail.pho.done() },
     photo: { position: photo.pos.done(), normal: photo.nor.done(), uv: photo.uv.done() },
   };
 }
 
 // How high each kind of ground surface stands over the terrain, in a 1 m raster of the tile (centimetres, the
 // highest where they overlap): a sidewalk 20 cm, a carriageway 6, an island 22. What walks or drives on the
-// ground stands on it (streamer.lift), not sunk into it.
+// ground stands on it (streamer.lift), not sunk into it. The top bit (WET) marks water no paving crosses (the sea, a
+// lagoon, a river, a pool; not a bridge's road over it, a pier): the visitor's car, bike and walker stop at its
+// edge (streamer.wet).
 const LIFT_CELL = 1;
-function liftRaster(areas, tx, tz, tileSize) {
-  const n = Math.ceil(tileSize / LIFT_CELL), x0 = tx * tileSize, z0 = tz * tileSize, data = new Uint8Array(n * n), xs = [];
-  for (const a of areas) {
-    const cm = Math.round(styleOf(a).lift * 100);
-    if (!cm) continue;
-    for (const rings of a.polygons) {
-      for (let j = 0; j < n; j++) {
-        const z = z0 + (j + 0.5) * LIFT_CELL;
-        xs.length = 0;
-        for (const r of rings) for (let i = 0, k = r.length - 2; i < r.length; k = i, i += 2) {
-          const za = r[k + 1], zb = r[i + 1];
-          if ((za > z) !== (zb > z)) xs.push(r[k] + ((z - za) / (zb - za)) * (r[i] - r[k]));
-        }
-        if (xs.length < 2) continue;
-        xs.sort((p, q) => p - q);
-        for (let s = 0; s + 1 < xs.length; s += 2) {
-          const i0 = Math.max(0, Math.ceil((xs[s] - x0) / LIFT_CELL - 0.5)), i1 = Math.min(n - 1, Math.floor((xs[s + 1] - x0) / LIFT_CELL - 0.5));
-          for (let i = i0; i <= i1; i++) if (data[j * n + i] < cm) data[j * n + i] = cm;
-        }
+const PAVED = new Set([AREA.CARRIAGEWAY, AREA.ROAD, AREA.SIDEWALK, AREA.ISLAND, AREA.PARKING, AREA.PLAZA, AREA.PATH, AREA.STEPS, AREA.TACTILE, AREA.OTHER]);
+function liftRaster(areas, tx, tz, tileSize, clear = null) {
+  const n = Math.ceil(tileSize / LIFT_CELL), x0 = tx * tileSize, z0 = tz * tileSize, data = new Uint8Array(n * n), flag = new Uint8Array(n * n), xs = [];
+  // (each cell whose middle the polygon covers)
+  const fill = (rings, f) => {
+    for (let j = 0; j < n; j++) {
+      const z = z0 + (j + 0.5) * LIFT_CELL;
+      xs.length = 0;
+      for (const r of rings) for (let i = 0, k = r.length - 2; i < r.length; k = i, i += 2) {
+        const za = r[k + 1], zb = r[i + 1];
+        if ((za > z) !== (zb > z)) xs.push(r[k] + ((z - za) / (zb - za)) * (r[i] - r[k]));
+      }
+      if (xs.length < 2) continue;
+      xs.sort((p, q) => p - q);
+      for (let s = 0; s + 1 < xs.length; s += 2) {
+        const i0 = Math.max(0, Math.ceil((xs[s] - x0) / LIFT_CELL - 0.5)), i1 = Math.min(n - 1, Math.floor((xs[s + 1] - x0) / LIFT_CELL - 0.5));
+        for (let i = i0; i <= i1; i++) f(j * n + i);
       }
     }
+  };
+  for (const a of areas) {
+    const style = styleOf(a), cm = Math.round(style.lift * 100), wet = style.layer === GROUND.WATER, paved = PAVED.has(a.kind);
+    if (!cm && !wet && !paved) continue;
+    const keep = clear && CLEAR.has(a.kind) ? (c) => !clear.inside(x0 + ((c % n) + 0.5) * LIFT_CELL, z0 + (Math.floor(c / n) + 0.5) * LIFT_CELL) : null;
+    for (const rings of a.polygons) fill(rings, (c) => { if (keep && !keep(c)) return; if (data[c] < cm) data[c] = cm; if (wet) flag[c] |= 1; if (paved) flag[c] |= 2; });
   }
+  for (let c = 0; c < data.length; c++) if (flag[c] === 1) data[c] |= WET;
   return { data, n, x0, z0, cell: LIFT_CELL };
 }
 
@@ -672,15 +789,16 @@ function joinMeshes(a, b) {
   return out;
 }
 
-// channels: prepareChannels() (src/world/channels.js), or null
-export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z), channels = null) {
+// channels: prepareChannels() (src/world/channels.js), or null; carriage: carriageLookup() (src/shared/carriage.js), the
+// carriageways no paving stands on, or null
+export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z), channels = null, carriage = null) {
   // (the default surface ignores decks: fine for tests, the worker passes makeSurface())
-  const drape = createDraper(grid, surface, tileSize);
+  const drape = createDraper(grid, surface, tileSize), ground = createDraper(grid, (x, z) => sampleGrid(grid, x, z), tileSize);
   tile = { ...tile, ...clearRoadway(tile) }; // (nothing standing out in the lanes: src/shared/roadway.js)
   const ch = channels?.forTile(tile.tx, tile.tz), cut = ch?.cut ?? null;
   return {
     terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize, cut),
-    roads: joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null),
+    roads: joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut, ground, carriage), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null),
     paint: roadMesh(tile.areas.filter(isPaint), grid, surface, [], drape),
     decals: decalMesh(tile.props, drape),
     buildings: buildingMesh(tile.buildings, tile.tx, tile.tz),
@@ -688,6 +806,6 @@ export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(g
     props: Float32Array.from(tile.props.flatMap((p) => [p.kind, p.variant, p.rot, p.x, p.z, p.scale])),
     wires: tile.wires,
     signs: tile.signs, // plain objects; the text is drawn on the main thread
-    lifts: liftRaster(tile.areas.filter((a) => !isPaint(a)), tile.tx, tile.tz, tileSize),
+    lifts: liftRaster(tile.areas.filter((a) => !isPaint(a)), tile.tx, tile.tz, tileSize, carriage),
   };
 }

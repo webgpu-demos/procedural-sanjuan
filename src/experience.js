@@ -63,13 +63,8 @@ body:not(.hud-off) #xp-cap { bottom: 140px; } /* (free roaming: above the HUD's 
 #xp-story .g div { font-size: 11px; color: rgba(246,241,231,0.55); text-transform: uppercase; letter-spacing: 0.08em; }
 #xp-story .g b { display: block; font-size: 16px; color: #fff; text-transform: none; letter-spacing: 0; margin-top: 2px; font-variant-numeric: tabular-nums; }
 #xp-story .st { margin-top: 10px; font-size: 12px; color: rgba(246,241,231,0.7); min-height: 1.3em; }
-#xp-dock .act .k { font-size: 10px; padding: 1px 5px; margin-left: 4px; border-radius: 4px; background: rgba(255,255,255,0.14); color: rgba(246,241,231,0.8); }
-#xp-drive { position: fixed; right: 26px; bottom: 96px; z-index: 935; text-align: right; pointer-events: none; opacity: 0; transition: opacity 0.4s ease; text-shadow: 0 2px 14px rgba(0,0,0,0.7); }
-#xp-drive.on { opacity: 1; }
-#xp-drive .v { font-size: 64px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-#xp-drive .u { font-size: 13px; letter-spacing: 0.2em; color: rgba(246,241,231,0.7); }
-#xp-drive .st { margin-top: 6px; font-size: 15px; font-weight: 600; }
-#xp-drive .help { margin-top: 10px; font-size: 11px; letter-spacing: 0.06em; color: rgba(246,241,231,0.55); }
+/* (the clean view, H: the numbers and the story go with the rest) */
+.hud-hidden #xp-stats, .hud-hidden #xp-story { opacity: 0 !important; pointer-events: none; }
 #xp-time { flex-basis: 100%; position: relative; height: 22px; margin: 2px 4px 0; }
 #xp-time input { width: 100%; margin: 0; appearance: none; -webkit-appearance: none; height: 22px; background: transparent; cursor: pointer; position: relative; z-index: 2; }
 #xp-time input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #0b2a44 0%, #2a5d8a 22%, #f2a65a 33%, #ffe6b0 40%, #9fd4ff 100%); }
@@ -102,7 +97,6 @@ const KIND = {
   airport: ['va al aeropuerto', 'to the airport (SJU)'], 'airport-return': ['vuelve del aeropuerto', 'back from the airport'],
 };
 const TYPE_NAME = ['carro compacto', 'sedán', 'SUV', 'pickup', 'camión de entregas', 'guagua'];
-const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const ease = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
 const clockLabel = (hour) => {
@@ -151,7 +145,10 @@ export class Experience {
     // the morning as a line: drag to any moment of it
     this.timeInput = this.dock.querySelector('#xp-time input');
     this.timeInput.addEventListener('input', () => { this.app.clockTime.live = false; this.app.clockTime.hour = Number(this.timeInput.value) / 3600; this.scrubbing = true; });
-    this.timeInput.addEventListener('change', () => { this.scrubbing = false; });
+    // (let go: the clock followed again, and the focus given back, or the HUD's keys and main's are dead until another
+    // key moves it; a drag back to where it began fires no 'change')
+    const letGo = () => { this.scrubbing = false; this.timeInput.blur(); };
+    this.timeInput.addEventListener('change', letGo); this.timeInput.addEventListener('pointerup', letGo); this.timeInput.addEventListener('pointercancel', letGo);
     this.marks();
     this.dock.querySelectorAll('.scen button').forEach((b) => b.addEventListener('click', () => this.setScenario(b.dataset.s)));
     this.dock.querySelector('.ride').addEventListener('click', () => this.rideNear());
@@ -162,7 +159,7 @@ export class Experience {
     });
     this.skip.addEventListener('click', () => this.endIntro());
     addEventListener('keydown', (e) => { if (this.directing && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); this.endIntro(); } });
-    // driving wants a keyboard: on a touch screen alone, the button is not offered
+    // (the closing caption names the keys: on a touch screen alone it is not shown, endIntro)
     this.canDrive = !!app.drive && !(matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches);
     this.trips = null; this.tripinfo = null; this.loadStories(this.app.sim);
     this.nameIndex = this.indexNames(app.roads);
@@ -214,13 +211,13 @@ export class Experience {
   // ---------------------------------------------------------------- the title, the opening
   showTitle(total) {
     const n = total ? total.toLocaleString('es-PR') : '', end = clockLabel((this.app.sim?.end ?? 36000) / 3600).t;
-    this.titleUp = true;
+    this.titleUp = true; this.app.clockTime.day = MORNING; // (the morning's date whichever way in: free, the sun was today's)
     this.start = (() => { const d = document.createElement('div'); d.id = 'xp-start'; d.className = 'xp'; document.body.appendChild(d); return d; })();
     this.start.innerHTML = `<div class="k">Puerto Rico · simulación</div><h1>SAN JUAN</h1><div class="s">La mañana — un martes cualquiera</div>
       <div class="d">${n ? n + ' viajes' : 'Cada viaje'} simulados con SUMO, de las 4:30 a las ${end} de la mañana: quién sale de dónde, cuándo y hacia dónde,
       según el Censo (ACS), con los conteos de la FHWA y las calles de OpenStreetMap.<br>Every car you will see is a simulated trip.</div>
       <div class="row"><button class="go">▶ Comenzar · with sound</button><button class="free">Explorar libremente</button></div>`;
-    this.start.querySelector('.go').addEventListener('click', () => { this.sound.start(); this.setSoundButton(); this.hideTitle(); this.beginIntro(); });
+    this.start.querySelector('.go').addEventListener('click', () => { this.sound.start(); this.hideTitle(); this.beginIntro(); });
     this.start.querySelector('.free').addEventListener('click', () => { this.clouds(); this.hideTitle(); this.endIntro(true); this.app.startFree?.(); });
   }
   hideTitle() { this.titleUp = false; this.start?.classList.add('gone'); setTimeout(() => this.start?.remove(), 1100); }
@@ -264,7 +261,7 @@ export class Experience {
   }
   playApagon(at) {
     if (innerWidth < 700) return false; // (a phone: just the clock and the caption)
-    this.reel = this.apagonShots(at); this.reelName = 'apagon'; this.app.clockTime.day = MORNING;
+    this.reel = this.apagonShots(at); this.reelName = 'apagon'; this.app.clockTime.day = MORNING; this.cutGen = (this.cutGen ?? 0) + 1;
     this.directing = true; this.app.controls.enabled = false;
     this.bars.classList.add('on'); this.skip.style.display = 'block';
     this.dock.classList.add('hidden'); // (the scene full frame: the clock's panel comes back when it ends)
@@ -274,18 +271,19 @@ export class Experience {
   }
   beginIntro() {
     this.clouds();
-    this.reel = this.shots; this.reelName = 'intro'; this.app.clockTime.day = MORNING;
+    this.reel = this.shots; this.reelName = 'intro'; this.app.clockTime.day = MORNING; this.cutGen = (this.cutGen ?? 0) + 1;
     this.directing = true; this.app.controls.enabled = false;
     this.bars.classList.add('on'); this.skip.style.display = 'block';
     this.app.atmosphere.vignette.darkness = 0.55; this.app.atmosphere.grain.blendMode.opacity.value = 0.08;
     this.shot = -1; this.cut(0);
   }
-  // to shot k, through black
+  // to shot k, through black (and nothing more once another cut, the end of the opening or the apagón's scene has
+  // come since: skipped while it loaded in the black, it took the camera seconds later for a ride on PR-22)
   async cut(k) {
-    const shots = this.reel;
+    const shots = this.reel, gen = (this.cutGen = (this.cutGen ?? 0) + 1), stale = () => gen !== this.cutGen || !this.directing;
     this.fade.classList.add('on'); this.caption(null); this.fading = true; // (in the black: a moment for changes that would show)
     await new Promise((r) => setTimeout(r, 750));
-    if (!this.directing) return;
+    if (stale()) return;
     if (k >= shots.length) { this.endIntro(); return; }
     const s = shots[k], app = this.app;
     this.shot = k; this.shotT = 0;
@@ -306,6 +304,7 @@ export class Experience {
       quiet = app.streamer.pending ? 0 : quiet + 1;
       if ((!sim || ready) && quiet >= 3 && i > 6) break;
       await new Promise((r) => setTimeout(r, 100));
+      if (stale()) return;
     }
     if (s.ride) {
       // (on the road for the whole shot: a car whose trip ended halfway was swapped for another, a different car)
@@ -324,9 +323,11 @@ export class Experience {
     }
     app.clockTime.rate = s.rate;
     if (app.speedMap) { app.speedMap.on = !!s.map; this.mapButton(); }
-    if (s.cap) setTimeout(() => this.directing && this.shot === k && this.caption(s.cap), (s.capAt ?? 0.9) * 1000);
+    if (s.cap) setTimeout(() => !stale() && this.caption(s.cap), (s.capAt ?? 0.9) * 1000);
     this.fade.classList.remove('on'); this.fading = false;
   }
+  // (a caption for ms, cleared then only if no other has come since)
+  captionFor(lines, ms) { this.caption(lines); const id = this.capId; setTimeout(() => { if (this.capId === id) this.caption(null); }, ms); }
   place(s, f) {
     const g = (x, z) => this.app.streamer.ground(x, z), e = ease(Math.min(1, f));
     const ex = lerp(s.eye[0][0], s.eye[1][0], e), ez = lerp(s.eye[0][2], s.eye[1][2], e), ey = lerp(s.eye[0][1], s.eye[1][1], e);
@@ -336,13 +337,14 @@ export class Experience {
     this.app.camera.lookAt(this.app.controls.target);
   }
   caption(lines) {
+    this.capId = (this.capId ?? 0) + 1;
     if (!lines) { this.cap.classList.remove('on'); return; }
     this.cap.querySelector('.a').textContent = lines[0]; this.cap.querySelector('.b').textContent = lines[1] ?? '';
     this.cap.classList.add('on');
   }
   endIntro(fromTitle = false) {
     const app = this.app, reel = this.reelName;
-    this.directing = false; this.shot = -1; this.reelName = null; this.fading = false;
+    this.directing = false; this.shot = -1; this.reelName = null; this.fading = false; this.cutGen = (this.cutGen ?? 0) + 1;
     if (app.sim) app.sim.keep = null;
     if (app.sim) app.sim.near = app.sim.constructor.NEAR;
     this.bars.classList.remove('on'); this.skip.style.display = 'none'; this.caption(null);
@@ -362,7 +364,7 @@ export class Experience {
     app.controls.enabled = true;
     this.dock.classList.remove('hidden');
     // what can be done now: the ways round the city (a keyboard's)
-    if (this.canDrive && !fromTitle) { this.caption(['Recorre San Juan: 2 caminar · 3 bici · 4 manejar · 5 volar', 'walk, cycle, drive or fly · M for the map · V for the camera']); setTimeout(() => !this.directing && this.caption(null), 7000); }
+    if (this.canDrive && !fromTitle) this.captionFor(['Recorre San Juan: 2 caminar · 3 bici · 4 manejar · 5 volar', 'walk, cycle, drive or fly · M for the map · V for the camera'], 7000);
   }
 
   // the moments of the morning, under the time line
@@ -390,9 +392,11 @@ export class Experience {
     }
   }
   async setScenario(name) {
-    if (name === this.scenario) return;
+    // (one change at a time: a double click loaded two runs, and the second rewrote the clock under the scene)
+    if (name === this.scenario || this.switching) return;
+    this.switching = true;
     this.dock.querySelectorAll('.scen button').forEach((b) => b.classList.toggle('on', b.dataset.s === name));
-    const ok = await this.app.setScenario(name);
+    const ok = await this.app.setScenario(name).finally(() => { this.switching = false; });
     if (!ok) { this.dock.querySelectorAll('.scen button').forEach((b) => b.classList.toggle('on', b.dataset.s === this.scenario)); return; }
     this.scenario = name; this.wave = null; this.marks();
     await this.loadStories(this.app.sim);
@@ -402,8 +406,7 @@ export class Experience {
       const T = this.app.clockTime.hour * 3600;
       // before the failure: bring the clock to a minute before it, so the moment can be watched
       if (T > at + 600 || T < at - 1800) { this.app.clockTime.hour = (at - 75) / 3600; }
-      this.caption(['Apagón · 5:45 a.m.', 'La red eléctrica falla y todos los semáforos se apagan · the grid fails; every signal goes dark']);
-      setTimeout(() => this.caption(null), 6500);
+      this.captionFor(['Apagón · 5:45 a.m.', 'La red eléctrica falla y todos los semáforos se apagan · the grid fails; every signal goes dark'], 6500);
     }
   }
   // How real is it: the run against the counts (validation.json, tools/sim/validate.py)
@@ -414,7 +417,7 @@ export class Experience {
     this.truth.innerHTML = `<h3>¿Qué tan real es esto?</h3><div class="sub">How real is this</div>
       <div>${n} viajes simulados con SUMO, de las 4:30 a las ${end}, a partir de los flujos de viaje al trabajo del Censo (ACS),
       las horas de salida de cada municipio y los edificios de la ciudad. Se comparan con los conteos de tránsito de la FHWA (HPMS 2024).</div>
-      ${sim.index.share && sim.index.share < 1 ? `<div class="not">Se simula el ${Math.round(sim.index.share * 100)}% de la demanda estimada: con más, en la hora punta
+      ${sim.index.share && sim.index.share < 1 ? `<div class="not">Se simula el ${Math.round(sim.index.share * 100)}% de la demanda estimada: con más, en la hora pico
       las filas crecen más que el tránsito que mueve la red simulada (trazada de OpenStreetMap, con semáforos supuestos). Es
       un límite del modelo, no de la ciudad. · ${Math.round(sim.index.share * 100)}% of the estimated demand: with more, the simulated
       network's queues grow faster at the rush than the traffic it moves.</div>` : ''}
@@ -437,11 +440,10 @@ export class Experience {
     const b = this.dock.querySelector('.map'), on = !!this.app.speedMap?.on;
     b.classList.toggle('on', on); b.style.background = on ? 'rgba(255,122,69,0.45)' : '';
   }
-  toggleSound() { if (this.sound.on) this.sound.stop(); else this.sound.start(); this.setSoundButton(); }
-  setSoundButton() { /* (the HUD's sound button follows the sound itself: hud.js) */ }
+  toggleSound() { if (this.sound.on) this.sound.stop(); else this.sound.start(); } // (the HUD's button follows the sound itself: hud.js)
 
   // ---------------------------------------------------------------- each frame
-  update(dt, { night, uGrid }) {
+  update(dt, { uGrid }) {
     const app = this.app, sim = app.sim, T = app.clockTime.hour * 3600;
     // the opening's camera
     if (this.directing && this.shot >= 0) {
@@ -455,7 +457,7 @@ export class Experience {
     const ran = this.lastT != null && this.lastT < sim?.end - 30 && T - this.lastT < 60; this.lastT = T;
     if (sim && ran && !this.directing && app.clockTime.rate > 0 && T >= sim.end - 30) {
       app.clockTime.hour = 5.45; this.wave = null;
-      this.caption(['Otra mañana', 'the simulated morning begins again']); setTimeout(() => this.caption(null), 4000);
+      this.captionFor(['Otra mañana', 'the simulated morning begins again'], 4000);
     }
     // the clock
     const c = clockLabel(app.clockTime.hour);
@@ -476,7 +478,8 @@ export class Experience {
     // the numbers
     if (sim) {
       const st = sim.stats;
-      this.stats.innerHTML = st.active ? `SUMO · <b>${st.active.toLocaleString('es-PR')}</b> carros en la calle${st.nearSpeed != null ? ` · cerca, <b>${Math.round(st.nearSpeed * 3.6)}</b> km/h` : ''}${uGrid.z >= 0 ? ' · <b style="color:#ff6a4d">apagón</b>' : ''}` : '';
+      const html = st.active ? `SUMO · <b>${st.active.toLocaleString('es-PR')}</b> carros en la calle${st.nearSpeed != null ? ` · cerca, <b>${Math.round(st.nearSpeed * 3.6)}</b> km/h` : ''}${uGrid.z >= 0 ? ' · <b style="color:#ff6a4d">apagón</b>' : ''}` : '';
+      if (html !== this.statsShown) { this.statsShown = html; this.stats.innerHTML = html; } // (only when it changes)
       this.stats.style.opacity = this.directing ? 0 : 1;
     }
     // the story of the car being ridden with
@@ -504,7 +507,7 @@ export class Experience {
     } else this.story.classList.remove('on');
     // the sound
     this.sound.update(dt, {
-      night, cars: sim?.stats.near ?? 0, moving: sim?.stats.nearSpeed ?? 0, jammed: sim?.stats.nearStopped ?? 0,
+      cars: sim?.stats.near ?? 0, moving: sim?.stats.nearSpeed ?? 0,
       height: app.camera.position.y - app.streamer.ground(app.camera.position.x, app.camera.position.z),
       powered: uGrid.z < 0 ? 1 : Math.hypot(app.controls.target.x - uGrid.x, app.controls.target.z - uGrid.y) > uGrid.z ? 1 : 0,
     });

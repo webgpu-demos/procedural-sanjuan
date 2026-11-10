@@ -38,9 +38,36 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   shade trees (the trees OSM maps, and parks and woods filled out; a lawn only lightly, open ground such as El
   Morro's esplanade not at all), concrete utility poles with wires, street lights, signals that cycle, USPS collection
   boxes, pillar hydrants, bus stops, statues (Columbus on his column at Plaza Colón).
-- **Traffic**: the simulated morning (below): every car a trip SUMO drove, with its brake lights, its
-  lamps on the road at dawn, the signal heads showing the simulation's own lights. Outside the simulated
-  hours, compacts, sedans, SUVs, pickups, delivery trucks and AMA buses drive around the camera.
+- **Traffic** (`traffic.js`, `simtraffic.js`, `fleet.js`): the simulated morning (below): every car a trip SUMO drove,
+  the signal heads showing the simulation's own lights; outside the simulated hours, compacts, sedans, SUVs and
+  minivans, pickups, delivery vans and AMA buses drive around the camera. The cars are the lofted bodies of mrdoob's
+  [slop-newyork](https://github.com/mrdoob/slop-newyork) (MIT, `carbodies.js`): each body lofted from design tables
+  (half-width, sill, shoulder, belt and crown curves along the car, rounded into the nose and tail; a glasshouse
+  lofted over it; lathed tyres and alloys), every detail (glass and its seals, pillars, door seams and handles,
+  headlamps with their projectors and daytime bar, tail lamps with an LED bar, grille mesh, plates with Puerto Rico's)
+  painted by one material from the object-space position and normal, the edges filtered over their screen footprint
+  (`carmaterial.js`). Per car: its paint, solid or metallic, chrome or blacked-out trim, a black roof now and then,
+  one of four wheel designs, whose pattern turns as it goes (blurred to the rim's mean once it turns faster than the
+  eye can follow); brake lights, turn signals before a turn, reversing lamps on the car you drive; a soft contact
+  shadow under it; near the camera the full model (3,400 triangles), further off a ~490-triangle stand-in in the same
+  material (the bus: `busbody.js`, `busmaterial.js`, white with a band in its route's colour). A car stands on its
+  road's deck where the flyovers draw one under it, else on the street the tiles draw, and up onto any deck drawn too
+  low over that to drive under (`roadlevel.js`); where a ramp's deck runs into the expressway's, it takes the
+  expressway's level over the overlap (`mergeDecks`). The roads' asphalt is worn and repaired as San Juan's is: block
+  cracking, utility-cut patches and trenches with sealed edges, tar snakes, oil drips, potholes (after slop-newyork's
+  road material).
+- **People on foot** (`people.js`): the sidewalks, crossings, footways and plazas walked by as many people as would be
+  there at that hour (below), each one of 39 of Microsoft's [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox)
+  avatars (MIT), chosen for a San Juan street: everyday clothes for the heat, office clothes in the Milla de Oro, a
+  clinic's whites and scrubs, runners on the promenades at dawn, swimwear by the beach, children with a grown-up; not
+  the library's winter clothes, other countries' uniforms, or headscarves and robes. Most of the library is fair;
+  the same avatar is drawn with a skin tone of San Juan's (fair to dark brown) by a mask of its skin in its atlas.
+  They keep right, slow behind the one in front, wait at a crossing for the simulation's lights and for a gap in the
+  cars, stand at bus stops and shop doors, talk in twos and threes, sit on benches; couples, friends and families
+  walk together. They stop at the kerb from the foot they are on, set off from standing, and stand up from a bench
+  before they go: transitions made by NVIDIA's [MotionBricks](https://github.com/NVlabs/motionbricks) between the
+  clips' own poses (`tools/motion/`). All of them are two draws (`THREE.BatchedMesh`), skinned on the GPU from a texture of every clip's
+  poses, in three levels of detail.
 - **Surroundings** (`far.js`): beyond the area, the rest of the island out to the horizon (the far shore of
   the bay, Cataño, Guaynabo, the mountains) as coarse terrain under a low-resolution aerial photo, over the sea.
 - **The city from afar at night** (`nightroads.js`, `far.js`): the streets of the whole area drawn into a map of light the
@@ -49,7 +76,7 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   at San Juan, volumetric clouds, sun shadows, ambient occlusion, bloom, day and night on San Juan's clock
   (AST, UTC−4 all year).
 
-Drag to pan, right-drag to rotate, WASD to move, N for day/night, click a building to inspect it.
+Drag to pan, right-drag to rotate, WASD to move, N for sound, G for the settings panel and readout, click a building to inspect it.
 URL parameters: `?area=condado`, `?night=1`, `?time=18.5`, `?cam=x,z,distance,azimuth,elevation`, `?radius=1500`.
 
 ## Garita, the island above it (`src/shared/twin.js`)
@@ -89,6 +116,14 @@ npm run compile    # data/raw -> public/tiles/<area>/      (seconds; several min
 npm run preview    # top-down render -> data/preview/<area>.png
 npm test           # tile format round trip + checks over the compiled areas
 ```
+
+No building stands in a road: `compile` takes out (or notches, keeping the rest of its footprint) a building that a
+drawn street-level centreline runs into by half a metre or more, and paves the slot (`tools/pipeline/roadclear.mjs`;
+forts and landmark models excepted). Tiles compiled before that rule are patched in place, without a recompile
+(which would delete `sim/`): `node tools/pipeline/clearroads.mjs --area=<id> [--dry-run] [--list]`. It copies every
+file it changes to `data/tiles-backup/before-clearroads-<id>/` first (with `cleared.json`, the list of what it did),
+flags a removed building `NO_SOLID` so the tile's building order and ids stay as they were, and is safe to run again.
+`npm test` (`roads-clear.test.mjs`) fails on an area that still needs it.
 
 All scripts take `--area=<id>` (default `sanjuan`). Areas are defined in `tools/pipeline/config.mjs` as an
 origin, a bounding box and a default view:
@@ -143,9 +178,11 @@ levels lagoons and ponds at their lowest shore, and keeps dry land above the sea
 "Explorar libremente", or the end of the opening, leaves you in the city with a game's heads-up display, after
 mrdoob's [Slop New York](https://github.com/mrdoob/slop-newyork) (MIT):
 
-- **Ways round** (`1`–`5`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump: the
-  walker is a man of Microsoft's [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) avatars, MIT, with
-  his own idle, walk and run, each played at the pace that keeps his planted foot still; see
+- **Ways round** (`1`–`5`): Explorar (the map's camera); Caminar (W S walk, A D turn, Shift run, Space jump, F sit
+  on the bench beside you and get up: the walker is a man of Microsoft's
+  [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox) avatars, MIT, with his own idle, walk and run, each
+  played at the pace that keeps his planted foot still, and NVIDIA's MotionBricks between them: he sets off, stops
+  from the foot he is on and turns on the spot as the crowd does, sits down and gets up; see
   `public/models/people/README.md`);
   Bici (W pedal, S brake, A D steer, Shift sprint: it leans into the turns; the same man rides it, seated, his
   feet and hands put on the pedals and the bars by inverse kinematics);
@@ -193,10 +230,11 @@ foot, by bike, by car and by helicopter (below: the car rides the ground or the 
 against the buildings' walls and the simulated cars, which fade rather than drive through you), the **apagón** (at
 5:45 the grid fails: windows, street lamps and every signal go dark in a wave from the Monacillos transmission
 centre, and the rush is simulated without them, every dark signal an all-way stop as the law has it; it plays as a
-scene of its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two
-hours on), riding with any car (click it: where it comes from, why it drives, its delay), the jam map, the lancha
-crossing to Cataño on its timetable, and plenas on the radio ("Callejón de Panderetas", "Fiesta de la Memoria" and
-"Romanoctubre", made for the project with Suno, one after the other; in the apagón the radio dies with the power,
+scene of its own: the dark rolling across the city, Avenida 65 de Infantería with its signals dead, the jam an
+hour and a half on), riding with any car (click it: where it comes from, why it drives, its delay), the jam map, the lancha
+crossing to Cataño on its timetable, and plenas and more on the radio ("Callejón de Panderetas", "Fiesta de la
+Memoria", "Romanoctubre", "Island Call and Response", "Bounce Playful" and "Perdona mi vida", made for the project
+with Suno, one after the other, round again; in the apagón the radio dies with the power,
 and comes back faint, a battery radio somewhere down the street). The frame rate is kept up by stepping quality down
 and back up as needed (`?quality=high` keeps it all). `G` brings back the settings panel; `?xp=0` skips the
 experience, `?sim=0` the simulation, `?scenario=apagon` opens the blackout.
@@ -216,8 +254,11 @@ npm run sim:all                      # demand, buses, routes, the morning and th
   as several nodes within 20 m are one node (netconvert cut the pieces between them to nothing: 2,907 edges under
   a metre, and a car that could not stop on one waited across the junction behind it); driveways and car parks
   (OSM's unnamed service ways) are left out, where a signal had given a car park a phase of its own. Signals
-  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper; ramps get acceleration
-  lanes; an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
+  allow right on red; where two expressway carriageways merge into fewer lanes, a zipper; where a ramp of one lane
+  joins it at grade, an acceleration lane, 140 m alongside and a taper (`src/shared/roadway.js` accelLanes: 82 in San
+  Juan, the client paves them where the simulation drives them), and where any other ramp joins it in fewer lanes,
+  a zipper (netconvert's own guessed acceleration lanes, `--ramps`, widened roads past what the tiles pave);
+  an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
 - **Demand** (`demand.py`): a cordon model. Homes, jobs, schools and shops are the floor area of the city's
   buildings, by use and municipio; the ACS municipio-to-municipio commuting flows say who drives where; a
   commuter from beyond the area leaves by whichever of the roads towards their municipio the routes favour (a
@@ -241,16 +282,64 @@ npm run sim:all                      # demand, buses, routes, the morning and th
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
   direction is matched to the counted line (which runs down the median of a divided road). The published run, at
-  seven tenths of the demand, carried 0.48 of the counted traffic (freeways 0.40, arterials 0.59; r² 0.40), about
-  seven tenths of it scaled to the whole demand, and teleported 1,286 of its 228,000 cars; at half the demand 0.42
-  (328 teleported), at six tenths 0.45 (676), at 0.85 0.49 (3,119, and trips half as long again): past seven
-  tenths the rush hour mostly queues longer.
+  seven tenths of the demand, on the network with the acceleration lanes the client paves (and other ramps zipped
+  in), carried 0.45 of the counted traffic (freeways 0.35, arterials 0.57; r² 0.30) and teleported 1,570 of its
+  227,000 cars (1,388 still on the road at 10:15); with the ramps zipped and no acceleration lanes, 0.45 and 1,338
+  (1,683); with netconvert's guessed acceleration lanes it had carried 0.48 (freeways 0.40; r² 0.40, 1,286
+  teleported), its trips an eighth shorter, but those lanes lay past the paving the tiles draw (73 km of lanes in
+  San Juan where a car stood off the road, 25 km without), and with the ramps giving way, 0.45 and 2,280
+  teleported. Earlier, with the guessed lanes: at half the demand 0.42 (328 teleported), at six tenths
+  0.45 (676), at 0.85 0.49 (3,119, and trips half as long again): past seven tenths the rush hour mostly queues
+  longer.
   The figures for the published run are in the experience (¿Qué tan real?).
 - **Experiments** run on GitHub Actions (the `simlab` branch: `simlab/jobs.json` lists the jobs, each pushes what
   it found to a branch `simres/<job>`); `hotspots.py` lists where a run teleports cars and why.
 
 What it is not: real cars. The trips are drawn from survey data and simulated; they are checked against
 counts, not recorded from traffic.
+
+## Where people walk (`tools/pipeline/walkways.mjs`, `tools/assets/`)
+
+```
+node tools/pipeline/walkways.mjs --area=<id>                  # the walks of a compiled area -> public/tiles/<id>/walks*
+python tools/assets/crowd.py <Rocketbox Assets> <avatar> f|m <out> <id>   # an avatar for the crowd (Blender's bpy)
+node tools/assets/crowd_pack.mjs <out>                        # -> public/models/people/crowd/ (gltfpack)
+```
+
+- **The network**: every street's sidewalks, measured on the compiled tiles (from the centreline out to the kerb,
+  then across the paving), the corners where neighbouring streets' sidewalks meet, a crossing across each street's
+  mouth at a junction (on OSM's zebra where it maps one; at the lights where the junction has them), OSM's
+  mid-block crossings, its footways, paths, steps and pedestrian streets (their loose ends joined to the nearest
+  walk). A street of houses without a sidewalk is walked at its edge; the inner side of a divided road is a median,
+  crossed, not walked. Old San Juan's narrow streets are walked as streets.
+- **How many**: from what stands along each stretch (OSM's shops, cafés, bars, offices, schools, clinics, sights and
+  bus stops; the floor area of the buildings by their use; the beach; the historic district), as people per 100 m
+  at the busiest hour of each kind (shops, offices, sights, bars, schools, buses, homes, clinics, the beach and the
+  parks), each kind with its own day (`src/world/people.js` `DAY`). An estimate, scaled to a few places: about 20 on
+  Calle Fortaleza at its busiest, 10 on Ashford, 6 on the Milla de Oro, under one on a street of houses. Not a count.
+- **Where they stop**: bus stops (and their shelters' benches), benches, shop doors and cafés, bars at night.
+- In blocks of 1 km (`walks/<x>_<z>.bin`, listed in `walks.json`), loaded round the view. `npm run walks -- --area=<id>`
+  after a compile (which clears the area's folder). A bridge's sidewalks, which the tiles do not pave (the deck is
+  drawn on its own), are put where the street's would be; footbridges are left out (people would walk under them).
+  The municipality's walks come in a few large pieces (the expressways and the bay part them).
+- **The people** (`public/models/people/README.md`): `crowd.py` cuts a Rocketbox avatar's skeleton to the 22 bones a
+  walk moves, makes its three levels of detail and its atlas (`crowd_atlas.py`: the skin found by its colour against
+  the face's and the hair's, and marked in alpha), and retargets the clips; `crowd_pack.mjs` keeps one set of clips for
+  the women and one for the men (the retargeting gives every avatar of either the same rotations) and compresses the
+  rest. In the client every avatar's every clip is baked into the pose texture on its own skeleton.
+- **The crowd's transitions** (`tools/motion/transitions.py`): NVIDIA's MotionBricks (SIGGRAPH 2026; code Apache-2.0,
+  the model under the NVIDIA Open Model Agreement) fills the motion between 4 poses of one clip and 4 of another. It
+  runs here on the CPU (`mbcpu.py`: the model's own encoding and decoding, Warp kernels, with ONNX Runtime in place of
+  TensorRT; about 0.15 s a generation on two cores). `rig.py` carries the crowd's Rocketbox clips onto the model's
+  SOMA skeleton and the result back (each bone turned as the joint it stands for, the two rest poses aligned bone by
+  bone; the hips scaled by the hip heights): setting off (idle to walk), stopping from either foot (walk to idle),
+  standing up (sit to idle), as `<sex>-moves.glb` (the pelvis's travel kept: the client carries the person along it).
+
+  ```
+  pip install onnxruntime warp-lang usd-core scipy
+  git clone https://github.com/NVlabs/motionbricks; cd motionbricks; git lfs pull   # (the ONNX models, the SOMA skeleton)
+  python tools/motion/transitions.py <motionbricks> <motionbricks>/motionbricks/assets/onnx/soma/mmm_v6_soma_fp32.onnx <crowd.py output>
+  ```
 
 ## Publishing
 
@@ -260,7 +349,8 @@ npm run deploy     # vite build (with the compiled areas in public/) -> force-pu
 
 GitHub Pages serves that branch (Settings → Pages → Deploy from a branch → `gh-pages`, `/`). The build uses
 relative URLs (`base: './'` in `vite.config.js`), so it works under `https://<owner>.github.io/<repo>/`.
-The branch holds only the latest build (about 210 MB with all four areas); compile the areas before deploying.
+The branch holds only the latest build (about 210 MB with all four areas); compile the areas before deploying,
+and run `npm test` (an area compiled before the road rule needs `clearroads.mjs`, above).
 
 ## Compiled output (`public/tiles/<area>/`)
 
@@ -277,6 +367,7 @@ World frame: metres, x east, y up (above mean sea level), z south; the origin is
 | `roads.json` | road graph: junction nodes `[x, y, z]`, edges with polylines (road level per point) and OSM attributes |
 | `rails.json` | surface and elevated railway polylines |
 | `structures.json` | footbridges, station platforms and canopies |
+| `walks.json`, `walks/<x>_<z>.bin` | where people walk, in blocks of 1 km: sidewalks, corners, crossings, footways; people per 100 m by kind of day; bus stops, benches, shop doors (`tools/pipeline/walkways.mjs`) |
 | `channels.json` | rivers, canals, streams and ditches: per stretch its kind, width, end flags and line with the water's level (`tools/pipeline/channels.mjs`) |
 
 `src/shared/` is used by both the compiler and the client.
@@ -286,4 +377,4 @@ World frame: metres, x east, y up (above mean sea level), z south; the origin is
 Buildings, roads, coastline and places: © OpenStreetMap contributors (ODbL); a redistributed compiled area
 is a derived database under the ODbL. Building heights: FEMA / ORNL USA Structures (public domain).
 Elevation: USGS 3DEP via the AWS Terrain Tiles. Aerial photo: USGS The National Map (public domain).
-Textures: Poly Haven (CC0). Trees: ez-tree (MIT). Original city engine: procedural-tokyo.
+Textures: Poly Haven (CC0). Trees: ez-tree (MIT). People: Microsoft Rocketbox (MIT; `public/models/people/README.md`), their transitions made with NVIDIA's MotionBricks. Cars, the bus and the asphalt's wear: after mrdoob's slop-newyork (MIT). Original city engine: procedural-tokyo.

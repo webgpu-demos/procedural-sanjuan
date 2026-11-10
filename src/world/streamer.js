@@ -7,23 +7,54 @@ import * as THREE from 'three';
 import { clearLanes } from '../shared/roadway.js';
 import { solidsOf } from './collide.js';
 import { tileKey } from '../shared/geo.js';
-import { meshHeight } from '../shared/terrain.js';
+import { meshHeight, settlePads } from '../shared/terrain.js';
 import { makeSurface, makeCover } from '../shared/decks.js';
 import { SIGN_LOD_DISTANCE } from './signs.js';
+import { WET } from './constants.js';
 import { shared } from './materials.js';
 
 const WORKERS = Math.min(4, Math.max(2, (navigator.hardwareConcurrency || 4) >> 1));
 const MAX_IN_FLIGHT = WORKERS * 2;
 const NEAR_EYE = 600; // metres round the camera always streamed in full, however far ahead it looks
+// Distance (m) from the eye beyond which a chunk of distant blocks leaves out its small houses, and its middling
+// buildings too (meshing.js BLOCK_LOD): within 7 km of the Condado they were 1.4 of 1.7 million triangles
+const BLOCK_SMALL = 2500, BLOCK_MID = 4500;
 // Distance (m) from the eye within which a tile shows its full-size photo atlas instead of the small one.
 const ROOFS_FULL = 600, WALLS_FULL = 900;
+
+// A thing that never moves once built (a tile, its buildings and props; a deck): its matrices set once and left. The
+// renderer brings every object's matrix up to date on every render of the scene, four a frame (the lamps' light map,
+// the picture, its reflection, its depth), and for the four thousand objects of the tiles round the view that was
+// several milliseconds each on an M3. (Children added later, and anything moved, still update; the scene's own matrix
+// is left too, main.js, or every world matrix under it is worked out again regardless.)
+export function frozen(o) {
+  o.updateMatrixWorld(true);
+  o.traverse((c) => { c.matrixAutoUpdate = false; });
+  return o;
+}
+
+function released() { this.array = null; } // (a BufferAttribute's onUpload: its array is on the GPU, the copy here goes)
+// A tile's mesh that is only ever drawn lets go of its arrays once they are on the GPU (`keep`: the attributes the
+// main thread still reads), and is not tested by a click's ray (main.js picks facades only). Round Hato Rey the
+// tiles held 186 MB of copies of what the GPU had; drive.js reads the facades' position, normal and index (the walls
+// and roofs it runs into), synth.js their aBldg.
+function drawnOnly(mesh, keep = null) {
+  const g = mesh.geometry;
+  for (const [name, a] of Object.entries(g.attributes)) if (!keep?.includes(name)) a.onUpload(released);
+  if (g.index && !keep?.includes('index')) g.index.onUpload(released);
+  if (!keep) mesh.raycast = () => {};
+  return mesh;
+}
 
 function geometry(arrays, attrs) {
   const g = new THREE.BufferGeometry();
   for (const [name, size] of attrs) if (arrays[name]?.length) g.setAttribute(name, new THREE.BufferAttribute(arrays[name], size));
   if (arrays.index) g.setIndex(new THREE.BufferAttribute(arrays.index, 1));
-  g.computeBoundingSphere();
-  g.computeBoundingBox();
+  const b = arrays.bounds; // (from the worker: tileWorker.js bound)
+  if (b) {
+    g.boundingBox = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(b[6], b[7], b[8]), b[9]);
+  } else { g.computeBoundingSphere(); g.computeBoundingBox(); }
   return g;
 }
 
@@ -35,11 +66,13 @@ export class Streamer {
     this.signs = signs;
     this.base = base;
     this.radius = radius;
+    this.detail = 1; // (the frame-rate governor's detail, main.js: the full trees drawn nearer on a machine that cannot keep up)
     this.hysteresis = hysteresis;
     this.tiles = new Map(); // key -> { state, group, info, ends, tris }
     this.blocks = new Map(); // chunk key -> { state, mesh }: the distant buildings, BLOCK x BLOCK tiles a mesh
     this.blockRadius = blockRadius;
     this.inFlight = 0;
+    this.arrived = []; // what the workers have finished and the main thread has not yet taken in
     this.stats = { loaded: 0, buildings: 0, triangles: 0 };
   }
 
@@ -64,8 +97,14 @@ export class Streamer {
     shared.uLoadedRect.value.set(this.mask.x0 * size, this.mask.z0 * size, this.mask.w * size, this.mask.h * size);
     this.workers = Array.from({ length: WORKERS }, () => {
       const w = new Worker(new URL('./tileWorker.js', import.meta.url), { type: 'module' });
-      w.postMessage({ type: 'init', decks, channels, tileSize: this.manifest.tileSize, grid: { ...this.grid, data: data.slice().buffer } });
-      w.onmessage = (e) => this.onResult(e.data);
+      const own = data.slice().buffer; // (each worker's copy, handed over: posted as it was, it was copied again)
+      w.postMessage({ type: 'init', decks, channels, tileSize: this.manifest.tileSize, grid: { ...this.grid, data: own } }, [own]);
+      w.onmessage = (e) => {
+        this.arrived.push(e.data); // (taken in update(), a few at a time)
+        // (and with no frames to take them in, the page hidden, after a moment all at once: a city loading in a
+        // background tab had stopped at its first eight tiles)
+        this.drain ??= setTimeout(() => { this.drain = null; if (performance.now() - (this.updated ?? 0) > 400) while (this.arrived.length) this.onResult(this.arrived.shift()); }, 500);
+      };
       return w;
     });
     this.nextWorker = 0;
@@ -75,6 +114,13 @@ export class Streamer {
   // segs: the approaches to the expressway's merges and forks, whose turn arrows the workers leave out (roadway.js
   // mergeApproaches); before the first tile.
   merges(segs) { for (const w of this.workers) w.postMessage({ type: 'merges', segs: segs.buffer.slice(0) }); }
+  // segs: the carriageways no paving stands on (src/shared/carriage.js carriageSegs); before the first tile
+  carriage(segs) { for (const w of this.workers) w.postMessage({ type: 'carriage', segs: segs.buffer.slice(0) }); }
+  // quads: the acceleration lanes' paving and lines (roadway.js accelQuads), paved in the tiles; before the first tile.
+  accel(quads) { for (const w of this.workers) w.postMessage({ type: 'accel', pave: quads.pave.buffer.slice(0), line: quads.line.buffer.slice(0) }); }
+  // pads: where the decks land on the ground, the ground held level with them (src/shared/terrain.js padField); before
+  // the first tile, and before anything stands on the ground
+  pads(pads) { const keep = settlePads(this.grid, pads); for (const w of this.workers) w.postMessage({ type: 'pads', pads: keep }); return keep; }
 
   // Terrain height, and the height of whatever one stands on (the terrain, or a bridge deck).
   ground(x, z) { return meshHeight(this.grid, x, z); } // (the terrain as its mesh draws it: src/shared/terrain.js)
@@ -84,12 +130,26 @@ export class Streamer {
     const size = this.manifest.tileSize, t = this.tiles.get(tileKey(Math.floor(x / size), Math.floor(z / size)))?.lifts;
     if (!t) return 0;
     const i = Math.floor((x - t.x0) / t.cell), j = Math.floor((z - t.z0) / t.cell);
-    return i < 0 || j < 0 || i >= t.n || j >= t.n ? 0 : t.data[j * t.n + i] / 100;
+    return i < 0 || j < 0 || i >= t.n || j >= t.n ? 0 : (t.data[j * t.n + i] & ~WET) / 100;
+  }
+  // Is (x, z) water no paving crosses (the sea, a lagoon, a river, a pool: meshing.js liftRaster), where its tile is
+  // loaded? Beyond the area's extent too (the open sea round it, or the end of the city drawn).
+  wet(x, z) {
+    const e = this.manifest.extent;
+    if (e && (x < e.minX || x > e.maxX || z < e.minZ || z > e.maxZ)) return true;
+    const size = this.manifest.tileSize, t = this.tiles.get(tileKey(Math.floor(x / size), Math.floor(z / size)))?.lifts;
+    if (!t) return false;
+    const i = Math.floor((x - t.x0) / t.cell), j = Math.floor((z - t.z0) / t.cell);
+    return i >= 0 && j >= 0 && i < t.n && j < t.n && (t.data[j * t.n + i] & WET) !== 0;
   }
 
   // focus: the point tiles are streamed around; eye: the camera position, for level of detail.
   update(focus, eye = focus) {
     const size = this.manifest.tileSize;
+    this.updated = performance.now();
+    // The tiles the workers have finished, taken in a few milliseconds' worth a frame (at least one): taken in as they
+    // came, several arriving together held the picture for a tenth of a second, a stutter wherever the view moved on.
+    for (let t0 = performance.now(), first = true; this.arrived.length && (first || performance.now() - t0 < 4); first = false) { this.onResult(this.arrived.shift()); this.tookAny = true; }
     for (const [key, t] of this.tiles) {
       if (t.state !== 'ready' || (!t.trees && !t.signs && !t.atlases.length)) continue;
       // Distance from the eye to the nearest point of the tile, so things next to the camera are never the
@@ -99,10 +159,14 @@ export class Streamer {
       const dy = Math.max(0, eye.y - this.ground(x0 + size / 2, z0 + size / 2) - 25);
       const d = Math.hypot(dx, dy, dz);
       if (t.trees) {
-        // a tile full of trees (a wood) keeps its detailed ones closer: thousands of them are too much to draw
-        const limit = this.props.constructor.lodDistance * (t.trees.count > 120 ? 0.6 : 1);
-        const near = t.trees.near.visible ? d < limit * 1.25 : d < limit;
-        t.trees.near.visible = near; t.trees.far.visible = !near;
+        // a tile full of trees (a wood) keeps its detailed ones closer: thousands of them are too much to draw. And
+        // nearer still at the governor's lower steps: a full tree is thousands of triangles (one wooded tile in reach
+        // half a million), and on an M3 they kept the picture past a refresh, at 30 a second, at its lowest step. The full
+        // trees within 40% of that, the lighter ones (props.js buildTree lite) out to it, the simple ones beyond.
+        const limit = this.props.constructor.lodDistance * (t.trees.count > 120 ? 0.6 : 1) * this.detail, tr = t.trees;
+        const was = tr.near.visible ? 0 : tr.mid.visible ? 1 : 2;
+        const level = d < limit * 0.4 * (was === 0 ? 1.25 : 1) ? 0 : d < limit * (was <= 1 ? 1.25 : 1) ? 1 : 2;
+        tr.near.visible = level === 0; tr.mid.visible = level === 1; tr.far.visible = level === 2;
         if (t.trees.lines) t.trees.lines.visible = d < this.props.constructor.wireDistance;
       }
       for (const a of t.atlases) {
@@ -128,26 +192,39 @@ export class Streamer {
     // ground under the camera was left out, the cars driving on the bare terrain in the foreground)
     const eyeScale = this.radius / Math.min(this.radius, NEAR_EYE);
     const dist = (tl) => {
-      const x = (tl.x + 0.5) * size, z = (tl.z + 0.5) * size;
-      return Math.min(Math.hypot(x - focus.x, z - focus.z), Math.hypot(x - eye.x, z - eye.z) * eyeScale);
+      const x = (tl.x + 0.5) * size, z = (tl.z + 0.5) * size, fx = x - focus.x, fz = z - focus.z, ex = x - eye.x, ez = z - eye.z;
+      return Math.min(Math.sqrt(fx * fx + fz * fz), Math.sqrt(ex * ex + ez * ez) * eyeScale);
     };
+    // (the scan of the area's tiles, four and a half thousand of them, for what to load and to drop: when the view has
+    // moved 16 m, a tile has come in, or every 20th frame; it was half a millisecond and a third of a megabyte of
+    // garbage every frame)
+    const moved = !this.scanAt || Math.abs(focus.x - this.scanAt[0]) + Math.abs(focus.z - this.scanAt[1]) + Math.abs(eye.x - this.scanAt[2]) + Math.abs(eye.z - this.scanAt[3]) > 16;
+    if (!moved && !this.tookAny && (this.scanFrame = (this.scanFrame ?? 0) + 1) % 20) return;
+    this.scanAt = [focus.x, focus.z, eye.x, eye.z]; this.tookAny = false;
     // unload
-    for (const [key, t] of this.tiles) {
-      if (t.state === 'ready' && dist(this.available.get(key)) > this.radius + this.hysteresis) this.unload(key);
-    }
+    this.tiles.forEach((t, key) => { if (t.state === 'ready' && dist(this.available.get(key)) > this.radius + this.hysteresis) this.unload(key); });
     // distant blocks: whole chunks of BLOCK x BLOCK tiles within the block radius (the loaded-tiles map hides
     // the buildings of the tiles that are in in full)
     const chunks = this.blockRadius > this.radius ? this.manifest.blocks?.chunks ?? [] : [], span = (this.manifest.blocks?.size ?? 4) * size;
     const chunkDist = ([cx, cz]) => Math.max(0, Math.hypot((cx + 0.5) * span - focus.x, (cz + 0.5) * span - focus.z) - span * 0.71);
     for (const [key, b] of this.blocks) if (b.state === 'ready' && (!chunks.length || chunkDist(b.chunk) > this.blockRadius + this.hysteresis * 2)) this.unloadBlocks(key);
+    // (and how much of each is drawn: the small houses not beyond BLOCK_SMALL from the eye, the middling buildings not
+    // beyond BLOCK_MID, times the governor's detail; meshing.js blockMesh puts them last in the index)
+    for (const b of this.blocks.values()) {
+      if (!b.cuts) continue;
+      const [cx, cz] = b.chunk, h = Math.max(0, Math.hypot((cx + 0.5) * span - eye.x, (cz + 0.5) * span - eye.z) - span * 0.71);
+      const d = Math.hypot(h, eye.y) / this.detail, was = b.mesh.geometry.drawRange.count;
+      const count = d > BLOCK_MID * (was <= b.cuts[0] ? 0.9 : 1) ? b.cuts[0] : d > BLOCK_SMALL * (was <= b.cuts[1] ? 0.9 : 1) ? b.cuts[1] : Infinity;
+      if (count !== was) b.mesh.geometry.setDrawRange(0, count);
+    }
     // load, nearest first: full tiles, then (with what is left of the workers) the distant blocks
     if (this.inFlight >= MAX_IN_FLIGHT) return;
     const wanted = [];
-    for (const [key, tl] of this.available) {
-      if (this.tiles.has(key)) continue;
+    this.available.forEach((tl, key) => {
+      if (this.tiles.has(key)) return;
       const d = dist(tl);
       if (d <= this.radius) wanted.push([d, key, tl]);
-    }
+    });
     // (nearest first, and those in front of the eye before those behind it: this.look, the way it looks)
     const [lx, lz] = this.look ?? [0, 0];
     for (const w of wanted) { const tl = w[2], vx = (tl.x + 0.5) * size - focus.x, vz = (tl.z + 0.5) * size - focus.z; w[0] *= 1 - 0.35 * ((vx * lx + vz * lz) / (Math.hypot(vx, vz) || 1)); }
@@ -180,9 +257,30 @@ export class Streamer {
     if (!b) return; // dropped while in flight
     b.state = 'ready';
     if (!msg.mesh.position.length) return;
-    b.mesh = new THREE.Mesh(geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3], ['aTile', 2]]), this.materials.blocks);
+    const geo = geometry(msg.mesh, [['position', 3], ['normal', 3], ['color', 3], ['aTile', 2]]);
+    // The distant blocks are only ever drawn, so their arrays are let go once they are on the GPU (round Hato Rey
+    // 280 MB of the page's heap held a copy of what the GPU already had), and a click's ray goes through them (it
+    // looks for facades: before, it also tested each of the blocks' millions of triangles).
+    for (const a of [...Object.values(geo.attributes), geo.index]) a.onUpload(released);
+    b.mesh = new THREE.Mesh(geo, this.materials.blocks);
+    b.cuts = msg.mesh.cuts;
+    b.mesh.raycast = () => {};
     b.mesh.name = `blocks ${msg.key}`;
-    this.scene.add(b.mesh);
+    this.scene.add(frozen(b.mesh));
+    this.coverBlocks(b);
+  }
+  // A chunk of distant blocks every tile of which is in in full is not drawn at all. The loaded-tiles map hides the
+  // blocks under the tiles that are in, but a pixel at a time: their triangles were still drawn and thrown away, the
+  // chunks round the view among the densest of the city.
+  coverBlocks(b) {
+    if (!b?.mesh) return;
+    const B = this.manifest.blocks?.size ?? 4, [cx, cz] = b.chunk;
+    let covered = true;
+    for (let x = cx * B; x < cx * B + B && covered; x++) for (let z = cz * B; z < cz * B + B; z++) {
+      const key = tileKey(x, z);
+      if (this.available.has(key) && this.tiles.get(key)?.state !== 'ready') { covered = false; break; }
+    }
+    b.mesh.visible = !covered;
   }
 
   unloadBlocks(key) {
@@ -209,22 +307,22 @@ export class Streamer {
     t.lifts = msg.mesh.lifts; // (how high the paving stands: lift())
     const atlases = [];
 
-    const ground = new THREE.Mesh(geometry(terrain, [['position', 3], ['normal', 3]]), this.materials.terrain);
+    const ground = drawnOnly(new THREE.Mesh(geometry(terrain, [['position', 3], ['normal', 3]]), this.materials.terrain));
     ground.receiveShadow = true;
     group.add(ground);
 
     if (roads.position.length) {
-      const m = new THREE.Mesh(geometry(roads, [['position', 3], ['normal', 3], ['color', 3], ['aLayer', 1]]), this.materials.road);
+      const m = drawnOnly(new THREE.Mesh(geometry(roads, [['position', 3], ['normal', 3], ['color', 3], ['aLayer', 1]]), this.materials.road));
       m.receiveShadow = true;
       group.add(m);
     }
     if (paint.position.length) {
-      const m = new THREE.Mesh(geometry(paint, [['position', 3], ['normal', 3], ['color', 3], ['aLayer', 1]]), this.materials.paint);
+      const m = drawnOnly(new THREE.Mesh(geometry(paint, [['position', 3], ['normal', 3], ['color', 3], ['aLayer', 1]]), this.materials.paint));
       m.receiveShadow = true;
       group.add(m);
     }
     if (decals.position.length) {
-      const m = new THREE.Mesh(geometry(decals, [['position', 3], ['normal', 3], ['uv', 2]]), this.props.mats.decal);
+      const m = drawnOnly(new THREE.Mesh(geometry(decals, [['position', 3], ['normal', 3], ['uv', 2]]), this.props.mats.decal));
       m.receiveShadow = true;
       m.renderOrder = 2;
       group.add(m);
@@ -232,7 +330,7 @@ export class Streamer {
     let trees = null;
     if (props.length || wires.length) {
       trees = this.props.build(props, wires, this.surface);
-      trees.near.visible = false; // update() picks the level of detail on the next frame
+      trees.near.visible = trees.mid.visible = false; // update() picks the level of detail on the next frame
       group.add(trees.group);
     }
     let signs = null;
@@ -250,13 +348,21 @@ export class Streamer {
         group.userData.own = [m.material]; // (kept off the mesh: its userData is the picking record)
         atlases.push(this.atlas(msg.key, t, walls, WALLS_FULL, (map) => { m.material.userData.photo.value = map; m.material.userData.photoOn.value = 1; }));
       }
+      drawnOnly(m, ['position', 'normal', 'index', 'aBldg']);
       m.castShadow = true;
       m.receiveShadow = true;
       m.userData = { tile: msg.key, info, ends: buildings.ends, facade: true };
       group.add(m);
+      const d = buildings.details;
+      if (d?.position.length) { // what stands on the roofs (meshing.js): left out at a distance with the other small things (main.js)
+        const r = drawnOnly(new THREE.Mesh(geometry(d, [['position', 3], ['normal', 3], ['color', 3], ['aFacade', 4], ['aBldg', 4], ['aPhoto', 2]]), m.material)); // (a click picks the building under it)
+        r.castShadow = r.receiveShadow = true;
+        r.userData.roofs = true;
+        group.add(r);
+      }
     }
     if (models) { // a tile's static models (bridges, street furniture, trees), where the compiler wrote any
-      const m = new THREE.Mesh(geometry(models, [['position', 3], ['normal', 3], ['color', 3]]), this.materials.models);
+      const m = drawnOnly(new THREE.Mesh(geometry(models, [['position', 3], ['normal', 3], ['color', 3]]), this.materials.models));
       m.castShadow = m.receiveShadow = true;
       group.add(m);
     }
@@ -273,9 +379,9 @@ export class Streamer {
       }));
       group.add(m);
     }
-    const tris = terrain.index.length / 3 + roads.position.length / 9 + buildings.triangles;
+    const tris = terrain.index.length / 3 + (roads.index ? roads.index.length : roads.position.length / 3) / 3 + buildings.triangles;
     Object.assign(t, { state: 'ready', group, trees, signs, atlases, signNear: false, buildings: info.length, tris });
-    this.scene.add(group);
+    this.scene.add(frozen(group));
     const tl = this.available.get(msg.key);
     this.setLoaded(tl.x, tl.z, true);
     this.stats.loaded++; this.stats.buildings += info.length; this.stats.triangles += tris;
@@ -319,6 +425,9 @@ export class Streamer {
     if (i < 0 || j < 0 || i >= this.mask.w || j >= this.mask.h) return;
     tex.image.data[j * this.mask.w + i] = on ? 255 : 0;
     tex.needsUpdate = true;
+    // (and the distant blocks of its chunk: drawn, or all under tiles in full)
+    const B = this.manifest.blocks?.size ?? 4, cx = Math.floor(tx / B), cz = Math.floor(tz / B);
+    for (const b of this.blocks.values()) if (b.chunk[0] === cx && b.chunk[1] === cz) this.coverBlocks(b);
   }
 
   // Building under a raycast hit on a facade mesh: { usage, storeys, height, base, tile, index } (index: in the tile).

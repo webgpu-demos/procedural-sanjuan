@@ -6,11 +6,12 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { Tree } from '@dgreenheck/ez-tree';
 import { PROP, DECAL } from '../shared/tileformat.js';
 import { shared } from './materials.js';
-import { LAMP_LAYER, lampMaterial, gridAware } from './lamplight.js';
+import { LAMP_LAYER, lampMaterial, lampUniforms, gridAware } from './lamplight.js';
 import { parkedVehicles } from './traffic.js';
 import { DECAL_COLS, DECAL_ROWS } from './decals.js';
 
 const TREE_LOD_DISTANCE = 300; // metres from the camera to the nearest point of a tile; beyond it trees are simple shapes
+                                // (within 40% of it the full ones, between the two the lighter ones: streamer.js)
 const WIRE_LOD_DISTANCE = 140; // and the power lines beyond this are left out
 
 // ---------------------------------------------------------------- geometry helpers
@@ -340,7 +341,9 @@ function wireMaterial() {
     fragmentShader: /* glsl */ `
       uniform float uPx; varying float vDepth;
       void main() {
-        float cover = clamp(0.03 * uPx / max(vDepth, 0.5), 0.0, 0.9);
+        // (gone by WIRE_LOD_DISTANCE, where the tile's lines are hidden, streamer.js: a fifth to a third opaque there,
+        // they popped)
+        float cover = clamp(0.03 * uPx / max(vDepth, 0.5), 0.0, 0.9) * (1.0 - smoothstep(${(WIRE_LOD_DISTANCE * 0.7).toFixed(1)}, ${WIRE_LOD_DISTANCE.toFixed(1)}, vDepth));
         if (cover < 0.02) discard;
         gl_FragColor = vec4(vec3(0.006, 0.007, 0.009), cover);
       }`,
@@ -396,18 +399,26 @@ function leafMaterial(map, tint, recolor = false, crown = false) {
   return m;
 }
 
-function buildTree(def) {
+// lite: the same tree for the middle distance (TREE_LOD_DISTANCE: within it, past the full ones), about a third of the
+// triangles: no twigs, a third of the leaf cards, each larger, so that the crown keeps its size and fullness, and
+// coarser branches. The full ones (6,000 to 14,000 triangles each, leaves and branches) were most of the picture's triangles
+// and most of the sun's shadow map's in a view over the city (4.5 of its 6.6 million, on an M3 the frame it was
+// redrawn in, every third, a long one).
+function buildTree(def, lite = false) {
   if (def.palm) return buildPalm(def);
   const tree = new Tree();
   tree.loadPreset(def.preset);
   const o = tree.options;
   o.seed = def.seed;
   // fewer, larger leaf cards: thousands of trees are drawn, not one hero tree
-  o.leaves.count = Math.max(4, Math.round(o.leaves.count * 0.55));
-  o.leaves.size *= 1.45;
+  // (the middle distance's: no twigs, their leaves on the branches they grew from, about a third as many in all)
+  const twigs = lite && o.branch.levels >= 2 ? o.branch.children[o.branch.levels - 1] : 1;
+  if (twigs > 1) o.branch.levels -= 1;
+  o.leaves.count = Math.max(4, Math.round(o.leaves.count * (lite ? 0.55 * 0.35 * twigs : 0.55)));
+  o.leaves.size *= lite ? 2.3 : 1.45;
   // thinner meshes: the presets are tuned for a single hero tree, we draw thousands
-  for (const k of Object.keys(o.branch.sections)) o.branch.sections[k] = Math.max(3, Math.round(o.branch.sections[k] * 0.5));
-  for (const k of Object.keys(o.branch.segments)) o.branch.segments[k] = Math.max(3, Math.round(o.branch.segments[k] * 0.6));
+  for (const k of Object.keys(o.branch.sections)) o.branch.sections[k] = Math.max(3, Math.round(o.branch.sections[k] * (lite ? 0.3 : 0.5)));
+  for (const k of Object.keys(o.branch.segments)) o.branch.segments[k] = Math.max(3, Math.round(o.branch.segments[k] * (lite ? 0.4 : 0.6)));
   tree.generate();
   const size = new THREE.Box3().setFromObject(tree).getSize(new THREE.Vector3());
   const s = def.height / size.y, k = def.spread ?? 1; // spread: a wider, flatter crown
@@ -574,17 +585,26 @@ function buildPalm(def) {
     colored(crown, [0.2, 0.34, 0.12]),
     colored(new THREE.CylinderGeometry(0.18, 0.28, crownY, 5).translate(lean * 0.4, crownY / 2, 0), royal ? [0.42, 0.41, 0.38] : [0.28, 0.24, 0.18]),
   ]);
+  // (and past FAR_SMALL, main.js cullSmall: a flattened octahedron on a three-sided trunk, 14 triangles)
+  const radius = royal ? 4.2 : 5.2;
+  const farLow = mergeGeometries([
+    colored(new THREE.OctahedronGeometry(radius * 0.8, 0).scale(1, 0.4, 1).translate(lean, crownY, 0), [0.2, 0.34, 0.12]),
+    colored(new THREE.CylinderGeometry(0.22, 0.3, crownY, 3, 1, true).translate(lean * 0.4, crownY / 2, 0), royal ? [0.42, 0.41, 0.38] : [0.28, 0.24, 0.18]),
+  ]);
   return {
-    radius: royal ? 4.2 : 5.2, height: H, palm: true,
-    branches, leaves, solid, far,
+    radius, height: H, palm: true,
+    branches, leaves, solid, far, farLow,
     branchMat: trunkMat,
     leafMat: leafMaterial(frondMap, royal ? 0xd8f0b0 : 0xc8e6a0),
   };
 }
 
-// Far trees: a smooth lumpy crown on a stick (unit height, unit width), coloured per vertex.
-function blobTreeGeometry() {
-  const crown = mergeVertices(new THREE.IcosahedronGeometry(0.5, 2).deleteAttribute('uv').deleteAttribute('normal'));
+// Far trees: a smooth lumpy crown on a stick (unit height, unit width), coloured per vertex: green, or for a tree
+// in flower its blossom's colour (tint), as dark against it as the green is against the green trees' tints (a
+// flamboyán went green beyond its lighter model: no red canopy from the air).
+// detail 0: the crown alone in 20 triangles, for past FAR_SMALL (main.js cullSmall), where the stick is not seen.
+function blobTreeGeometry(tint = null, detail = 2) {
+  const crown = mergeVertices(new THREE.IcosahedronGeometry(0.5, detail).deleteAttribute('uv').deleteAttribute('normal'));
   const p = crown.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
@@ -594,11 +614,14 @@ function blobTreeGeometry() {
   crown.computeVertexNormals();
   const g = crown.toNonIndexed(), n = g.attributes.position.count, c = new Float32Array(n * 3);
   // darker underneath, lighter on top, like a lit canopy
+  const bloom = tint != null && new THREE.Color(tint).multiplyScalar(0.2); // (0.102 of green on top, against 0.51 in the green tints)
   for (let i = 0; i < n; i++) {
     const t = THREE.MathUtils.clamp((g.attributes.position.getY(i) - 0.25) / 0.75, 0, 1);
+    if (bloom) { const k = 0.31 + 0.69 * t; c[i * 3] = bloom.r * k; c[i * 3 + 1] = bloom.g * k; c[i * 3 + 2] = bloom.b * k; continue; }
     c[i * 3] = 0.012 + 0.03 * t; c[i * 3 + 1] = 0.032 + 0.07 * t; c[i * 3 + 2] = 0.008 + 0.014 * t;
   }
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  if (detail < 2) return g;
   return mergeGeometries([g, tube(0.035, 0.03, 0.35, 0, 0, 0, [0.25, 0.2, 0.16], 5)]);
 }
 
@@ -606,10 +629,13 @@ function blobTreeGeometry() {
 export class Props {
   constructor() {
     const std = (extra) => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.1, ...extra });
-    this.trees = TREES.map(buildTree);
+    this.trees = TREES.map((d) => buildTree(d));
+    // (the middle distance's, each drawn with its full tree's materials; a palm is light enough as it is)
+    this.trees.forEach((t, v) => { const m = TREES[v].palm ? t : buildTree(TREES[v], true); t.lite = { branches: m.branches, leaves: m.leaves, solid: m.solid }; });
     this.models = {
       pole: [poleGeometry(false), poleGeometry(true)], light: lightGeometry(), signal: signalGeometry(), vending: vendingGeometry(),
-      blob: blobTreeGeometry(), lamp: new THREE.BoxGeometry(0.24, 0.03, 0.6), quad: new THREE.PlaneGeometry(1, 1),
+      blob: blobTreeGeometry(), bloom: blobTreeGeometry(TREES.find((d) => d.recolor)?.tint),
+      blobLow: blobTreeGeometry(null, 0), bloomLow: blobTreeGeometry(TREES.find((d) => d.recolor)?.tint, 0), lamp: new THREE.BoxGeometry(0.24, 0.03, 0.6), quad: new THREE.PlaneGeometry(1, 1),
       pool: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), lens: new THREE.CircleGeometry(0.15, 16),
     };
     // furniture drawn as one instanced model per kind (and variant)
@@ -636,8 +662,55 @@ export class Props {
       wire: wireMaterial(),
     };
     this.mats.poolCool = lampMaterial(this.mats.pool.map, {}, { grid: true }); // white LED lamps on the back streets
+    // a parked car far off (parkedBox): its paint (the stand-in's per-car colour), dark glass round the cabin
+    this.mats.parkedBox = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.3 });
+    this.mats.parkedBox.onBeforeCompile = (shader) => {
+      lampUniforms(shader); // (every material samples the lamp map: see simtraffic.js's boxes)
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec3 paintColor;\nattribute float aGlass;\nvarying vec3 vPaint;\nvarying float vGlass;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaint = paintColor; vGlass = aGlass;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vPaint;\nvarying float vGlass;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(vPaint, vec3(0.035, 0.04, 0.05), vGlass);');
+    };
+    this.mats.parkedBox.customProgramCacheKey = () => 'car-parked-box-v1';
+    this.boxes = new Map();
+    // (a tree's shadow from afar: its simple crown, at its size in the tree's own units; drawn only into the shadow map)
+    this.mats.shadowPlain = new THREE.MeshBasicMaterial();
+    for (const t of this.trees) if (!t.palm) t.shadowCrown = this.models.blob.clone().scale(t.radius * 1.75, t.height, t.radius * 1.75);
     this.time = 0;
     this.signalSlot = null; // (x, z, rot) -> the head's slot in the simulated signals' texture (simsignals.js)
+  }
+
+  // A parked car's far shape for the stand-in `geometry`: its body as a box and the cabin above it (dark glass, the
+  // roof in paint), twenty triangles, sharing the stand-in's per-car paint
+  parkedBox(geometry) {
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+    const { min, max } = geometry.boundingBox, key = [min.x, min.y, min.z, max.x, max.y, max.z].map((v) => v.toFixed(2)).join();
+    let base = this.boxes.get(key);
+    if (!base) {
+      const pos = [], nor = [], glass = [];
+      const face = (a, b, c, d, n, g) => { pos.push(...a, ...b, ...c, ...a, ...c, ...d); for (let i = 0; i < 6; i++) { nor.push(...n); glass.push(g); } };
+      // five faces of a box (no floor); sides: glass or paint
+      const box = (x0, x1, y0, y1, z0, z1, sides) => {
+        face([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [0, 1, 0], 0);
+        face([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], sides);
+        face([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], sides);
+        face([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], sides);
+        face([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], sides);
+      };
+      const H = max.y - min.y, L = max.z - min.z, belt = min.y + H * 0.58, inset = (max.x - min.x) * 0.07;
+      box(min.x, max.x, min.y + 0.18, belt, min.z, max.z, 0);
+      box(min.x + inset, max.x - inset, belt, max.y, min.z + L * 0.2, min.z + L * 0.68, 1);
+      base = new THREE.BufferGeometry();
+      base.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      base.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      base.setAttribute('aGlass', new THREE.Float32BufferAttribute(glass, 1));
+      this.boxes.set(key, base);
+    }
+    const g = base.clone();
+    g.setAttribute('paintColor', geometry.attributes.paintColor);
+    return g;
   }
 
   update(dt) {
@@ -653,10 +726,11 @@ export class Props {
   }
 
   // props: Float32Array of [kind, variant, rot, x, z, scale] rows; wires: Float32Array of [x1, z1, x2, z2] rows.
-  // Returns { group, near, far, count } — `near` holds the full trees, `far` the simple ones; count = trees.
+  // Returns { group, near, mid, far, count } — `near` holds the full trees, `mid` the lighter ones (buildTree lite),
+  // `far` the simple ones; count = trees.
   build(props, wires, ground) {
-    const group = new THREE.Group(), near = new THREE.Group(), far = new THREE.Group(), lines = new THREE.Group();
-    group.add(near, far, lines);
+    const group = new THREE.Group(), near = new THREE.Group(), mid = new THREE.Group(), far = new THREE.Group(), lines = new THREE.Group();
+    group.add(near, mid, far, lines);
     const by = new Map();
     for (let i = 0; i < props.length; i += 6) {
       // one instanced mesh per kind and model; parked cars share a model per vehicle type (their variant also carries the colour)
@@ -665,13 +739,17 @@ export class Props {
       by.get(key).push(i);
     }
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3(), s = new THREE.Vector3();
+    // (the ground under each prop, looked up once: a tree is four instanced parts, a street light three, and the
+    // lookups were most of a tile's arrival on the main thread)
+    const under = new Float32Array(props.length / 6).fill(NaN);
+    const groundAt = (i) => { const k = i / 6; let y = under[k]; if (y !== y) y = under[k] = ground(props[i + 3], props[i + 4]); return y; };
     // An InstancedMesh with one matrix per prop: `local` offsets the part within the prop's frame.
     const instanced = (rows, geo, mat, { parent = group, shadow = true, lift = 0, local = null, scale = null } = {}) => {
       const mesh = new THREE.InstancedMesh(geo, mat, rows.length);
       rows.forEach((i, n) => {
         const x = props[i + 3], z = props[i + 4], k = scale ? scale(i) : props[i + 5];
         q.setFromAxisAngle(up, props[i + 2]);
-        v.set(x, ground(x, z) + lift, z);
+        v.set(x, groundAt(i) + lift, z);
         if (local) v.add(new THREE.Vector3(...local).multiplyScalar(props[i + 5]).applyQuaternion(q)); // (parts sit on a model of that size)
         if (Array.isArray(k)) s.set(...k); else s.setScalar(k);
         mesh.setMatrixAt(n, m.compose(v, q, s));
@@ -686,11 +764,33 @@ export class Props {
       const kind = key >> 4, variant = key & 15;
       if (kind === PROP.TREE) {
         const t = this.trees[variant % this.trees.length];
-        instanced(rows, t.branches, t.branchMat, { parent: near });
-        instanced(rows, t.leaves, t.leafMat, { parent: near });
-        if (t.solid) instanced(rows, t.solid, this.mats.metal, { parent: near });
-        if (t.far) instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false });
-        else instanced(rows, this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] });
+        const parts = [[t.branches, t.lite.branches, t.branchMat, 'branches'], [t.leaves, t.lite.leaves, t.leafMat, 'leaves'], [t.solid, t.lite.solid, this.mats.metal, 'solid']];
+        for (const [full, lite, mat, part] of parts) {
+          if (!full) continue;
+          const a = instanced(rows, full, mat, { parent: near });
+          // (the lighter tree in the same places: the same matrices)
+          const b = new THREE.InstancedMesh(lite, mat, rows.length);
+          b.instanceMatrix = a.instanceMatrix; b.castShadow = b.receiveShadow = true; b.computeBoundingSphere();
+          mid.add(b);
+          // In the sun's shadow map (shadowShapes: main.js swaps them in for its redraw), a full tree is drawn as its
+          // lighter one, and a lighter one as its simple crown (its branches not at all): a shadow is a shape on the
+          // ground, a quarter of the triangles leafy enough, and at a hundred metres and more a crown's shape. Trees
+          // were most of what went into the shadow map, 4 of its 4.7 million triangles on the opening's ride at 9:30.
+          if (!t.palm) {
+            a.userData.shadowAs = [lite, null];
+            b.userData.shadowAs = part === 'leaves' ? [t.shadowCrown, this.mats.shadowPlain] : [null, null];
+          }
+        }
+        // A tree far off: its simple crown out to FAR_SMALL, and past it the same in a few triangles (userData.crown,
+        // which main.js cullSmall shows by distance: trees had vanished from aerial views a kilometre out)
+        const bloom = TREES[variant % TREES.length].recolor;
+        const crown = t.far ? instanced(rows, t.far, this.mats.blob, { parent: far, shadow: false })
+          : instanced(rows, bloom ? this.models.bloom : this.models.blob, this.mats.blob, { parent: far, shadow: false, scale: (i) => [t.radius * 1.75 * props[i + 5], t.height * props[i + 5], t.radius * 1.75 * props[i + 5]] });
+        crown.userData.crown = 'near';
+        const low = new THREE.InstancedMesh(t.far ? t.farLow : bloom ? this.models.bloomLow : this.models.blobLow, this.mats.blob, rows.length);
+        low.instanceMatrix = crown.instanceMatrix; low.castShadow = low.receiveShadow = false; low.computeBoundingSphere();
+        low.userData.crown = 'distant';
+        far.add(low);
       } else if (kind === PROP.POLE) {
         instanced(rows, this.models.pole[variant % 2], this.mats.metal);
         instanced(rows, this.models.lamp, this.mats.lamp, { shadow: false, local: [POLE_LAMP.x, POLE_LAMP.y - 0.02, 0], scale: () => [1.6, 1, 0.3] });
@@ -704,9 +804,19 @@ export class Props {
         rows.forEach((i, n) => body.setColorAt(n, new THREE.Color().setRGB(...VENDING_BODY[props[i + 1] % 4], THREE.SRGBColorSpace)));
         instanced(rows, this.models.quad, this.mats.panel, { lift: 0.02, shadow: false, local: [0, 0.97, 0.365], scale: () => [0.94, 1.66, 1] });
       } else if (kind === PROP.PARKED) {
-        const kit = parkedVehicles(), mesh = instanced(rows, kit.models[variant % kit.models.length], kit.material, { lift: 0.05 });
-        rows.forEach((i, n) => mesh.setColorAt(n, new THREE.Color(kit.colors[(props[i + 1] >> 2) % kit.colors.length])));
+        const kit = parkedVehicles(), car = kit.model(variant, rows.map((i) => (props[i + 1] >> 2) * 7919 + Math.round(props[i + 3] * 31 + props[i + 4] * 17)));
+        const mesh = instanced(rows, car.geometry, car.material, { lift: 0.02, scale: car.scale ? () => car.scale : null });
         mesh.userData.vehicle = true; // (labelled as vehicles in synthetic training images, src/synth/labels.js)
+        mesh.userData.parked = 'near';
+        mesh.userData.own = [car.geometry]; // (the tile's own copies, with its cars' paint: freed with it, as an instanced mesh's geometry is not)
+        // and far off, a body and a cabin in its paint, in the same places (main.js cullSmall shows one or the other): a
+        // car a few pixels long drawn with the stand-in's five hundred triangles was a fifth of an aerial view's
+        // triangles, and as many again in the shadow map
+        const far = new THREE.InstancedMesh(this.parkedBox(car.geometry), this.mats.parkedBox, rows.length);
+        far.instanceMatrix = mesh.instanceMatrix; far.castShadow = far.receiveShadow = true;
+        far.boundingSphere = mesh.boundingSphere; far.visible = false;
+        far.userData.vehicle = true; far.userData.parked = 'far'; far.userData.own = [far.geometry];
+        group.add(far);
       } else if (this.furniture[kind]) {
         const models = this.furniture[kind];
         instanced(rows, models[variant % models.length], this.mats.metal, { lift: 0.12 });
@@ -728,6 +838,7 @@ export class Props {
           });
           mesh.geometry = mesh.geometry.clone();
           mesh.geometry.setAttribute('aLens', new THREE.InstancedBufferAttribute(a, 3));
+          mesh.userData.own = [mesh.geometry]; // (the tile's own copy: freed with it, as an instanced mesh's geometry is not)
         }
       }
     }
@@ -748,7 +859,7 @@ export class Props {
       g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
       lines.add(new THREE.LineSegments(g, this.mats.wire)); // hair-thin: only worth drawing close up (a line is a pixel wide however far: six of them a black band)
     }
-    return { group, near, far, lines, count: this.trees.reduce((n, _, v) => n + (by.get(PROP.TREE * 16 + v) ?? []).length, 0) };
+    return { group, near, mid, far, lines, count: this.trees.reduce((n, _, v) => n + (by.get(PROP.TREE * 16 + v) ?? []).length, 0) };
   }
 
   static lodDistance = TREE_LOD_DISTANCE;

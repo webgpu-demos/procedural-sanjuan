@@ -304,13 +304,16 @@ hours = collections.Counter(int(t // 1800) / 2 for t, *_ in trips)
 print('departures by half hour:', ' '.join(f'{h:.1f}h {hours[h]}' for h in sorted(hours)))
 
 # ---------------------------------------------------------------- write
-VTYPES = {  # lengths as the models (src/world/traffic.js TYPES); Puerto Rico drives a little over the limit (the bus: gtfs.py)
-    'compact': dict(length=4.2, width=1.74, accel=2.8, decel=4.5, maxSpeed=48),
-    'sedan': dict(length=4.8, width=1.82, accel=2.6, decel=4.5, maxSpeed=50),
-    'suv': dict(length=4.7, width=1.9, accel=2.5, decel=4.5, maxSpeed=48),
-    'pickup': dict(length=5.6, width=1.95, accel=2.4, decel=4.5, maxSpeed=46),
-    'truck': dict(length=7.0, width=2.3, accel=1.3, decel=4.0, maxSpeed=30, vClass='delivery'),
+VTYPES = {  # Puerto Rico drives a little over the limit (the bus: gtfs.py)
+    'compact': dict(accel=2.8, decel=4.5, maxSpeed=48),
+    'sedan': dict(accel=2.6, decel=4.5, maxSpeed=50),
+    'suv': dict(accel=2.5, decel=4.5, maxSpeed=48),
+    'pickup': dict(accel=2.4, decel=4.5, maxSpeed=46),
+    'truck': dict(accel=1.3, decel=4.0, maxSpeed=30, vClass='delivery'),
 }
+# their lengths and widths as the client draws them (src/shared/vehicles.json: SUMO spaces its cars as they are drawn)
+SIZES = json.load(open(os.path.join(ROOT, 'src/shared/vehicles.json')))['types']
+for k, v in VTYPES.items(): VTYPES[k] = dict(length=SIZES[k]['length'], width=SIZES[k]['width'], **v)
 # (San Juan drives close: 2 m gaps, less dawdling than SUMO's default driver; the capacity that comes of it is
 # what the counts are checked against. The headway, tau, stays at SUMO's step of 1 s: below it Krauss drivers
 # can run into the car ahead, and SUMO clears each crash by teleporting a car: at 0.9 s, one car in six.)
@@ -320,12 +323,23 @@ with open(os.path.join(OUT, 'trips.xml'), 'w') as fx:
     fx.write('<routes>\n')
     for k, v in VTYPES.items():
         cls = v.pop('vClass', 'passenger')
-        drive = dict(speedFactor='normc(1.06,0.1,0.75,1.35)', sigma=0.3, tau=1.0, minGap=2.0, lcStrategic=1.2, lcCooperative=0.8, lcAssertive=1.3, impatience=0.5)
+        # (lane changes at a driver's pace: SUMO moved a car standing in a queue across into the next lane at 1.3 m/s,
+        # broadside to its way, and one car in five was seen sliding; no faster across now than 0.3 m/s standing and
+        # half its speed moving)
+        drive = dict(speedFactor='normc(1.06,0.1,0.75,1.35)', sigma=0.3, tau=1.0, minGap=2.0, lcStrategic=1.2, lcCooperative=0.8, lcAssertive=1.3, impatience=0.5,
+                     lcMaxSpeedLatStanding=0.3, lcMaxSpeedLatFactor=0.5)
         drive.update(VEXTRA)
         fx.write(f'  <vType id="{k}" vClass="{cls}" ' + ' '.join(f'{a}="{b}"' for a, b in {**v, **drive}.items()) + '/>\n')
     end = lambda k, e: f'{k}Taz="{e[4:]}"' if e.startswith('taz:') else f'{k}="{e}"'
+    # A trip from a place in the area sets off from the kerb, standing (a car pulling out); one into the area pulls in
+    # to the kerb at a place along its last street and stops there (--arrive=<m/s>: rolls to that speed instead).
+    # Set off at the street's speed and gone at it, 96% of them had appeared and vanished mid-street at 40 km/h. A
+    # trip through a gate (a municipio beyond the edge: taz) comes in and leaves at the road's speed, as it would.
+    ARRIVE = args.get('arrive', '0')
     for i, (t, a, b, typ, kind, story) in enumerate(trips):
-        fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" {end("from", a)} {end("to", b)} departLane="best" departSpeed="max" departPos="random_free"/>\n')
+        depart = 'departLane="best" departSpeed="max" departPos="random_free"' if a.startswith('taz:') else 'departLane="first" departSpeed="0" departPos="random_free"'
+        arrive = '' if b.startswith('taz:') else f' arrivalLane="first" arrivalSpeed="{ARRIVE}" arrivalPos="random"'
+        fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" {end("from", a)} {end("to", b)} {depart}{arrive}/>\n')
     fx.write('</routes>\n')
 # the municipios' gates (route.py and the assignment route with --with-taz)
 with open(os.path.join(OUT, 'taz.add.xml'), 'w') as fx:

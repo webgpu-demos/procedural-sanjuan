@@ -4,14 +4,18 @@
 // Arcade physics on a bicycle model: the engine pulls less as the speed rises, the steering lock closes with
 // speed, the car's course follows where it points with grip (little under the handbrake: a slide). It rides
 // the ground, or a deck it drove onto (a flyover, a ramp: it stays up there; driving under one, it stays under).
-// It stops against the walls of the buildings (their wall faces, rasterized into a grid as the tiles come near)
-// and against the simulated cars, which cannot swerve (they keep to their recorded way): one that would drive
+// It stops against the walls of the buildings (their wall faces, rasterized into a grid as the tiles come near), at
+// the water's edge (no driving out to sea), and against the simulated cars, which cannot swerve (they keep to their recorded way): one that would drive
 // through it fades out instead (simtraffic.js, probe).
 import * as THREE from 'three';
 import { vehicleCapsule } from './collide.js';
-import { TYPES, vehicle, carMaterial, beamGeometry, beamTexture } from './traffic.js';
+import { TYPES, beamGeometry, beamTexture } from './traffic.js';
+import { BODY_SPECS, buildCarGeometry, carStyleCode } from './carbodies.js';
+import { loftedCarMaterial, carDepth } from './carmaterial.js';
+import { wheelBlur } from './fleet.js';
 import { LAMP_LAYER, lampMaterial } from './lamplight.js';
 import { streetAt } from '../shared/decks.js';
+import { PASS } from '../shared/tileformat.js';
 
 const CELL = 1.5;              // wall grid (m)
 const WHEELBASE = 2.8, TOP = 44, BOOST = 58, REVERSE = 9;
@@ -19,8 +23,10 @@ const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a
 
 // The walls of the buildings near a point: their faces that stand up, each laid down as the cells of a grid
 // it runs through, built per tile as the tiles come near (tiles(): the scene's tile groups).
+// ground(x, z): the street's level; a wall whose foot stands PASS metres or more over it (a skywalk's, a raised
+// part's: BFLAG.RAISED) is passed under.
 export class Walls {
-  constructor(tiles) { this.tiles = tiles; this.cells = new Map(); }
+  constructor(tiles, ground = null) { this.tiles = tiles; this.ground = ground; this.cells = new Map(); }
   of(tile) {
     let cells = this.cells.get(tile.name);
     if (cells) return cells;
@@ -34,6 +40,7 @@ export class Walls {
         if (Math.abs(nor[a * 3 + 1]) > 0.3) continue; // (a roof)
         // the wall's footprint: the two corners farthest apart on the ground
         const P = [a, b, c].map((v) => [pos[v * 3], pos[v * 3 + 2]]);
+        if (this.ground && Math.min(pos[a * 3 + 1], pos[b * 3 + 1], pos[c * 3 + 1]) - this.ground((P[0][0] + P[1][0] + P[2][0]) / 3, (P[0][1] + P[1][1] + P[2][1]) / 3) >= PASS) continue;
         let i = 0, j = 1, best = -1;
         for (const [u, w] of [[0, 1], [1, 2], [0, 2]]) { const d = (P[u][0] - P[w][0]) ** 2 + (P[u][1] - P[w][1]) ** 2; if (d > best) { best = d; i = u; j = w; } }
         const len = Math.sqrt(best), steps = Math.max(1, Math.ceil(len / (CELL * 0.5)));
@@ -112,25 +119,106 @@ export class Roofs {
   }
 }
 
+// Under a building: in each metre of a tile, the height of the roof drawn over it (its roofs' triangles laid down
+// cell by cell, NaN where there is none), worked out for a tile the first time a simulated car near the view asks.
+// (A street the simulation drives where the city draws a building: Avenida Roosevelt at Hato Rey runs through one,
+// the data of the two not agreeing; its cars went through the walls. Under a roof now they fade out.)
+const COVER = 1;
+export class Overhead {
+  constructor(tiles, size = 256) { this.tiles = tiles; this.size = size; this.grids = new Map(); this.byKey = new Map(); this.budget = 2; }
+  of(tile) {
+    let g = this.grids.get(tile);
+    if (g !== undefined) return g;
+    if (this.budget-- <= 0) return null; // (two tiles a frame: a tile with towers on it takes milliseconds)
+    const b = new THREE.Box3().setFromObject(tile), x0 = Math.floor(b.min.x), z0 = Math.floor(b.min.z);
+    const w = Math.max(1, Math.ceil(b.max.x - x0)), h = Math.max(1, Math.ceil(b.max.z - z0));
+    // (first the undersides of what is raised over the street, a skywalk: a car passing beneath one is in the open,
+    // seen from the side, and the raised building's own roof over it is not a roof over the street; then the roofs)
+    let roof = null, under = null;
+    for (const up of [false, true]) tile.traverse((o) => {
+      if (!o.isMesh || !o.userData.facade) return;
+      const pos = o.geometry.attributes.position.array, nor = o.geometry.attributes.normal.array, idx = o.geometry.index?.array;
+      const n = idx ? idx.length : pos.length / 3;
+      for (let t = 0; t < n; t += 3) {
+        const a = idx ? idx[t] : t, bb = idx ? idx[t + 1] : t + 1, c = idx ? idx[t + 2] : t + 2;
+        if (up ? nor[a * 3 + 1] < 0.3 : nor[a * 3 + 1] > -0.9) continue; // (a wall; on the first pass, all but undersides)
+        const ax = pos[a * 3], az = pos[a * 3 + 2], bx = pos[bb * 3], bz = pos[bb * 3 + 2], cx = pos[c * 3], cz = pos[c * 3 + 2];
+        const d = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
+        if (Math.abs(d) < 1e-6) continue;
+        const i0 = Math.max(0, Math.floor((Math.min(ax, bx, cx) - x0) / COVER)), i1 = Math.min(w - 1, Math.floor((Math.max(ax, bx, cx) - x0) / COVER));
+        const j0 = Math.max(0, Math.floor((Math.min(az, bz, cz) - z0) / COVER)), j1 = Math.min(h - 1, Math.floor((Math.max(az, bz, cz) - z0) / COVER));
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const px = x0 + (i + 0.5) * COVER, pz = z0 + (j + 0.5) * COVER;
+          const u = ((bx - px) * (cz - pz) - (cx - px) * (bz - pz)) / d, v = ((cx - px) * (az - pz) - (ax - px) * (cz - pz)) / d;
+          if (u < -1e-4 || v < -1e-4 || u + v > 1 + 1e-4) continue;
+          const y = u * pos[a * 3 + 1] + v * pos[bb * 3 + 1] + (1 - u - v) * pos[c * 3 + 1], k = j * w + i;
+          if (!up) { under ??= new Float32Array(w * h).fill(NaN); if (!(under[k] <= y)) under[k] = y; continue; }
+          if (under && y >= under[k] - 0.5) continue; // (the raised building's own roof)
+          roof ??= new Float32Array(w * h).fill(NaN);
+          if (!(roof[k] >= y)) roof[k] = y;
+        }
+      }
+    });
+    g = roof ? { x0, z0, w, h, roof } : null;
+    this.grids.set(tile, g);
+    if (this.grids.size > 80) this.grids.delete(this.grids.keys().next().value); // (the oldest)
+    return g;
+  }
+  // the tiles in the scene now (once a frame, by the caller: refresh())
+  // (the budget each frame; the tiles every 30th: they come and go with the view, slowly)
+  refresh() {
+    this.budget = 2;
+    if ((this.frame = (this.frame ?? 0) + 1) % 30 !== 1) return;
+    this.byKey.clear();
+    for (const t of this.tiles()) { const [a, c] = t.name.slice(5).split('_').map(Number); this.byKey.set((a + 32768) * 65536 + c + 32768, t); }
+    for (const t of [...this.grids.keys()]) if (!t.parent) this.grids.delete(t);
+  }
+  // the roof drawn over (x, z), or -Infinity (of the tile there and those round it: a building of one may stand over
+  // its edge)
+  at(x, z) {
+    let top = -Infinity;
+    const tx = Math.floor(x / this.size), tz = Math.floor(z / this.size);
+    for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) {
+      const tile = this.byKey.get((tx + a + 32768) * 65536 + tz + c + 32768);
+      if (!tile) continue;
+      const b = tile.userData.box ??= new THREE.Box3().setFromObject(tile);
+      if (x < b.min.x || x > b.max.x || z < b.min.z || z > b.max.z) continue;
+      const g = this.of(tile);
+      if (!g) continue;
+      const i = Math.floor((x - g.x0) / COVER), j = Math.floor((z - g.z0) / COVER);
+      if (i < 0 || j < 0 || i >= g.w || j >= g.h) continue;
+      const y = g.roof[j * g.w + i];
+      if (y > top) top = y;
+    }
+    return top;
+  }
+}
+
 export class Driver {
   // scene; surface(x, z, -2): the terrain; sim(): the simulated traffic (decks, the cars round about), or null;
   // tiles(): the scene's tile groups (for the walls)
-  constructor({ scene, surface, sim, tiles, lift = () => 0 }) {
+  constructor({ scene, surface, sim, tiles, lift = () => 0, decks = null, wet = () => false }) {
+    this.decks = decks; // (the decks the flyovers draw: roadlevel.js)
+    this.wet = wet; // (water no road crosses, and beyond the city: streamer.wet)
     this.surface = surface; this.sim = sim; this.tiles = tiles; this.lift = lift; // (lift: the paving's height over the terrain)
     this.on = false; this.label = 'Sedán';
-    this.spec = TYPES[1]; // a sedan
-    const geo = vehicle(this.spec.spec, 2);
-    this.brake = new THREE.InstancedBufferAttribute(new Float32Array(1), 1);
-    geo.setAttribute('aBrake', this.brake);
+    this.spec = TYPES[1]; // a sedan: the lofted body (carbodies.js), in a clear-coated paint
+    const body = BODY_SPECS.sedan, geo = buildCarGeometry(body, true);
+    this.wheelR = body.wheelRadius; this.turned = 0;
+    const red = new THREE.Color(0x8c1c1c); // (a red that reads against the asphalt by day and by night)
+    geo.setAttribute('paintColor', new THREE.InstancedBufferAttribute(new Float32Array([red.r, red.g, red.b]), 3));
+    this.state = new THREE.InstancedBufferAttribute(new Float32Array([0, 0, 0, carStyleCode({ metallic: 1, trim: 1, wheel: 1 })]), 4);
+    this.wheel = new THREE.InstancedBufferAttribute(new Float32Array(2), 2);
+    geo.setAttribute('carState', this.state); geo.setAttribute('aWheel', this.wheel);
     geo.setAttribute('aHide', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
-    this.mesh = new THREE.InstancedMesh(geo, carMaterial(true, { hero: true }), 1);
-    this.mesh.setColorAt(0, new THREE.Color(0x8c1c1c)); // (a red that reads against the asphalt by day and by night)
+    this.mesh = new THREE.InstancedMesh(geo, loftedCarMaterial(body, { hero: true }), 1);
     this.mesh.castShadow = true; this.mesh.frustumCulled = false; this.mesh.visible = false;
+    this.mesh.customDepthMaterial = carDepth();
     this.beams = new THREE.InstancedMesh(beamGeometry(this.spec.L), lampMaterial(beamTexture(), { vertexColors: true }), 1);
     this.beams.instanceMatrix = this.mesh.instanceMatrix; this.beams.layers.set(LAMP_LAYER); this.beams.frustumCulled = false; this.beams.visible = false;
     scene.add(this.mesh, this.beams);
     this.m = new THREE.Matrix4();
-    this.walls = new Walls(tiles);
+    this.walls = new Walls(tiles, (x, z) => surface(x, z));
     this.view = null;
   }
 
@@ -144,7 +232,7 @@ export class Driver {
   }
   // Out of it: gone, or (park) left where it stopped, lamps off, to get back into (parked: its place)
   stop({ park = false } = {}) {
-    this.on = false; this.view = null; this.beams.visible = false; this.brake.array[0] = 0; this.brake.needsUpdate = true;
+    this.on = false; this.view = null; this.beams.visible = false; this.state.array[0] = 0; this.state.needsUpdate = true; this.mesh.material.userData.reverse.value = 0;
     this.parked = park ? { x: this.x, z: this.z, y: this.y, heading: this.heading } : null;
     this.mesh.visible = park;
     if (this.sim()) this.sim().probe = null;
@@ -162,14 +250,19 @@ export class Driver {
     let v = this.speed;
     // engine, brakes, reverse; rolling resistance and air
     if (gas) v += (v < 0 ? 14 : 5.6 * (1 - (v / top) ** 2) * (boost ? 1.6 : 1)) * dt; // (0-100 km/h in about 6 s)
-    if (brake) v -= (v > 0.5 ? 16 : 5 * (1 - Math.min(1, -v / REVERSE))) * dt;
+    if (brake) v -= (v > 0.5 ? 9.5 : 5 * (1 - Math.min(1, -v / REVERSE))) * dt; // (as hard as tyres hold on dry asphalt: it was 1.6 g)
     if (!gas && !brake) v -= Math.sign(v) * Math.min(Math.abs(v), (0.5 + 0.06 * Math.abs(v)) * dt);
     if (hand) v -= Math.sign(v) * Math.min(Math.abs(v), 7 * dt);
-    v = THREE.MathUtils.clamp(v, -REVERSE, top + 2);
+    // (held to the push's top speed whether Shift is down or not: let go at 58 m/s, the car was at 46 the next frame.
+    // Over its top speed the engine's share above is negative: it comes down on its own.)
+    v = THREE.MathUtils.clamp(v, -REVERSE, BOOST + 2);
     // steering: the lock closes as the speed rises; the wheel comes back by itself
     const lock = 0.6 / (1 + Math.abs(v) / 11);
     this.steer += (steerIn * lock - this.steer) * (1 - Math.exp(-dt * (steerIn ? 5 : 7)));
-    const yaw = (v / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.7 : 1);
+    // (and no tighter than the tyres hold: 8.5 m/s² across, 12 let go with the handbrake. The wheel alone turned it
+    // at 31 m/s² at 20 m/s and 8 g flat out, a U-turn 23 m wide at 158 km/h.)
+    const most = (hand ? 12 : 8.5) / Math.max(Math.abs(v), 3);
+    const yaw = THREE.MathUtils.clamp((v / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.7 : 1), -most, most);
     this.heading += yaw * dt;
     // the course follows the heading with grip (the handbrake lets go of it: a slide)
     const grip = hand ? 1.6 : 9;
@@ -179,7 +272,16 @@ export class Driver {
     // walls: the nose (or the tail, backing up) and its corners
     const half = this.spec.L * 0.5, side = this.spec.spec.W * 0.5, s = Math.sin(this.heading), c = Math.cos(this.heading), dir = v >= 0 ? 1 : -1;
     const probes = [[0, half * dir], [side, half * dir * 0.85], [-side, half * dir * 0.85]];
-    let hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => this.walls.blocked(nx + c * a + s * b, nz - s * a + c * b));
+    // (and the water's edge: the sea, a lagoon, a river, unless a deck crosses it there at the car's height; set
+    // down in the water, it drives out of it)
+    const water = (x, z) => this.wet(x, z) && !this.wet(this.x, this.z) && this.decks?.at(x, z, this.y + 0.5, 2.4) == null;
+    // (and on a flyover, its parapets: a probe neither on a deck's paving at the car's level nor on the street at
+    // about that level, past the deck's end, is a wall, as for the simulated cars, roadlevel.js offCorners. Nothing
+    // held the car up there: through the parapet it hung in the air for three metres and glided down. Only where
+    // the car itself stands on what it may: somewhere the decks do not cover as drawn, it can still drive out.)
+    const paved = (x, z) => this.decks.cornerOn(x, z, this.y) || (this.decks.ground.on(x, z) && Math.abs(streetAt(this.surface, x, z, this.y) + this.lift(x, z) - this.y) < 0.4);
+    const parapet = this.onDeck && paved(this.x, this.z) ? (x, z) => !paved(x, z) : () => false;
+    let hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => { const x = nx + c * a + s * b, z = nz - s * a + c * b; return this.walls.blocked(x, z) || water(x, z) || parapet(x, z); });
     // the street's things and the vehicles round about (collide.js: the simulated cars, the traffic, the car
     // parked): one met from outside stops it; one it is already inside of it drives out of (set down in a queue,
     // the first seconds it may drive through the cars at all: ghost)
@@ -202,18 +304,22 @@ export class Driver {
     // the ground, or the deck it is on: a deck near its height (a ramp grows out of the road a step at a time,
     // so the car climbs onto it; driving under a flyover, the deck is far above and the ground is the way)
     // (the asphalt as drawn, a bridge's deck at street level included; the kerb up onto a sidewalk)
-    const ground = streetAt(this.surface, this.x, this.z, this.y) + this.lift(this.x, this.z), deck = sim?.deckAt(this.x, this.z, this.y + 0.5) ?? null;
+    const ground = streetAt(this.surface, this.x, this.z, this.y) + this.lift(this.x, this.z), deck = this.decks?.at(this.x, this.z, this.y + 0.5, 2.4) ?? null;
     const want = deck != null && Math.abs(deck - this.y) < 2.4 ? deck : ground;
+    this.onDeck = want !== ground && want - ground > 1; // (up on a flyover, not a deck at street level)
     // (no steeper than a road climbs: the elevation model has the odd bridge embankment in it, a wall to drive into)
-    const moved = Math.hypot(nx - this.x, nz - this.z) + Math.abs(v) * dt, climb = 0.35 * moved + 0.02;
+    const moved = Math.hypot(nx - this.x, nz - this.z) + Math.abs(v) * dt, climb = 0.35 * moved + 1.2 * dt; // (by the time gone, not the frame: it settled twice as fast at 120 Hz)
     this.y += THREE.MathUtils.clamp((want - this.y) * (1 - Math.exp(-dt * 12)), -climb * 2, climb);
-    // pitch and roll from the ground under the wheels (on a deck: level)
-    if (want === ground) {
-      const f = this.surface(this.x + s * 1.4, this.z + c * 1.4, -2) - this.surface(this.x - s * 1.4, this.z - c * 1.4, -2);
-      const r = this.surface(this.x + c * 0.9, this.z - s * 0.9, -2) - this.surface(this.x - c * 0.9, this.z + s * 0.9, -2);
-      this.pitch += (-Math.atan(f / 2.8) - this.pitch) * (1 - Math.exp(-dt * 8));
-      this.roll += (Math.atan(r / 1.8) - this.roll) * (1 - Math.exp(-dt * 8));
-    } else { this.pitch *= Math.exp(-dt * 8); this.roll *= Math.exp(-dt * 8); }
+    // pitch and roll from what is under the wheels: the street as drawn (a bridge at street level is its deck, not the
+    // river bed under it, which is what the bare terrain gave: the car tilted to it), or the deck it is on, fore and
+    // aft (level across). On a flyover's ramp it was drawn level, its nose in the deck.
+    {
+      const at = want === ground ? (x, z) => streetAt(this.surface, x, z, this.y) : (x, z) => this.decks.at(x, z, this.y + 0.5, 2.4) ?? want;
+      const f = at(this.x + s * 1.4, this.z + c * 1.4) - at(this.x - s * 1.4, this.z - c * 1.4);
+      const r = want === ground ? at(this.x + c * 0.9, this.z - s * 0.9) - at(this.x - c * 0.9, this.z + s * 0.9) : 0;
+      this.pitch += (-Math.atan(THREE.MathUtils.clamp(f, -0.6, 0.6) / 2.8) - this.pitch) * (1 - Math.exp(-dt * 8));
+      this.roll += (Math.atan(THREE.MathUtils.clamp(r, -0.4, 0.4) / 1.8) - this.roll) * (1 - Math.exp(-dt * 8));
+    }
     // the body leans out of a turn and dips under the brakes
     const lean = THREE.MathUtils.clamp(yaw * v * 0.012, -0.06, 0.06), dive = brake && v > 1 ? 0.025 : gas ? -0.012 : 0;
     this.bump *= Math.exp(-dt * 6);
@@ -221,7 +327,11 @@ export class Driver {
     m.makeRotationY(this.heading).multiply(new THREE.Matrix4().makeRotationX(-this.pitch + dive)).multiply(new THREE.Matrix4().makeRotationZ(this.roll + lean));
     m.setPosition(this.x, this.y + 0.01, this.z);
     this.mesh.setMatrixAt(0, m); this.mesh.instanceMatrix.needsUpdate = true;
-    this.brake.array[0] = brake && v > 0.3 ? 1 : 0; this.brake.needsUpdate = true;
+    this.state.array[0] = brake && v > 0.3 ? 1 : 0; this.state.needsUpdate = true;
+    // its wheels turn as it goes; its reversing lamps light going backwards
+    this.turned += (v * dt) / this.wheelR;
+    this.wheel.array[0] = this.turned; this.wheel.array[1] = wheelBlur(Math.abs(v), this.wheelR); this.wheel.needsUpdate = true;
+    this.mesh.material.userData.reverse.value = v < -0.3 ? 1 : 0;
     this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: Math.abs(v), kmh: Math.abs(v) * 3.6, bump: this.bump, reversing: v < -0.3 };
   }
 }

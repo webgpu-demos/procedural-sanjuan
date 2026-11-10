@@ -25,6 +25,9 @@ export const AREAS = {
     view: [3000, 1600, 5200, 38, 22], // from over Hato Rey, north-west across Santurce to the Condado and Old San Juan
     heritage: OLD_CITY,
     ads: 0.2,
+    // where the billboards and screens crowd (not the origin: that is the Plaza de Armas, in the old city, where none
+    // stand): the Milla de Oro, and Avenida Ponce de León in Santurce
+    adsAt: [[-66.0629, 18.4236], [-66.0705, 18.4490]],
     chunk: 0.04, terrain: 10, orthoZoom: 15, stream: 1000,
   },
   condado: {

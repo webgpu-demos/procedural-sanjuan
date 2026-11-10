@@ -83,6 +83,7 @@ uniform vec3 uSunGlint;
 uniform float uGlintOn;
 uniform sampler2DArray uWallAlb;
 uniform sampler2DArray uWallNor;
+uniform sampler2D uShopWords;
 uniform float uWallScale[6];
 uniform float uWallDetail[6];
 varying vec4 vFacade;
@@ -117,8 +118,10 @@ const FACADE_MAIN = /* glsl */ `
   vec3 tuv = vec3(st / uWallScale[int(layer)], layer);
   vec3 wall = diffuseColor.rgb * mix(vec3(1.0), texture(uWallAlb, tuv).rgb * 2.0, uWallDetail[int(layer)]);
   wall *= 0.9 + 0.2 * vnoise(st * 0.11 + seed * 50.0);          // breaks up tiling over large walls
+  // (the maps' green points up the image, and the image's rows run down v, the way gB points: taken the other way,
+  // as it was, a brick's courses and a wall's grooves were lit as ridges along that one axis)
   gNm = texture(uWallNor, tuv).xyz * 2.0 - 1.0;
-  gNm = normalize(vec3(gNm.xy * 0.7, gNm.z));
+  gNm = normalize(vec3(gNm.x * 0.7, -gNm.y * 0.7, gNm.z));
   gRough = 0.82; gMetal = 0.0; gEmissive = vec3(0.0);
   if (layer > 3.5 && layer < 4.5) { gRough = 0.5; gMetal = 0.35; }  // metal siding and roofs
 
@@ -132,8 +135,24 @@ const FACADE_MAIN = /* glsl */ `
   }
   diffuseColor.rgb = wall;
 
+  // a colonial balcony's railing (meshing.js): wrought-iron bars, rails at the top, the foot and below the top,
+  // over the wall behind it in the balcony's shade (the vertex colour is the wall's); the iron black, a deep green
+  // or white, building by building. Far off the bars blur into their share of the panel.
+  if (kind > 4.5) {
+    float h = fract((v + 0.12 - 0.16) / floorH) * floorH, x = st.x;   // height over the balcony's floor; metres along
+    float wh = max(fwidth(h), 1e-4), wxr = max(fwidth(x), 1e-4);
+    float bars = box(fract(x / 0.13), 0.4, 0.6, wxr / 0.13);
+    float rails = max(max(box(h, 0.92, 1.01, wh), box(h, -0.01, 0.06, wh)), box(h, 0.74, 0.77, wh));
+    float iron = max(bars, rails), blur = smoothstep(0.3, 0.8, max(wh, wxr / 0.13));
+    iron = mix(iron, 0.42, blur);
+    float pick = fract(seed * 23.7);
+    vec3 ironCol = pick < 0.5 ? vec3(0.025, 0.027, 0.03) : pick < 0.8 ? vec3(0.02, 0.06, 0.04) : vec3(0.75, 0.75, 0.72);
+    diffuseColor.rgb = mix(vColor.rgb * 0.38, ironCol, iron);
+    gRough = mix(0.85, 0.45, iron); gMetal = mix(0.0, 0.3, iron * step(pick, 0.8));
+    gNm = vec3(0.0, 0.0, 1.0);
+  }
   // steelwork of a lattice tower (src/world/tower.js): painted steel in the vertex colour, floodlit at night
-  if (kind > 3.5) {
+  if (kind > 3.5 && kind < 4.5) {
     // (a colour brighter than 1 is a lamp: dark glass by day, lit at night; the steel keeps its own paint
     // under the floodlights)
     float lampOn = step(1.5, max(vColor.r, max(vColor.g, vColor.b)));
@@ -150,6 +169,7 @@ const FACADE_MAIN = /* glsl */ `
     vec2 room = vec2(col + mod(sid, 61.0) * 17.0, row + mod(sid, 53.0) * 13.0);
     float fx = fract(u), fy = fract(fyAll);
     float wx = max(fwidth(u), 1e-4), wy = max(fwidth(fyAll), 1e-4);
+    vec2 gu = vec2(dFdx(u), dFdy(u)), gf = vec2(dFdx(fyAll), dFdy(fyAll)); // (for the shop names' texture lookups)
     float far = smoothstep(0.2, 0.6, max(wx, wy));                   // the grid aliases far away
 
     // window rectangle within one bay: [x0, x1] x [y0, y1]
@@ -162,6 +182,9 @@ const FACADE_MAIN = /* glsl */ `
     bool colonial = cat > 1.5 && cat < 2.5 && !shop;
     if (colonial) r = vec4(0.3, 0.7, 0.1, 0.86);
     if (shop) r = vec4(0.05, 0.95, 0.03, 0.8);                       // ground-floor shopfront
+    // (in the colonial city a shop opens through a tall doorway, not a plate-glass front)
+    bool oldShop = shop && cat < 2.5;
+    if (oldShop) r = vec4(0.17, 0.83, 0.0, 0.8);
     float valid = step(0.0, v) * step(v, height - 0.9);
     // houses and apartments: some bays are plain wall
     if (cat < 2.5 && !shop) valid *= step(0.2, hash12(room + 41.0));
@@ -187,7 +210,7 @@ const FACADE_MAIN = /* glsl */ `
     frame *= 1.0 - far;
     float pane = inWin * (1.0 - frame);
     // louvred wooden shutters: closed over some openings (no glass shows), folded back beside the others
-    float closed = colonial ? step(0.55, hash12(room + 91.0)) : 0.0;
+    float closed = colonial ? step(0.55, hash12(room + 91.0)) : oldShop ? step(0.62, hash12(room + 91.0)) : 0.0;
     pane *= 1.0 - closed;
 
     // interior mapping: intersect the view ray with a room box behind the glass
@@ -260,7 +283,7 @@ const FACADE_MAIN = /* glsl */ `
       float under = box(v, height - 0.6, height - 0.5, wv) * (1.0 - far);
       float band = row > 0.5 ? box(fy * floorH, -0.02, 0.14, wv) * (1.0 - 0.7 * far) : 0.0;
       float surround = 0.0;
-      if (colonial) {
+      if (colonial || oldShop) {
         float e2 = min(min(pm.x - wmin.x + 0.13, wmax.x + 0.13 - pm.x), min(pm.y - wmin.y + 0.1, wmax.y + 0.22 - pm.y));
         surround = (1.0 - inWin) * smoothstep(-0.5, 0.5, e2 / max(fwidth(e2), 1e-4)) * valid * (1.0 - far);
       }
@@ -275,6 +298,21 @@ const FACADE_MAIN = /* glsl */ `
       float leaves = closed * inWin + open;
       diffuseColor.rgb = mix(diffuseColor.rgb, shutterCol * slats, leaves);
       gRough = mix(gRough, 0.75, leaves); gMetal = mix(gMetal, 0.0, leaves);
+      gNm = mix(gNm, vec3(0.0, 0.0, 1.0), leaves);
+    }
+    if (oldShop) {
+      // its doors, panelled and painted: shut across some doorways, folded back beside the others with the shop's
+      // glass between them
+      float k = fract(seed * 13.1 + hash12(room + 3.3) * 0.4);
+      vec3 doorCol = k < 0.3 ? vec3(0.1, 0.3, 0.18) : k < 0.55 ? vec3(0.34, 0.21, 0.11) : k < 0.8 ? vec3(0.42, 0.11, 0.09) : vec3(0.08, 0.28, 0.4);
+      float lx = fract((fx - r.x) / (r.y - r.x) * 2.0), ly = fy / r.w;    // across one leaf, up the doorway
+      float wl = max(fwidth(lx), 1e-4), wly = max(fwidth(ly), 1e-4);
+      float panel = box(lx, 0.16, 0.84, wl) * (box(ly, 0.06, 0.42, wly) + box(ly, 0.5, 0.94, wly)) * (1.0 - far);
+      float seam = (1.0 - box(lx, 0.025, 0.975, wl)) * (1.0 - far);
+      float open = (box(fx, r.x - 0.12, r.x, wx) + box(fx, r.y, r.y + 0.12, wx)) * box(fy, r.z, r.w, wy) * valid * (1.0 - closed) * (1.0 - far);
+      float leaves = closed * inWin + open;
+      diffuseColor.rgb = mix(diffuseColor.rgb, doorCol * mix(1.0, 0.8, panel * closed) * (1.0 - 0.5 * seam * closed), leaves);
+      gRough = mix(gRough, 0.7, leaves); gMetal = mix(gMetal, 0.0, leaves);
       gNm = mix(gNm, vec3(0.0, 0.0, 1.0), leaves);
     }
     float daylight = (1.0 - uNight) * (shop ? 0.3 : cat > 4.5 && cat < 5.5 ? 0.06 : 0.12);
@@ -324,13 +362,25 @@ const FACADE_MAIN = /* glsl */ `
     // the lintel shades the top of the opening
     diffuseColor.rgb *= 1.0 - 0.35 * inWin * (1.0 - smoothstep(0.0, 0.18, wmax.y - pm.y)) * (1.0 - far);
 
-    // sign band over shopfronts
+    // sign band over shopfronts: a painted board with dark letters, or now and then a dark one with light letters,
+    // and the shop's trade on it, a word from the atlas (shopWords) centred at a fixed share of the board's height
     if (shop) {
       float sign = box(fy, 0.84, 0.985, wy) * box(fx, 0.03, 0.97, wx) * valid * step(0.25, hash12(room + 57.0));
-      vec3 sc = mix(hue(hash12(room + 71.0)), vec3(0.93), 0.35 + 0.35 * step(0.6, hash12(room + 83.0))); // (painted boards, not neon)
-      diffuseColor.rgb = mix(diffuseColor.rgb, sc * 0.75, sign);
-      gEmissive += sign * sc * uNight * 1.6 * gridPower(seed);
-      gRough = mix(gRough, 0.4, sign);
+      if (sign > 0.0) { // (the board only: the rest of the shop front skips the lettering)
+        float dark = step(0.72, hash12(room + 83.0));
+        vec3 hc = hue(hash12(room + 71.0));
+        vec3 sc = dark > 0.5 ? hc * 0.22 + 0.025 : mix(hc, vec3(0.93), 0.35 + 0.35 * step(0.45, hash12(room + 89.0))); // (painted boards, not neon)
+        vec3 ink = dark > 0.5 ? vec3(0.95, 0.9, 0.78) : mix(hc * 0.3, vec3(0.05), 0.55);
+        float k = (0.94 * cellW) / (0.145 * floorH) / 8.0;                // the board's width to height, over the atlas row's 8
+        vec2 b = vec2((fx - 0.5) / 0.94, (fy - 0.84) / 0.145);            // across the board -0.5..0.5, up it 0..1
+        vec2 auv = vec2(0.5 + b.x * k, (floor(hash12(room + 97.0) * 32.0) + 1.0 - b.y) / 32.0);
+        float letters = textureGrad(uShopWords, auv, vec2(gu.x * k, -gf.x / 32.0) / vec2(0.94, 0.145), vec2(gu.y * k, -gf.y / 32.0) / vec2(0.94, 0.145)).r
+          * step(0.0, auv.x) * step(auv.x, 1.0) * step(0.0, b.y) * step(b.y, 1.0);
+        vec3 face = mix(sc, ink, letters);
+        diffuseColor.rgb = mix(diffuseColor.rgb, face * 0.75, sign);
+        gEmissive += sign * face * uNight * 0.7 * step(0.33, hash12(room + 61.0)) * gridPower(seed); // (lit boards, not light boxes: the pale ones burnt out white; a third unlit)
+        gRough = mix(gRough, 0.4, sign);
+      }
     }
   }
 }
@@ -369,6 +419,35 @@ if (synthTarp(vWPos, vSynth, vBldg.z) > 0.5) {
 }
 `;
 
+// The trades on the shopfronts' sign bands (FACADE_MAIN): a column of 32 words, one to a row of 512 x 64 pixels,
+// white on black, centred and kept within the middle 240 pixels so a narrow board still shows the whole of it.
+// Drawn once, when the first facade compiles.
+const SHOP_WORDS = [
+  'FARMACIA', 'PANADERÍA', 'COLMADO', 'BARBERÍA', 'JOYERÍA', 'CAFÉ', 'RESTAURANTE', 'LIBRERÍA',
+  'BOUTIQUE', 'GALERÍA', 'HELADOS', 'ARTESANÍAS', 'SOUVENIRS', 'ÓPTICA', 'FERRETERÍA', 'ZAPATERÍA',
+  'LAVANDERÍA', 'PIZZERÍA', 'REPOSTERÍA', 'FLORISTERÍA', 'MODAS', 'LECHONERA', 'BAR', 'CELULARES',
+  'MUEBLERÍA', 'PERFUMERÍA', 'BAZAR', 'LICORES', 'BODEGA', 'SEGUROS', 'TIENDA', 'CAFETERÍA',
+];
+let shopWordsTexture = null;
+function shopWords() {
+  if (shopWordsTexture) return shopWordsTexture;
+  const W = 512, R = 64, canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = R * SHOP_WORDS.length;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, canvas.height);
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  SHOP_WORDS.forEach((w, i) => {
+    // (a third in a serif, the old city's lettering; the rest in a heavy condensed sans)
+    g.font = i % 3 === 1 ? 'bold 34px Georgia, "Times New Roman", serif' : '800 38px "Avenir Next Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif';
+    const tw = g.measureText(w).width, fit = Math.min(1, 240 / tw);
+    g.save(); g.translate(W / 2, i * R + R / 2 + 2); g.scale(fit, 1); g.fillText(w, 0, 0); g.restore();
+  });
+  const t = new THREE.CanvasTexture(canvas);
+  t.flipY = false; t.colorSpace = THREE.NoColorSpace; t.anisotropy = 8;
+  t.minFilter = THREE.LinearMipmapLinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  return (shopWordsTexture = t);
+}
+
 function facadeMaterial(tex) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.0 });
   m.userData.photo = { value: NO_PHOTO }; m.userData.photoOn = { value: 0 };
@@ -377,13 +456,17 @@ function facadeMaterial(tex) {
       uLampOn: { value: 0 }, uLampMap: shared.uLampMap, // (no lamp light on buildings; the sampler still needs its texture)
       uPhoto: m.userData.photo, uPhotoOn: m.userData.photoOn, uPhotoRange: shared.uPhotoRange, uPhotoMix: shared.uPhotoMix,
       uNight: shared.uNight, uTime: shared.uTime, uWindowLife: shared.uWindowLife, uCityGlass: shared.uCityGlass, uNightBlue: shared.uNightBlue, uGrid: shared.uGrid, uSunDir: shared.uSunDir, uSunGlint: shared.uSunGlint, uGlintOn: shared.uGlintOn, uWallAlb: { value: tex.wall.albedo }, uWallNor: { value: tex.wall.normal },
-      uWallScale: { value: tex.wall.scales }, uWallDetail: { value: tex.wall.details },
+      uWallScale: { value: tex.wall.scales }, uWallDetail: { value: tex.wall.details }, uShopWords: { value: shopWords() },
     });
+    // (vSynth is the same at every vertex of a building, so it is not `flat`: on Chrome's Metal backend a flat
+    // varying anywhere in the program has every draw's indices rewritten, or made, first (GL's provoking vertex is
+    // the last, Metal's the first), a compute pass and a buffer per draw, some 1 ms a frame over Hato Rey's towers.
+    // synthTarp rounds the one component read as an integer.)
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec4 aFacade;\nattribute vec4 aBldg;\nattribute vec2 aPhoto;\nattribute vec4 aSynth;\nvarying vec4 vFacade;\nvarying vec4 vBldg;\nvarying vec2 vPhoto;\nflat varying vec4 vSynth;\n${WORLD_VARYINGS_VERT}`)
+      .replace('#include <common>', `#include <common>\nattribute vec4 aFacade;\nattribute vec4 aBldg;\nattribute vec2 aPhoto;\nattribute vec4 aSynth;\nvarying vec4 vFacade;\nvarying vec4 vBldg;\nvarying vec2 vPhoto;\nvarying vec4 vSynth;\n${WORLD_VARYINGS_VERT}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvFacade = aFacade;\nvBldg = aBldg;\nvPhoto = aPhoto;\nvSynth = aSynth;\n${WORLD_VARYINGS_SET}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + FACADE_PARS + PHOTO_PARS + 'flat varying vec4 vSynth;\n' + TARP_GLSL)
+      .replace('#include <common>', '#include <common>\n' + FACADE_PARS + PHOTO_PARS + 'varying vec4 vSynth;\n' + TARP_GLSL)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + FACADE_MAIN + PHOTO_MAIN + TARP_MAIN)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = gMetal;')
@@ -393,11 +476,66 @@ function facadeMaterial(tex) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gPane;');
   };
-  m.customProgramCacheKey = () => 'facade-v26';
+  m.customProgramCacheKey = () => 'facade-v32';
   return m;
 }
 
 // ---------------------------------------------------------------- ground
+const ROAD_WEAR = /* glsl */ `
+// The asphalt's wear and repairs (after mrdoob's road material in slop-newyork, MIT): hairline block cracking in the
+// worn stretches, utility-cut patches and trenches with tar-sealed edges (fresh and dark, or old and pale), potholes,
+// tar snakes over the wider cracks, oil drips. Each is traced only while it is wider than a pixel, then settles to its
+// mean. wxz: world position; px: metres a pixel spans.
+// (smoothstep with its edges either way round: GLSL leaves a reversed smoothstep undefined)
+float rss(float a, float b, float x) { float t = clamp((x - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+float voronoiBorder(vec2 p) {
+  vec2 ip = floor(p), fp = fract(p);
+  float f1 = 8.0, f2 = 8.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 id = ip + vec2(float(i), float(j));
+    vec2 site = vec2(float(i), float(j)) + vec2(hash12(id), hash12(id + vec2(37.1, 11.7))) * 0.8 + 0.1;
+    float d = length(fp - site);
+    f2 = min(f2, max(f1, d)); f1 = min(f1, d);
+  }
+  return (f2 - f1) * 0.5;
+}
+// x: crack coverage, y: signed distance to a patch's edge (< 0 inside), z: pothole (0..1), w: 1 where the cell has a patch
+vec4 roadWear(vec2 wxz, float px) {
+  float worn = rss(0.5, 0.78, vnoise(wxz * 0.045 + 71.0));
+  float crack = 0.0;
+  if (worn > 0.001 && px < 0.04) {
+    vec2 warp = (vec2(vnoise(wxz * 2.7), vnoise(wxz * 2.7 + 13.0)) - 0.5) * 0.35;
+    float border = voronoiBorder(wxz / 0.55 + warp) * 0.55;
+    float width = worn * 0.0016 + 0.0012, eff = max(width, px * 0.6);
+    crack = (1.0 - rss(eff, eff + px, border)) * (width / eff) * worn * rss(0.04, 0.015, px);
+  }
+  vec2 pCell = floor(wxz / 11.0);
+  float hasPatch = step(0.5, hash12(pCell + vec2(3.7, 8.1))), trench = step(0.6, hash12(pCell + vec2(2.9, 6.3))), alongX = step(0.5, hash12(pCell + vec2(5.5, 9.9)));
+  vec2 pCentre = (pCell + 0.5 + (vec2(hash12(pCell + vec2(1.3, 5.9)), hash12(pCell + vec2(9.2, 2.4))) - 0.5) * mix(0.4, 0.08, trench)) * 11.0;
+  vec2 cutHalf = vec2(hash12(pCell + vec2(4.4, 0.6)) * 1.8 + 0.6, hash12(pCell + vec2(7.8, 3.1)) * 1.4 + 0.5);
+  float trenchLong = hash12(pCell + vec2(0.7, 4.8)) * 2.0 + 2.4, trenchNarrow = hash12(pCell + vec2(6.6, 7.2)) * 0.25 + 0.3;
+  vec2 pHalf = mix(cutHalf, mix(vec2(trenchNarrow, trenchLong), vec2(trenchLong, trenchNarrow), alongX), trench);
+  vec2 pq = abs(wxz - pCentre) - pHalf;
+  float patchDist = max(pq.x, pq.y);
+  vec2 hCell = floor(wxz / 7.0);
+  vec2 hCentre = (hCell + vec2(hash12(hCell + vec2(2.2, 7.7)), hash12(hCell + vec2(6.1, 1.9))) * 0.6 + 0.2) * 7.0;
+  float hRadius = hash12(hCell + vec2(5.3, 4.2)) * 0.24 + 0.12;
+  float hDist = length(wxz - hCentre) * ((vnoise(wxz * 6.0) - 0.5) * 0.5 + 1.0);
+  float hasHole = step(0.975 - worn * 0.12, hash12(hCell + vec2(8.8, 0.3)));
+  float pothole = rss(hRadius + px, hRadius * 0.35, hDist) * hasHole;
+  return vec4(crack * (1.0 - step(patchDist, 0.0) * hasPatch), patchDist, pothole, hasPatch);
+}
+float roadTarSnakes(vec2 wxz, float px) {
+  float zone = rss(0.3, 0.48, vnoise(wxz * 0.03 + 17.0));
+  if (zone < 0.001 || px > 0.12) return 0.0;
+  vec2 warp = (vec2(vnoise(wxz * 0.9), vnoise(wxz * 0.9 + 31.0)) - 0.5) * 0.6;
+  float border = voronoiBorder(wxz / 2.4 + warp) * 2.4;
+  float keep = rss(0.38, 0.5, vnoise(wxz * 0.6 + 5.0));
+  float width = vnoise(wxz * 1.7 + 9.0) * 0.012 + 0.014, eff = max(width, px * 0.6);
+  return (1.0 - rss(eff, eff + px, border)) * (width / eff) * zone * keep * rss(0.12, 0.06, px);
+}
+`;
+
 // Terrain and road surfaces: vertex colour x texture detail, layer from the aLayer attribute
 // (roads) or fixed (terrain).
 const GROUND_PARS = /* glsl */ `
@@ -427,7 +565,9 @@ float gMirror = 0.0; // how much of a mirror this fragment is: water (written to
 vec3 gGlint = vec3(0.0), gSheen = vec3(0.0); // the sun in the water, where it reaches; the sky round a low sun in it
 float gLampGain = 1.0; // the share of the street lamps' light it takes (LAMP_GAIN, on the tiles' ground)
 float gSand = 0.0;      // how much it is a beach's sand (a beach area, or open ground the photo shows bright and warm)
+float gVeg = 0.0;       // how much it is grass the photo shows (open ground)
 ${NOISE}
+${ROAD_WEAR}
 `;
 const GROUND_MAIN = /* glsl */ `
 {
@@ -448,8 +588,30 @@ const GROUND_MAIN = /* glsl */ `
   float blotch = vnoise(st * 0.045);
   diffuseColor.rgb *= mix(a, b, 0.4) * (0.86 + 0.28 * blotch);
   gNm = texture(uGroundNor, vec3(st / sc, layer)).xyz * 2.0 - 1.0;
-  gNm = normalize(vec3(gNm.xy * 0.8, gNm.z));
+  gNm = normalize(vec3(gNm.x * 0.8, -gNm.y * 0.8, gNm.z)); // (green up the image, rows down v: as the walls')
   gRough = layer < 0.5 ? 0.86 - 0.12 * blotch : layer > 4.5 ? 0.62 - 0.1 * blotch : 0.93; // (worn adoquines have a sheen)
+  // the asphalt of the roads (not the open ground's paving): worn, cracked and patched, the odd pothole (ROAD_WEAR)
+  // (the pixel's size taken outside the branch: derivatives need every pixel round it to take them)
+  float roadPx = max(length(fwidth(vWPos.xz)), 1e-4);
+  if (layer < 0.5 && uFixedLayer < 0.0) {
+    vec2 wxz = vWPos.xz;
+    float px = roadPx;
+    vec4 wear = roadWear(wxz, px);
+    float patchCover = rss(px, -px, wear.y) * wear.w;
+    float sealW = max(0.022, px * 0.75), patchSeal = (1.0 - rss(sealW, sealW + px, abs(wear.y))) * (0.022 / sealW) * wear.w;
+    float fresh = step(0.55, hash12(floor(wxz / 11.0) + vec2(12.9, 6.6)));
+    float chips = mix(0.035, rss(0.72, 0.8, vnoise(wxz * 30.0)), rss(0.03, 0.012, px));
+    float tar = roadTarSnakes(wxz, px) * (1.0 - patchCover);
+    vec2 oilCell = floor(wxz / 2.5);
+    vec2 oilCentre = (oilCell + vec2(hash12(oilCell + vec2(4.1, 2.2)), hash12(oilCell + vec2(8.3, 6.7))) * 0.6 + 0.2) * 2.5;
+    float oilDist = length(wxz - oilCentre) * ((vnoise(wxz * 5.0) - 0.5) * 0.8 + 1.0), oilR = hash12(oilCell + vec2(1.9, 9.4)) * 0.25 + 0.1;
+    float oil = rss(oilR + px, oilR * 0.3, oilDist) * step(0.66, hash12(oilCell + vec2(7.7, 3.3))) * (hash12(oilCell + vec2(2.6, 5.1)) * 0.6 + 0.4);
+    vec3 base = diffuseColor.rgb;
+    vec3 patchCol = mix(mix(base, vec3(dot(base, vec3(0.33))) * 1.25, 0.45) * 1.06, base * 0.62, fresh);
+    diffuseColor.rgb = mix(base, patchCol, patchCover) * (1.0 - patchSeal * 0.5) + chips * 0.02 * (1.0 - patchCover * fresh);
+    diffuseColor.rgb *= (1.0 - tar * 0.62) * (1.0 - oil * 0.45) * (1.0 - wear.x * 0.65) * (1.0 - wear.z * 0.45);
+    gRough = clamp(gRough - patchSeal * 0.3 - tar * 0.38 - oil * 0.18 - patchCover * fresh * 0.06 + wear.z * 0.06, 0.3, 1.0);
+  }
   // the open ground (not roads, which have their own surface) shows the aerial photo: car parks, yards, gardens
   if (uFixedLayer >= 0.0 && uOrthoOn > 0.5) {
     vec2 ouv = (vWPos.xz - uOrthoRect.xy) / uOrthoRect.zw;
@@ -463,6 +625,7 @@ const GROUND_MAIN = /* glsl */ `
       // lighter or darker as the photo is, with a little of the photo's own colour.
       vec2 gst = st / uGroundScale[2], dst = st / uGroundScale[3], pst = st / uGroundScale[0];
       float veg = smoothstep(-0.005, 0.04, photo.g - max(photo.r, photo.b));
+      gVeg = veg;
       float warm = (1.0 - veg) * smoothstep(0.004, 0.04, photo.r - photo.b);
       gSand = warm * smoothstep(0.25, 0.5, dot(photo, vec3(0.3, 0.59, 0.11)));
       float pl = dot(photo, vec3(0.3, 0.59, 0.11)), lit = smoothstep(0.03, 0.55, pl);
@@ -478,8 +641,21 @@ const GROUND_MAIN = /* glsl */ `
                    * mix(1.0, 0.85 + 0.3 * vnoise(st * 0.083 + 7.1), 1.0 - smoothstep(3.0, 12.0, px)) * (0.92 + 0.16 * blotch);
       diffuseColor.rgb = mix(cls, photo * 0.55, 0.2) * detail;
       gNm = mix(mix(texture(uGroundNor, vec3(pst, 0.0)).xyz, texture(uGroundNor, vec3(dst, 3.0)).xyz, warm), texture(uGroundNor, vec3(gst, 2.0)).xyz, veg) * 2.0 - 1.0;
-      gNm = normalize(vec3(gNm.xy * 0.55, gNm.z));
+      gNm = normalize(vec3(gNm.x * 0.55, -gNm.y * 0.55, gNm.z));
     }
+  }
+  // Grass is not one green: patches tens of metres across burnt toward straw where it is dry, and others darker and
+  // lusher (a park or a lawn had been a single even green from the air, like baize)
+  float grassy = abs(layer - 2.0) < 0.5 && uFixedLayer < 0.0 ? 1.0 : gVeg;
+  if (grassy > 0.01 && !water) {
+    vec2 q = vWPos.xz;
+    float dry = smoothstep(0.5, 0.78, 0.65 * vnoise(q * 0.011 + 3.1) + 0.35 * vnoise(q * 0.047 + 8.2));
+    float lush = smoothstep(0.55, 0.85, vnoise(q * 0.019 + 1.7)) * (1.0 - dry);
+    vec3 g = diffuseColor.rgb;
+    float lum = dot(g, vec3(0.3, 0.59, 0.11));
+    g = mix(g, lum * vec3(1.5, 1.18, 0.5), dry * 0.6);   // straw
+    g = mix(g, g * vec3(0.75, 0.88, 0.68), lush * 0.6);  // deep green
+    diffuseColor.rgb = mix(diffuseColor.rgb, g, grassy);
   }
   // A beach: the sand below the reach of the waves is wet, darker and with a sheen, and the last of each wave
   // runs up it as a thin edge of foam and drains back. (The sand had been one dry cream plane to the waterline.)
@@ -622,7 +798,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
         '\n#ifdef MATTE\nreflectedLight.indirectSpecular *= MATTE; reflectedLight.directSpecular *= MATTE;\n#endif')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v13';
+  m.customProgramCacheKey = () => 'ground-v15';
   return m;
 }
 

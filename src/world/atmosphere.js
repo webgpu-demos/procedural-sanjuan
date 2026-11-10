@@ -6,7 +6,7 @@
 // local frame: worldToECEFMatrix places it on the globe, and the colour buffer is scaled into their units
 // before the effects and back after them.
 import * as THREE from 'three';
-import { EffectComposer, RenderPass, EffectPass, Effect, EffectAttribute, DepthOfFieldEffect, BloomEffect, ToneMappingEffect, ToneMappingMode, VignetteEffect, NoiseEffect, BlendFunction } from 'postprocessing';
+import { EffectComposer, RenderPass, EffectPass, Effect, EffectAttribute, DepthOfFieldEffect, BloomEffect, ToneMappingEffect, ToneMappingMode, VignetteEffect, NoiseEffect, BlendFunction, SMAAEffect, SMAAPreset, EdgeDetectionMode } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { WindowReflections } from './reflections.js';
 import { shared } from './materials.js';
@@ -43,6 +43,7 @@ class TwilightSky extends Effect {
         vec4 w = uInvViewProj * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
         vec3 hit = w.xyz / w.w, dir = normalize(hit - uCam);
         float up = clamp(dir.y, -0.05, 1.0);
+        float px = max(length(fwidth(dir)), 1e-5); // (a pixel's size on the sky, for the stars: before any pixel returns)
         bool isSky = depth >= 0.99999;
         if (!isSky) {
           // the far ground and sea melt into the twilight horizon (the physical haze stays bright after dusk)
@@ -68,7 +69,7 @@ class TwilightSky extends Effect {
         // its cell of the sky (the cells themselves, lit whole, read as dashes and streaks)
         vec3 cell = floor(dir * 150.0);
         vec3 at = normalize((cell + 0.5 + 0.5 * (vec3(hash(cell + 1.0), hash(cell + 2.0), hash(cell + 3.0)) - 0.5)) / 150.0);
-        float px = max(length(fwidth(dir)), 1e-5), ang = length(dir - at);
+        float ang = length(dir - at);
         float star = step(0.988, hash(cell)) * (1.0 - smoothstep(0.5 * px, 1.3 * px, ang)) * smoothstep(0.1, 0.45, up) * smoothstep(0.74, 0.97, uDark); // (fewer over a lit city, and none low down in its glow)
         sky += vec3(star * (0.35 + 0.65 * hash(cell + 7.0)));
         outputColor.rgb = inputColor.rgb + sky * uDark * 0.6;
@@ -109,10 +110,10 @@ class MotionBlur extends Effect {
       uniforms: new Map([['uInvViewProj', new THREE.Uniform(new THREE.Matrix4())], ['uPrevViewProj', new THREE.Uniform(new THREE.Matrix4())],
         ['uCam', new THREE.Uniform(new THREE.Vector3())], ['uStrength', new THREE.Uniform(0)]]),
     });
-    this.camera = camera; this.viewProj = new THREE.Matrix4(); this.started = false;
+    this.camera = camera; this.viewProj = new THREE.Matrix4(); this.vp = new THREE.Matrix4(); this.started = false;
   }
   update() {
-    const vp = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    const vp = this.vp.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
     this.uniforms.get('uPrevViewProj').value.copy(this.started ? this.viewProj : vp);
     this.viewProj.copy(vp); this.started = true;
     this.uniforms.get('uInvViewProj').value.copy(vp).invert();
@@ -122,8 +123,10 @@ class MotionBlur extends Effect {
 
 // The grade, after the tone mapping: a gentle S of contrast, a touch more colour, the shadows a little cool and
 // the highlights a little warm (as film and a graded picture are, against the even look of a render)
+// (gamma: the picture left as the eye sees it, in gamma space, for the edge smoothing that follows, which works there;
+// like: another Grade whose settings this one shares)
 class Grade extends Effect {
-  constructor() {
+  constructor(gamma = false, like = null) {
     super('Grade', `
       uniform float uContrast, uSaturation; uniform vec3 uShadows, uHighlights;
       void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
@@ -132,19 +135,23 @@ class Grade extends Effect {
         s = mix(s, s * s * (3.0 - 2.0 * s), uContrast);
         float l = dot(s, vec3(0.2126, 0.7152, 0.0722));
         s = mix(vec3(l), s, uSaturation) * mix(uShadows, uHighlights, smoothstep(0.1, 0.75, l));
-        outputColor = vec4(pow(clamp(s, 0.0, 1.0), vec3(2.2)), inputColor.a);
+        outputColor = vec4(${gamma ? 'clamp(s, 0.0, 1.0)' : 'pow(clamp(s, 0.0, 1.0), vec3(2.2))'}, inputColor.a);
       }`, {
-      uniforms: new Map([['uContrast', new THREE.Uniform(0.22)], ['uSaturation', new THREE.Uniform(1.08)],
+      uniforms: like ? new Map(like.uniforms) : new Map([['uContrast', new THREE.Uniform(0.22)], ['uSaturation', new THREE.Uniform(1.08)],
         ['uShadows', new THREE.Uniform(new THREE.Vector3(0.97, 1.0, 1.045))], ['uHighlights', new THREE.Uniform(new THREE.Vector3(1.035, 1.0, 0.955))]]),
     });
   }
+}
+// (and back from gamma space to light, after the edge smoothing)
+class ToLight extends Effect {
+  constructor() { super('ToLight', 'void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) { outputColor = vec4(pow(max(inputColor.rgb, 0.0), vec3(2.2)), inputColor.a); }'); }
 }
 
 export class Atmosphere {
   // origin: { lon, lat } of the world origin; the world is x east, y up, z south.
   // bounds: { minX, maxX, minZ, maxZ } of the area; the clouds can be kept to the sky above it.
   constructor(renderer, scene, camera, origin, bounds) {
-    this.renderer = renderer;
+    this.renderer = renderer; this.camera = camera;
     renderer.toneMapping = THREE.NoToneMapping; // done by the last pass
 
     // ---- where the scene sits on the globe
@@ -238,26 +245,37 @@ export class Atmosphere {
     plain.setFragmentShader(aerial.getFragmentShader());
     Object.assign(plain, generator.textures);
     plain.stbnTexture = stbn;
+    // The library starts the sky's cosSunAngularRadius at the sun's angular radius itself (0.0047) instead of its
+    // cosine, so the sun's disk is tried for every ray within ~90° of the sun and only its antialiasing keeps it off;
+    // that reads screen derivatives after an early return for opaque cloud, so along cloud edges the sun showed
+    // through as bright beads (at dawn and dusk most of all). Setting the radius through its setter fixes the cosine.
+    for (const e of [aerial, plain]) e.sunAngularRadius = e.sunAngularRadius;
 
     // ---- the passes
     this.composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
     this.composer.addPass(new RenderPass(scene, camera));
     // window glass reflects what is on screen (first of all: it reads the panes marked in the alpha channel)
+    // The colour is scaled into the atmosphere's units and back inside the passes either side of it, not in passes
+    // of their own (a full-screen pass costs as much as a simple effect's whole work): within a pass postprocessing
+    // runs the effects that read depth first, so the scale follows the reflections here and the clouds below. (The
+    // ambient occlusion between only multiplies the colour: the scale does not change it.)
     this.reflections = new WindowReflections(camera);
-    this.reflectionPass = new EffectPass(camera, this.reflections);
+    this.reflectionPass = new EffectPass(camera, this.reflections, new Scale(UNITS));
     this.composer.addPass(this.reflectionPass);
     // ambient occlusion: contact shading between buildings and the ground
     this.ao = new N8AOPostPass(scene, camera, innerWidth, innerHeight);
     Object.assign(this.ao.configuration, { aoRadius: 7, distanceFalloff: 1, intensity: 2.6, halfRes: true, gammaCorrection: false });
+    // (the pass looks through the scene every frame for a transparent material and, finding one, the road's painted
+    // arrows, the lamps' pools, the cars' soft shadows, turns on a mode that walks the scene four times a frame and
+    // draws its transparent things twice more into two more full-size buffers, so as to keep the occlusion off them.
+    // Here they lie on the road and should take the road's occlusion.)
+    this.ao.autoDetectTransparency = false;
     this.ao.configuration.color = new THREE.Color(0.02, 0.02, 0.03);
     this.composer.addPass(this.ao);
-    // (each scale in a pass of its own: within one pass, postprocessing runs the effects that read depth first)
-    this.composer.addPass(new EffectPass(camera, new Scale(UNITS)));
-    this.cloudPass = new EffectPass(camera, clouds, aerial);
+    this.cloudPass = new EffectPass(camera, clouds, aerial, new Scale(1 / UNITS));
     this.composer.addPass(this.cloudPass);
-    this.skyPass = new EffectPass(camera, plain);
+    this.skyPass = new EffectPass(camera, plain, new Scale(1 / UNITS));
     this.composer.addPass(this.skyPass);
-    this.composer.addPass(new EffectPass(camera, new Scale(1 / UNITS)));
     this.bloom = new BloomEffect({ intensity: 0.5, luminanceThreshold: 0.9, luminanceSmoothing: 0.2, mipmapBlur: true });
     // the film: a soft vignette and a fine grain over the tone-mapped picture (the experience turns them up for its shots)
     // depth of field, for riding with a car: the car sharp, the city behind it soft (off unless focus() is called)
@@ -275,7 +293,21 @@ export class Atmosphere {
     this.vignette = new VignetteEffect({ offset: 0.32, darkness: 0.38 });
     this.grain = new NoiseEffect({ blendFunction: BlendFunction.OVERLAY, premultiply: false });
     this.grain.blendMode.opacity.value = 0.05;
-    this.composer.addPass(new EffectPass(camera, this.twilight, this.bloom, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }), this.grade, this.vignette, this.grain));
+    const tone = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
+    this.finalPass = new EffectPass(camera, this.twilight, this.bloom, tone, this.grade, this.vignette, this.grain);
+    this.composer.addPass(this.finalPass);
+    // The edges smoothed (SMAA). The scene is drawn into the composer's buffers, not the canvas, so the canvas's own
+    // multisampling never touched it: every roof line, balcony rail and lane line was a stair of whole pixels. (The
+    // buffers multisampled instead cost 96 bytes a pixel, and leave the skyline as it was: the sky is painted in
+    // afterwards from one sample of depth.) It works on the finished picture, tone-mapped and in gamma space, where
+    // an edge is the contrast the eye sees: so the last pass is two when it is on, the picture to gamma space, then
+    // the smoothing, back to light, and the vignette and the grain over that. Off (aa, the frame-rate governor's
+    // lower steps), the one pass as before. The two share their effects.
+    this.smaa = new SMAAEffect({ preset: SMAAPreset.HIGH, edgeDetectionMode: EdgeDetectionMode.COLOR });
+    this.gradedPass = new EffectPass(camera, this.twilight, this.bloom, tone, new Grade(true, this.grade));
+    this.smoothPass = new EffectPass(camera, this.smaa, new ToLight(), this.vignette, this.grain);
+    this.composer.addPass(this.gradedPass); this.composer.addPass(this.smoothPass);
+    this.aa = true;
     this.connect();
     this.sun = new THREE.Vector3(); this.moon = new THREE.Vector3();
     // what is asked for, and what the frame-rate governor (main.js) allows: clouds no finer than cap.clouds
@@ -285,6 +317,9 @@ export class Atmosphere {
     this.cloudsOn = false; // volumetric clouds are heavy: off until asked for
   }
 
+  // edges smoothed, or not (the governor: main.js)
+  get aa() { return this.smoothPass.enabled; }
+  set aa(v) { this.finalPass.enabled = !v; this.gradedPass.enabled = this.smoothPass.enabled = !!v; }
   get cloudsOn() { return this.want.clouds; }
   set cloudsOn(v) { this.want.clouds = v; this.limit(); }
   get reflect() { return this.want.reflect; }
@@ -296,8 +331,11 @@ export class Atmosphere {
     this.cloudPass.enabled = on; this.skyPass.enabled = !on;
     const q = order[Math.min(order.indexOf(this.want.quality), order.indexOf(this.cap.clouds))] ?? 'low';
     if (on && q !== this.applied) { this.clouds.qualityPreset = q; this.applied = q; }
-    this.reflectionPass.enabled = this.want.reflect && this.cap.reflect;
+    // (the pass stays: it scales the colour too. Skipped, the reflections leave its shader)
+    const reflect = this.want.reflect && this.cap.reflect;
+    if (reflect !== (this.reflections.blendMode.blendFunction !== BlendFunction.SKIP)) this.reflections.blendMode.blendFunction = reflect ? BlendFunction.NORMAL : BlendFunction.SKIP;
     if (!this.cap.dof) this.dofPass.enabled = false;
+    if (cap?.aa != null && cap.aa !== this.aa) this.aa = cap.aa;
   }
   get coverage() { return this.clouds.coverage; }
   set coverage(v) { this.clouds.coverage = v; }
@@ -323,6 +361,9 @@ export class Atmosphere {
   }
 
   setSize(w, h) { this.composer.setSize(w, h); }
+  // The camera's near or far plane has changed (main.js moves the near plane with the camera's height): the passes
+  // that turn depth into distance keep their own copy of the two, taken when the camera was given them.
+  cameraChanged() { for (const pass of this.composer.passes) if (pass.mainCamera !== undefined || 'mainCamera' in pass) pass.mainCamera = this.camera; }
   // Riding: focus at that distance (m); null: no depth of field.
   focus(distance) {
     this.dofPass.enabled = distance != null && this.cap.dof;
@@ -330,7 +371,13 @@ export class Atmosphere {
   }
 
   // motion blur by this much (0: off; about 1 at a fast drive)
-  blur(strength) { this.motionPass.enabled = strength > 0.01 && this.cap.dof; this.motion.uniforms.get('uStrength').value = strength; }
+  blur(strength) {
+    const on = strength > 0.01 && this.cap.dof;
+    // (off, the pass is not run and its last camera grows old: back on, its first frame would smear the whole
+    // move since, a teleport across the city included)
+    if (on && !this.motionPass.enabled) this.motion.started = false;
+    this.motionPass.enabled = on; this.motion.uniforms.get('uStrength').value = strength;
+  }
 
   render(dt) { this.composer.render(dt); }
 }

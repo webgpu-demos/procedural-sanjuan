@@ -39,7 +39,7 @@ unlabelled blocks over more than 2 % of the picture is skipped.
 npm install
 node tools/assets/fetch_textures.mjs                       # once, if public/textures is not there yet
 npm run fetch -- --area=sanjuan && npm run compile -- --area=sanjuan   # if the area is not compiled yet
-npm run dev                         # the client, at http://localhost:5173/ (or serve a build)
+npm run dev                         # the client, at http://localhost:5280/ (or serve a build)
 node tools/synth/export.mjs --area=sanjuan --frames=400 --damage=0.25 --out=data/synth/sj
 node tools/synth/export.mjs --area=hatorey --frames=200 --damage=0.1 --seed=2 --out=data/synth/hr
 ```

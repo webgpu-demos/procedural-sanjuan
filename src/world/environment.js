@@ -16,6 +16,18 @@ const NIGHT = {
 const SUNSET = new THREE.Color(0xff9a52);
 const MOON_STAND_IN = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - 40), THREE.MathUtils.degToRad(205));
 
+// The sun's shadows fade out towards the edge of the ground its shadow map covers (the outer seventh), where they
+// ended at a line: riding along a street, the buildings' shadows stopped at a straight edge 220 m ahead that travelled
+// with the car, and from the air the far half of the city lay in a square of shadowed ground. Before any material is
+// compiled (main.js).
+export function installShadowFade() {
+  const chunk = THREE.ShaderChunk.shadowmap_pars_fragment, at = chunk.indexOf('getPointShadow'), end = at < 0 ? chunk.length : at;
+  const line = 'return mix( 1.0, shadow, shadowIntensity );';
+  if (!chunk.slice(0, end).includes(line)) { console.warn('environment: the shadow shader has changed; shadows end at the edge of their map'); return; }
+  THREE.ShaderChunk.shadowmap_pars_fragment = chunk.slice(0, end).split(line).join(
+    'return mix( 1.0, shadow, shadowIntensity * ( 1.0 - smoothstep( 0.86, 1.0, 2.0 * max( abs( shadowCoord.x - 0.5 ), abs( shadowCoord.y - 0.5 ) ) ) ) );') + chunk.slice(end);
+}
+
 export class Environment {
   constructor(scene, renderer) {
     this.scene = scene;
@@ -71,9 +83,12 @@ export class Environment {
     u.uWarm.value = this.warmth * (this.afterglow ?? 1);
     u.uCloudCover.value = this.cloudCover;
     this.bakedSun = u.uSunDir.value.clone(); this.bakedWarm = u.uWarm.value; this.bakedCover = this.cloudCover;
-    const old = this.scene.environment;
-    this.scene.environment = this.pmrem.fromScene(this.envScene, 0, 0.1, 10).texture;
-    old?.dispose();
+    // (the map before goes with its render target: disposing its texture alone frees nothing, three keeps a render
+    // target's buffers until the target itself is disposed, and every bake, one a second near dusk with the clock
+    // running fast, left 9 MB on the GPU for the garbage collector to find)
+    const target = this.pmrem.fromScene(this.envScene, 0, 0.1, 10);
+    this.scene.environment = target.texture;
+    this.envTarget?.dispose(); this.envTarget = target;
   }
 
   // sun, moon: unit vectors towards them (world space). The light is the sun by day — dimmer and warmer as it
@@ -123,9 +138,12 @@ export class Environment {
       c.updateProjectionMatrix();
       this.sun.shadow.normalBias = 0.25 + extent / 900;
     }
-    const texel = (2 * extent) / SHADOW_SIZE;
-    const fx = Math.round(focus.x / texel) * texel, fz = Math.round(focus.z / texel) * texel;
-    this.sun.target.position.set(fx, focus.y, fz);
+    // (snapped along the shadow map's own axes, across the sun's way, and by the size the map now has: snapped along
+    // the world's x and z, the map's texels still slid over the ground as the view moved, and the shadows' edges crawled)
+    const texel = (2 * extent) / this.sun.shadow.mapSize.x, right = this.right ??= new THREE.Vector3(), up = this.up ??= new THREE.Vector3();
+    right.crossVectors(THREE.Object3D.DEFAULT_UP, this.sunDir).normalize(); up.crossVectors(this.sunDir, right);
+    const a = focus.dot(right), b = focus.dot(up);
+    this.sun.target.position.copy(focus).addScaledVector(right, Math.round(a / texel) * texel - a).addScaledVector(up, Math.round(b / texel) * texel - b);
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDir, 2000);
   }
 

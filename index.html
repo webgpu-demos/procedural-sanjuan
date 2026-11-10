@@ -7,7 +7,9 @@
     <!-- Inter (the HUD) and Overpass (street-name signs: after Highway Gothic, the US road-sign face) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&family=Overpass:wght@600;700&display=swap" />
+    <!-- (not in the way of the first paint, the loader's included: taken as print, then for the screen once here) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&family=Overpass:wght@600;700&display=swap" media="print" onload="this.media = 'all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&family=Overpass:wght@600;700&display=swap" /></noscript>
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #0c1220; }
       canvas { display: block; }

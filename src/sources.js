@@ -11,6 +11,11 @@ export const SOURCES = [
         via: ['Geofabrik Puerto Rico extract', 'https://download.geofabrik.de/north-america/us/puerto-rico.html'],
       },
       {
+        name: 'Garita', url: 'https://github.com/webgpu-demos/garita',
+        what: 'Building ids (Overture GERS) and building heights from lidar, matched to the footprints.',
+        license: 'from Overture Maps Foundation (under its data licences) and USGS 3DEP (public domain)',
+      },
+      {
         name: 'FEMA / ORNL USA Structures', url: 'https://gis-fema.hub.arcgis.com/pages/usa-structures',
         what: 'Building heights measured by LiDAR, and building uses, where OpenStreetMap has none.',
         license: 'Public domain',
@@ -35,6 +40,11 @@ export const SOURCES = [
         what: 'Traffic counts (AADT) on Puerto Rico’s roads, 2024: what the simulated morning is checked against.',
         license: 'Public domain (CC0)',
         via: ['National Transportation Atlas Database', 'https://geo.dot.gov/server/rest/services/Hosted/HPMS_FULL_PR_2024/FeatureServer'],
+      },
+      {
+        name: 'ATI GTFS feed', url: 'https://www.ati.pr.gov/relaciones-comunidad?tab=DatosAbiertos',
+        what: 'The AMA buses: their routes, stops and timetables (PRITA_GTFS), driven as scheduled in the simulated morning.',
+        license: 'ATI, Gobierno de Puerto Rico, under its open-data terms (not affiliated)',
       },
     ],
   },
@@ -75,8 +85,13 @@ export const SOURCES = [
       },
       {
         name: 'Microsoft Rocketbox', url: 'https://github.com/microsoft/Microsoft-Rocketbox',
-        what: 'The one who walks and cycles: Male_Adult_01, with his idle, walk and run and a seated pose (converted to glTF).',
+        what: 'The one who walks and cycles (Male_Adult_01, with his idle, walk and run and a seated pose), and the 39 people on foot in the streets, with the library\'s walks, waits, talks and seats (converted to glTF).',
         license: 'MIT, Microsoft',
+      },
+      {
+        name: 'NVIDIA MotionBricks', url: 'https://github.com/NVlabs/motionbricks',
+        what: 'The people\'s steps between their clips: setting off, stopping, standing up, the walker turning on the spot.',
+        license: 'NVIDIA Open Model Agreement (no claim on its outputs)',
       },
       {
         name: 'Takram three-geospatial', url: 'https://github.com/takram-design-engineering/three-geospatial',
@@ -89,8 +104,8 @@ export const SOURCES = [
     group: 'Music',
     items: [
       {
-        name: 'Callejón de Panderetas, Fiesta de la Memoria, Romanoctubre', url: 'https://suno.com',
-        what: 'The plenas on the radio, made for this project with Suno.',
+        name: 'Callejón de Panderetas, Fiesta de la Memoria, Romanoctubre, Island Call and Response, Bounce Playful, Perdona mi Vida', url: 'https://suno.com',
+        what: 'The six songs on the radio, plenas and more, made for this project with Suno.',
         license: 'made with Suno',
       },
     ],
@@ -105,8 +120,13 @@ export const SOURCES = [
       },
       {
         name: 'Slop New York', url: 'https://github.com/mrdoob/slop-newyork',
-        what: 'mrdoob\'s game shell, after which the free roaming is laid out: its HUD, the ways round (walking, cycling, driving, flying), the cameras, the map.',
+        what: 'mrdoob\'s game shell, after which the free roaming is laid out: its HUD, the ways round (walking, cycling, driving, flying), the cameras, the map; and its cars, whose bodies and paint the cars and the AMA bus are built from.',
         license: 'MIT',
+      },
+      {
+        name: 'Inter and Overpass', url: 'https://fonts.google.com',
+        what: 'The HUD\'s type, and the street-name signs\' (Overpass: after Highway Gothic), from Google Fonts.',
+        license: 'SIL Open Font License 1.1',
       },
       {
         name: 'three.js and friends', url: 'https://threejs.org',

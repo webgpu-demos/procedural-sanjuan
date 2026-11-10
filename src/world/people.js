@@ -1,0 +1,1209 @@
+// People on foot: the city's sidewalks, crossings, footways and plazas walked by the people who would be there at
+// that hour (tools/pipeline/walkways.mjs: where, and how many, from what stands along each street), each one of
+// Microsoft's Rocketbox avatars (MIT; tools/assets/crowd.py: the library's people in everyday clothes, at work in
+// an office or a clinic, running, on the beach; public/models/people/README.md), with another skin tone than the
+// library's where the avatar allows (most of the library is fair; San Juan is not).
+//
+// Drawn as two batches (THREE.BatchedMesh: one draw each, whatever the number of people): the bodies, and the hair
+// and lashes (cutout). Each person is skinned on the GPU: the skeleton's pose at every frame of every clip is a
+// texture (22 bones, 3 texels a bone), the clips of a person and how far into them it is are a few texels of
+// another, and the vertex shader blends the two frames either side and the clip it leaves for the one it takes.
+//
+// What they do: walk the network, keeping right, slowing behind the one in front; at a crossing, wait for the lights
+// (the simulation's, src/world/simsignals.js) and for a gap in the cars; stand at a bus stop or a shop's door, talk
+// in twos and threes, sit on a bench; run along the promenades at dawn. Families walk together.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { shared } from './materials.js';
+import { lampUniforms, HERO_RIM } from './lamplight.js';
+import { streetAt } from '../shared/decks.js';
+
+// ---------------------------------------------------------------- constants
+const BONES = ['Bip01_Pelvis', 'Bip01_Spine', 'Bip01_Spine1', 'Bip01_Spine2', 'Bip01_Neck', 'Bip01_Head',
+  ...['L', 'R'].flatMap((s) => ['Clavicle', 'UpperArm', 'Forearm', 'Hand', 'Thigh', 'Calf', 'Foot', 'Toe0'].map((b) => `Bip01_${s}_${b}`))];
+const NB = BONES.length;
+const MOVE = ['walk', 'walk2', 'stroll', 'brisk', 'jog'], STILL = ['idle', 'wait', 'text', 'look', 'talk', 'sit', 'call'];
+// the transitions between them, played once (tools/motion/transitions.py: MotionBricks' motion between the clips' own
+// poses): setting off from standing, stopping from either foot, standing up from a seat
+const TRANS = ['start', 'stopL', 'stopR', 'standup'];
+const CLIPS = [...MOVE, ...STILL, ...TRANS];
+const POOL = 1600;                  // people at once, at most
+// metres: the full body nearer than the first, the plain one beyond the second; and either side of each a band, a
+// tenth of it, in which a person keeps the model it has (the first was 24 m, where a person is some 75 to 110 pixels
+// tall and the change shows; and one walked behind at the distance itself, a foot nearer and further as the two go,
+// changed model 91 times in ten seconds)
+const LOD = [40, 95], LOD_BAND = 0.1;
+// (the level at a distance, for one drawn at level `was` (-1: not drawn): it changes only once past the band)
+const lodAt = (d, was) => {
+  if (was < 0) return d < LOD[0] ? 0 : d < LOD[1] ? 1 : 2;
+  let l = was;
+  while (l < 2 && d > LOD[l] * (1 + LOD_BAND)) l++;
+  while (l > 0 && d < LOD[l - 1] * (1 - LOD_BAND)) l--;
+  return l;
+};
+const FAR = 360;                    // nobody is drawn beyond this (a few pixels)
+// Where a person stands that its way, taken anew, does not say (enter, settle): no more than this (m) is kept to be
+// walked off; beyond it, it is where its way says at once
+const OFF_MAX = 2.5;
+// Across its way a person moves no faster than this share of its pace along it (it does not slide sideways standing),
+// or, out of a car's way, than this (m/s)
+const SIDE = 0.9, DODGE = 1.2;
+// A seat and the way it is on: within the first (m), the one who gets up walks off along the way, eased onto it; out
+// to the second, a straight leg to it first; further (a bench in the middle of a plaza: 28% of San Juan's benches are
+// over 6 m from the nearest way, one 24.8 m, and what lies between is not known here), or with the way behind the
+// seat's back (19% of the benches in between: the straight leg would go through the bench), it stays until nobody is
+// looking, and is gone
+const SEAT_NEAR = 1.5, SEAT_REACH = 6;
+const W_BONES = 2048;               // the pose texture's width (texels)
+// the profiles of walkways.mjs (shops, offices, sights, bars, schools, buses, homes, clinics, the beach and the
+// parks): the share of its busiest hour each has at each hour of the day (0..23 h, San Juan time)
+const DAY = [
+  [.03, .02, .01, .01, .01, .03, .08, .2, .35, .55, .75, .9, 1, .95, .85, .85, .9, .95, .9, .75, .55, .35, .15, .06],
+  [.01, .01, .01, .01, .01, .03, .15, .6, .9, .55, .45, .6, 1, .9, .5, .45, .6, .8, .45, .2, .08, .04, .02, .01],
+  [.05, .03, .02, .01, .01, .02, .05, .12, .3, .55, .8, .95, 1, 1, .95, .9, .85, .8, .75, .7, .6, .45, .25, .1],
+  [.6, .45, .25, .1, .03, .01, .01, .01, .01, .02, .03, .05, .1, .1, .08, .08, .1, .2, .35, .55, .75, .9, 1, .85],
+  [0, 0, 0, 0, 0, 0, .1, .8, .5, .1, .1, .15, .3, .2, .2, 1, .6, .2, .05, .02, 0, 0, 0, 0],
+  [.03, .01, .01, .02, .1, .35, .8, 1, .8, .45, .4, .45, .5, .5, .55, .7, .9, 1, .75, .45, .3, .2, .1, .05],
+  [.05, .02, .01, .01, .03, .25, .6, .8, .5, .35, .35, .4, .45, .4, .35, .45, .7, .9, 1, .85, .6, .35, .15, .08],
+  [.05, .04, .03, .03, .05, .15, .5, .9, 1, .95, .9, .85, .8, .8, .75, .7, .6, .4, .25, .15, .1, .08, .06, .05],
+  [.02, .01, .01, .01, .05, .4, .9, 1, .8, .6, .6, .7, .7, .75, .75, .8, .9, 1, .9, .6, .3, .15, .06, .03],
+];
+const P = { SHOP: 0, OFFICE: 1, SIGHTS: 2, NIGHT: 3, SCHOOL: 4, TRANSIT: 5, HOME: 6, HEALTH: 7, LEISURE: 8 };
+const KIND = { SIDEWALK: 0, CORNER: 1, CROSSING: 2, FOOTWAY: 3, PATH: 4, STEPS: 5, PEDESTRIAN: 6, ROADSIDE: 7, LINK: 8, MEDIAN: 9 };
+const SPOT = { BUS: 0, BENCH: 1, FRONT: 2, BAR: 3, PLAZA: 4, SHELTER: 5 };
+const dayShare = (p, h) => { const a = Math.floor(h) % 24, t = h - Math.floor(h); return DAY[p][a] * (1 - t) + DAY[p][(a + 1) % 24] * t; };
+const dec = (q) => (q / 255) ** 2 * 40; // (people per 100 m, as walkways.mjs encodes them)
+// the item whose running total first reaches r ([[item, total], ...])
+const bisect = (cum, r) => { let lo = 0, hi = cum.length - 1; if (hi < 0) return null; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m][1] < r) lo = m + 1; else hi = m; } return cum[lo][0]; };
+
+// skin: the tone a person is drawn with, as a CIE lightness (San Juan: most people between fair and brown)
+const TONES = [[72, 0.12], [66, 0.24], [60, 0.26], [54, 0.2], [48, 0.12], [42, 0.06]];
+let seed = 12345;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const pick = (list) => list[Math.floor(rnd() * list.length)];
+const weighted = (pairs) => { let t = 0; for (const [, w] of pairs) t += w; let r = rnd() * t; for (const [v, w] of pairs) { r -= w; if (r <= 0) return v; } return pairs[pairs.length - 1][0]; };
+
+// ---------------------------------------------------------------- the shaders
+// (No flat varyings. A program with one makes ANGLE on Metal rewrite the indices of every indexed draw, GL's
+// flat-shaded vertex being the triangle's last and Metal's its first; the version in Chrome 156 rewrites each draw
+// into a new buffer, from the start of the index buffer to the end of the draw. One person is one draw at its
+// avatar's place in the batch's indices, a few megabytes long: hundreds in view took gigabytes of the GPU's memory
+// within a few frames. The atlas layer, the same at a person's every vertex, is interpolated to itself instead,
+// and the sampler rounds it to the layer.)
+const VERT_PARS = /* glsl */`
+uniform highp sampler2D uBones;
+uniform highp sampler2D uPeople;
+attribute vec4 skinIndex;
+attribute vec4 skinWeight;
+varying vec4 vLook;
+varying float vLayer;
+vec4 personData(float id, int k) { int i = int(id) * 4 + k; int w = textureSize(uPeople, 0).x; return texelFetch(uPeople, ivec2(i % w, i / w), 0); }
+mat4 poseBone(float row, float b) {
+  int i = (int(row) * ${NB} + int(b)) * 3, w = textureSize(uBones, 0).x;
+  vec4 r0 = texelFetch(uBones, ivec2(i % w, i / w), 0); i++;
+  vec4 r1 = texelFetch(uBones, ivec2(i % w, i / w), 0); i++;
+  vec4 r2 = texelFetch(uBones, ivec2(i % w, i / w), 0);
+  return mat4(r0.x, r1.x, r2.x, 0.0, r0.y, r1.y, r2.y, 0.0, r0.z, r1.z, r2.z, 0.0, r0.w, r1.w, r2.w, 1.0);
+}
+// a clip (x: its first row, y: its frames, z: how far into it, 0..1): the bone between the frames either side
+mat4 clipBone(vec4 c, float b) {
+  float f = c.z * c.y, f0 = floor(f), t = f - f0, f1 = mod(f0 + 1.0, c.y);
+  return poseBone(c.x + f0, b) * (1.0 - t) + poseBone(c.x + f1, b) * t;
+}
+mat4 personBone(vec4 a, vec4 b, float b_, float i) {
+  mat4 m = clipBone(a, i);
+  if (b_ > 0.002) m = m * (1.0 - b_) + clipBone(b, i) * b_;
+  return m;
+}`;
+const VERT_SKIN = /* glsl */`
+float personId = getIndirectIndex(gl_DrawID);
+vec4 clipA = personData(personId, 0), clipB = personData(personId, 1);
+vLook = personData(personId, 2); vLayer = clipB.w;
+mat4 skinM = personBone(clipA, clipB, clipA.w, skinIndex.x) * skinWeight.x + personBone(clipA, clipB, clipA.w, skinIndex.y) * skinWeight.y
+  + personBone(clipA, clipB, clipA.w, skinIndex.z) * skinWeight.z + personBone(clipA, clipB, clipA.w, skinIndex.w) * skinWeight.w;`;
+const FRAG_PARS = /* glsl */`
+uniform highp sampler2DArray uAtlas;
+varying vec4 vLook;
+varying float vLayer;`;
+// (a person fading in or out: a dither, as the cars do)
+const FADE = 'if (vLook.a < 0.999 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) > vLook.a) discard;';
+// Their shadows. The sun's depth bias (environment.js: -0.0003 of a 3,990 m depth range, some 1.2 m, against acne on
+// the buildings' and the terrain's large faces) is more than a person is deep, so a person would cast nothing: in the
+// sun's depth pass a person stands nearer the sun by PUSH (more than the bias), and where a person takes shadow its
+// sample is moved toward the sun by LIFT (more than PUSH less the bias), so a person does not shade itself; the cost,
+// people a step apart do not shade each other.
+export const SHADOW = { push: { value: 1.35 }, lift: { value: 1.0 }, range: { value: 3990 } };
+const SHADOW_LIFT = THREE.ShaderChunk.shadowmap_vertex.replace(
+  'shadowWorldPosition = worldPosition + vec4( shadowWorldNormal * directionalLightShadows[ i ].shadowNormalBias, 0 );',
+  'shadowWorldPosition = worldPosition + vec4( shadowWorldNormal * directionalLightShadows[ i ].shadowNormalBias + uSunDir * uShadowLift, 0 );');
+
+function personMaterial(cutout, textures) {
+  const m = new THREE.MeshStandardMaterial({ roughness: cutout ? 0.95 : 0.82, metalness: 0, side: cutout ? THREE.DoubleSide : THREE.FrontSide, envMapIntensity: cutout ? 0.4 : 1 });
+  m.defines = { USE_UV: '', LAMP_SIDES: '' };
+  m.onBeforeCompile = (shader) => {
+    lampUniforms(shader); shader.uniforms.uNight = shared.uNight;
+    Object.assign(shader.uniforms, textures, { uSunDir: shared.uSunDir, uShadowLift: SHADOW.lift });
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${VERT_PARS}\nuniform vec3 uSunDir;\nuniform float uShadowLift;`)
+      .replace('#include <skinbase_vertex>', VERT_SKIN)
+      .replace('#include <skinnormal_vertex>', 'objectNormal = (skinM * vec4(objectNormal, 0.0)).xyz;')
+      .replace('#include <skinning_vertex>', 'transformed = (skinM * vec4(transformed, 1.0)).xyz;')
+      .replace('#include <shadowmap_vertex>', SHADOW_LIFT);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${FRAG_PARS}\nuniform float uNight;`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FADE}`)
+      // (at night a little of the city's glow along their edges, as the one you are has: a figure reads against the dark street)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += 0.5 * ${HERO_RIM} + diffuseColor.rgb * 0.08 * uNight;`)
+      // the atlas: skin marked in alpha (0.75) takes the person's tone; the cutout keeps its own alpha (coverage)
+      .replace('#include <map_fragment>', cutout
+        ? 'vec4 texel = texture(uAtlas, vec3(vUv, vLayer)); if (texel.a < 0.5) discard; diffuseColor.rgb *= texel.rgb;'
+        : 'vec4 texel = texture(uAtlas, vec3(vUv, vLayer)); float skin = step(0.6, texel.a) * (1.0 - smoothstep(0.8, 0.95, texel.a));\ndiffuseColor.rgb *= texel.rgb * mix(vec3(1.0), vLook.rgb, skin);')
+      // (opaque: the alpha channel marks mirrors for the reflections, src/world/reflections.js)
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0;');
+  };
+  m.customProgramCacheKey = () => (cutout ? 'people-cut-v2' : 'people-v2');
+  return m;
+}
+function personDepth(cutout, textures) {
+  const m = new THREE.MeshDepthMaterial();
+  m.defines = { USE_UV: '' };
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, textures, { uShadowPush: SHADOW.push, uShadowRange: SHADOW.range });
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n${VERT_PARS}\nuniform float uShadowPush, uShadowRange;`)
+      .replace('#include <skinbase_vertex>', VERT_SKIN)
+      .replace('#include <skinnormal_vertex>', '')
+      .replace('#include <skinning_vertex>', 'transformed = (skinM * vec4(transformed, 1.0)).xyz;')
+      // (the sun's camera is orthographic: depth is linear over its range)
+      .replace('#include <project_vertex>', '#include <project_vertex>\ngl_Position.z -= 2.0 * uShadowPush / uShadowRange * gl_Position.w;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FADE}\n${cutout ? 'if (texture(uAtlas, vec3(vUv, vLayer)).a < 0.5) discard;' : ''}`);
+  };
+  m.customProgramCacheKey = () => (cutout ? 'people-depth-cut-v2' : 'people-depth-v2');
+  return m;
+}
+
+// ---------------------------------------------------------------- the avatars
+// The clips of the library's women and of its men (crowd_pack.mjs: <sex>-move.glb, <sex>-still.glb): the same
+// rotations for every avatar of either; only the bones' lengths are each avatar's own (and the child's hips lower).
+// Only the rotations are kept, and the pelvis's track, its travel over a walk's cycle taken out (the person is carried
+// along at the clip's own pace instead) and that pace measured.
+// A transition (moves: <sex>-moves.glb) carries the person as it goes (setting off, stopping): its pelvis's travel,
+// key by key, is taken out of its track and kept (travel: metres forward of where it began) for the person to be
+// carried along by.
+// (leg: the rig's, thigh and shin, at rest: an avatar with shorter ones covers less ground a stride, bakeAvatar)
+const legOf = (scene) => {
+  const at = (n) => scene.getObjectByName(n)?.getWorldPosition(new THREE.Vector3());
+  const hip = at('Bip01_L_Thigh'), knee = at('Bip01_L_Calf'), ankle = at('Bip01_L_Foot');
+  return hip && knee && ankle ? hip.distanceTo(knee) + knee.distanceTo(ankle) : 0;
+};
+function prepareClips(move, still, moves = null) {
+  const V = () => new THREE.Vector3(), clips = {};
+  move.scene.updateMatrixWorld(true);
+  const leg = legOf(move.scene);
+  for (const [g, moving] of [[move, true], [still, false], ...(moves ? [[moves, 'trans']] : [])]) {
+    g.scene.updateMatrixWorld(true);
+    let pelvis = null; g.scene.traverse((o) => { if (o.name === 'Bip01_Pelvis') pelvis = o; });
+    // (the way the rig faces at rest: its feet to its toes)
+    const ahead = V();
+    for (const s of ['L', 'R']) {
+      const f = g.scene.getObjectByName(`Bip01_${s}_Foot`), t = g.scene.getObjectByName(`Bip01_${s}_Toe0`);
+      if (f && t) ahead.add(t.getWorldPosition(V()).sub(f.getWorldPosition(V())));
+    }
+    ahead.y = 0; ahead.normalize();
+    const mixer = new THREE.AnimationMixer(g.scene);
+    for (const clip of g.animations) {
+      clip.tracks = clip.tracks.filter((t) => t.name.endsWith('.quaternion') || t.name === 'Bip01_Pelvis.position');
+      let speed = 0;
+      const track = clip.tracks.find((t) => t.name === 'Bip01_Pelvis.position');
+      if (moving === 'trans') {
+        // (each key's travel from the first, in the world: forward kept, all of it taken out of the track)
+        const n = track.times.length, v = track.values, a = mixer.clipAction(clip); a.play();
+        const end = clip.duration - 1e-4, at = (t) => { mixer.setTime(Math.min(t, end)); g.scene.updateMatrixWorld(true); return pelvis.getWorldPosition(V()); };
+        const p0 = at(track.times[0]), travel = new Float32Array(n), m3 = new THREE.Matrix3().setFromMatrix4(pelvis.parent.matrixWorld).invert();
+        const shifts = [];
+        for (let i = 0; i < n; i++) { const d = at(track.times[i]).sub(p0); d.y = 0; travel[i] = d.dot(ahead); shifts.push(d.applyMatrix3(m3)); }
+        a.stop(); mixer.uncacheClip(clip);
+        for (let i = 0; i < n; i++) { v[i * 3] -= shifts[i].x; v[i * 3 + 1] -= shifts[i].y; v[i * 3 + 2] -= shifts[i].z; }
+        clips[clip.name] = { clip, speed: 0, moving: true, trans: true, times: Float32Array.from(track.times), travel };
+        continue;
+      }
+      if (moving && track && pelvis) {
+        const a = mixer.clipAction(clip); a.play();
+        const at = (t) => { mixer.setTime(t); g.scene.updateMatrixWorld(true); return pelvis.getWorldPosition(V()); };
+        const p0 = at(0), p1 = at(clip.duration - 1e-4);
+        speed = Math.hypot(p1.x - p0.x, p1.z - p0.z) / clip.duration;
+        a.stop(); mixer.uncacheClip(clip);
+        // (the travel, in the track's own frame: the vertical bob stays)
+        const n = track.times.length, v = track.values, t0 = track.times[0], span = track.times[n - 1] - t0 || 1;
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(pelvis.parent.getWorldQuaternion(new THREE.Quaternion()).invert());
+        const d = new THREE.Vector3(v[(n - 1) * 3] - v[0], v[(n - 1) * 3 + 1] - v[1], v[(n - 1) * 3 + 2] - v[2]);
+        d.addScaledVector(up, -d.dot(up));
+        for (let i = 0; i < n; i++) { const f = (track.times[i] - t0) / span; v[i * 3] -= d.x * f; v[i * 3 + 1] -= d.y * f; v[i * 3 + 2] -= d.z * f; }
+      }
+      clips[clip.name] = { clip, speed, moving };
+    }
+  }
+  return { clips, leg };
+}
+// Every frame of every clip, as an avatar's 22 bones' skinning matrices (its bone's pose times its bind pose inverted),
+// turned so that it faces +z: rows of 22 x 3 texels. The walks at 30 a second; standing, talking and sitting at 8, and
+// a long one cut to 14 s, its last 1.5 s turning into its first (it loops without a jump).
+const MOVE_FPS = 30, STILL_FPS = 8, STILL_MAX = 14, LOOP_FADE = 1.5;
+// (a clip's frames in the texture: whether it is cut, how long it runs, how many they are)
+const framesOf = (c) => {
+  const cut = !c.moving && c.clip.duration > STILL_MAX + LOOP_FADE, T = cut ? STILL_MAX : c.clip.duration;
+  return { cut, T, frames: Math.max(2, Math.round(T * (c.moving ? MOVE_FPS : STILL_FPS)) + (c.trans ? 1 : 0)) };
+};
+const framesOfAll = (clips) => CLIPS.reduce((n, name) => n + (clips[name] ? framesOf(clips[name]).frames : 0), 0);
+// into: the pose texture's half floats, the avatar's frames written from frame `first` on (each 22 bones of 12: the
+// texture is made once at its size, loadAssets; a list grown twelve numbers at a time, then copied twice, was most of
+// the 1.7 s the page stood still for as the title came up)
+function bakeAvatar(gltf, clips, into, first) {
+  const scene = gltf.scene, V = () => new THREE.Vector3();
+  let skinned = null; scene.traverse((o) => { if (!skinned && o.isSkinnedMesh) skinned = o; });
+  const sk = skinned.skeleton, idx = BONES.map((n) => sk.bones.findIndex((b) => b.name === n));
+  if (idx.some((i) => i < 0)) throw new Error('a crowd avatar without its bones');
+  scene.updateMatrixWorld(true);
+  const leg = legOf(scene); // (at rest, before a clip poses it)
+  const bone = (n) => sk.bones[idx[BONES.indexOf(n)]];
+  const ahead = V();
+  for (const s of ['L', 'R']) ahead.add(bone(`Bip01_${s}_Toe0`).getWorldPosition(V()).sub(bone(`Bip01_${s}_Foot`).getWorldPosition(V())));
+  const turn = new THREE.Matrix4().makeRotationY(-Math.atan2(ahead.x, ahead.z));
+  // (as three skins: the mesh's world, its bind matrix's inverse, the bone's pose times its inverse bind matrix, the
+  // bind matrix; avatarGeometries puts every level's geometry in the first mesh's bind space)
+  const K = new THREE.Matrix4().multiplyMatrices(skinned.matrixWorld, skinned.bindMatrixInverse).premultiply(turn), Bm = skinned.bindMatrix.clone();
+  const mixer = new THREE.AnimationMixer(scene), m = new THREE.Matrix4(), out = {}, half = THREE.DataUtils.toHalfFloat;
+  const pose = (t, to) => {
+    mixer.setTime(t); scene.updateMatrixWorld(true);
+    for (let b = 0; b < NB; b++) {
+      m.multiplyMatrices(sk.bones[idx[b]].matrixWorld, sk.boneInverses[idx[b]]).premultiply(K).multiply(Bm);
+      to.set(m.elements, b * 16);
+    }
+    return to;
+  };
+  const A = new Float32Array(NB * 16), B = new Float32Array(NB * 16);
+  let row = first;
+  for (const name of CLIPS) {
+    const c = clips[name];
+    if (!c) continue;
+    const { cut, T, frames } = framesOf(c), start = row;
+    const action = mixer.clipAction(c.clip); action.play();
+    // (a transition is played once: its last frame its end, not its first again)
+    const tOf = (f) => (c.trans ? Math.min((f / (frames - 1)) * T, T - 1e-4) : (f / frames) * T); // (at its very end, the mixer would wrap to its start)
+    for (let f = 0; f < frames; f++, row++) {
+      const t = tOf(f) + (cut ? LOOP_FADE : 0);
+      pose(t, A);
+      if (cut && t >= T) { pose(t - T, B); const w = (t - T) / LOOP_FADE; for (let i = 0; i < A.length; i++) A[i] = A[i] * (1 - w) + B[i] * w; }
+      // (a bone's three rows of its matrix, the fourth being 0 0 0 1)
+      for (let b = 0, o = row * NB * 12; b < NB; b++) for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) into[o++] = half(A[b * 16 + k * 4 + r]);
+    }
+    action.stop();
+    out[name] = { start, frames, duration: T, speed: c.speed };
+    if (c.trans) {
+      const travel = new Float32Array(frames);
+      for (let f = 0; f < frames; f++) {
+        const t = c.times[0] + tOf(f); let k = 0;
+        while (k < c.times.length - 2 && c.times[k + 1] < t) k++;
+        const w = THREE.MathUtils.clamp((t - c.times[k]) / ((c.times[k + 1] - c.times[k]) || 1), 0, 1);
+        travel[f] = c.travel[k] * (1 - w) + c.travel[k + 1] * w;
+      }
+      Object.assign(out[name], { trans: true, travel, reach: travel[frames - 1] });
+    }
+  }
+  return { clips: out, frames: row - first, leg };
+}
+// (a turn of the page's own between two long pieces of work)
+const breathe = () => new Promise((done) => setTimeout(done));
+
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const loadImage = (url) => fetch(url).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(url)))).then((b) => createImageBitmap(b, { imageOrientation: 'none' }));
+
+// An avatar's levels of detail as plain geometries for the batches: bind pose, the skin's joints in BONES' order.
+function avatarGeometries(gltf) {
+  const out = [];
+  gltf.scene.updateMatrixWorld(true);
+  let first = null; gltf.scene.traverse((o) => { if (!first && o.isSkinnedMesh) first = o; });
+  const K0 = new THREE.Matrix4().multiplyMatrices(first.matrixWorld, first.bindMatrixInverse), B0i = first.bindMatrix.clone().invert();
+  gltf.scene.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    // (every level in the first mesh's bind space: the same skinning matrices serve them all)
+    const K = new THREE.Matrix4().multiplyMatrices(o.matrixWorld, o.bindMatrixInverse);
+    if (K.elements.some((v, i) => Math.abs(v - K0.elements[i]) > 1e-4)) console.warn('a crowd avatar whose meshes are bound apart');
+    let lod = null; for (let p = o; p && lod == null; p = p.parent) { const m = /^LOD(\d)/.exec(p.name); if (m) lod = Number(m[1]); }
+    if (lod == null) return;
+    const map = o.skeleton.bones.map((b) => BONES.indexOf(b.name));
+    if (map.some((i) => i < 0)) throw new Error(`a crowd avatar with other bones: ${o.skeleton.bones.map((b) => b.name)}`);
+    const src = o.geometry, n = src.attributes.position.count, g = new THREE.BufferGeometry();
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), si = new Uint8Array(n * 4), sw = new Float32Array(n * 4);
+    const v = new THREE.Vector3(), mat = B0i.clone().multiply(o.bindMatrix), nm = new THREE.Matrix3().getNormalMatrix(mat);
+    const A = src.attributes;
+    for (let i = 0; i < n; i++) {
+      v.fromBufferAttribute(A.position, i).applyMatrix4(mat); pos.set([v.x, v.y, v.z], i * 3);
+      v.fromBufferAttribute(A.normal, i).applyMatrix3(nm).normalize(); nor.set([v.x, v.y, v.z], i * 3);
+      uv[i * 2] = A.uv.getX(i); uv[i * 2 + 1] = A.uv.getY(i);
+      let t = 0; for (let c = 0; c < 4; c++) { si[i * 4 + c] = Math.max(0, map[A.skinIndex.getComponent(i, c)] ?? 0); t += (sw[i * 4 + c] = A.skinWeight.getComponent(i, c)); }
+      if (t > 0) for (let c = 0; c < 4; c++) sw[i * 4 + c] /= t;
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+    g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+    const index = src.index ? Array.from(src.index.array) : Array.from({ length: n }, (_, i) => i);
+    g.setIndex(new THREE.BufferAttribute(new Uint32Array(index), 1));
+    // (its bounds as it stands in the street: the bind space is not metres; and an arm swung out)
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.25);
+    out.push({ lod, cutout: /cutout/.test(o.material.name), geometry: g });
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------- the walks
+// The network in blocks (walkways.mjs: walks.json, walks/<cx>_<cz>.bin), loaded round the view.
+class Walks {
+  constructor(base) { this.base = base; this.nodes = new Map(); this.blocks = new Map(); this.links = []; this.spots = []; this.cells = new Map(); this.meta = null; }
+  async init() {
+    this.meta = await fetch(`${this.base}/walks.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!this.meta) return false;
+    this.have = new Set(this.meta.blocks.map(([x, z]) => `${x}_${z}`));
+    return true;
+  }
+  // the blocks within `r` of (x, z): loaded (as they arrive); those beyond `drop` let go
+  update(x, z, r = 900, drop = 2600) {
+    const C = this.meta.chunk;
+    for (let i = Math.floor((x - r) / C); i <= Math.floor((x + r) / C); i++) for (let j = Math.floor((z - r) / C); j <= Math.floor((z + r) / C); j++) {
+      const k = `${i}_${j}`;
+      if (!this.have.has(k) || this.blocks.has(k)) continue;
+      this.blocks.set(k, 'loading');
+      fetch(`${this.base}/walks/${k}.bin`).then((r) => r.arrayBuffer()).then((b) => this.add(k, b)).catch(() => this.blocks.delete(k));
+    }
+    for (const [k, b] of this.blocks) {
+      if (b === 'loading') continue;
+      const [i, j] = k.split('_').map(Number);
+      if (Math.hypot((i + 0.5) * C - x, (j + 0.5) * C - z) > drop) this.remove(k);
+    }
+  }
+  add(key, buf) {
+    if (this.blocks.get(key) !== 'loading') return;
+    let o = 24;
+    const h = new Uint32Array(buf, 0, 6), [, nN, nL, nI, nC, nS] = h;
+    const take = (T, n) => { const a = new T(buf, o, n); o += a.byteLength; o += (4 - (o % 4)) % 4; return a; };
+    const ids = take(Uint32Array, nN), xz = take(Float32Array, nN * 2);
+    const la = take(Uint32Array, nL), lb = take(Uint32Array, nL), inner = take(Uint8Array, nL), kind = take(Uint8Array, nL), width = take(Uint8Array, nL), w = take(Uint8Array, nL * 9);
+    const pts = take(Float32Array, nI * 2), cl = take(Uint32Array, nC), ce = take(Int32Array, nC), cn = take(Int32Array, nC), cf = take(Uint8Array, nC);
+    const sxz = take(Float32Array, nS * 2), sk = take(Uint8Array, nS), sh = take(Uint8Array, nS), sl = take(Uint32Array, nS), sw = take(Uint8Array, nS * 9);
+    const block = { links: [], spots: [] };
+    for (let i = 0; i < nN; i++) {
+      let n = this.nodes.get(ids[i]);
+      if (!n) this.nodes.set(ids[i], n = { id: ids[i], x: xz[i * 2], z: xz[i * 2 + 1], links: [], refs: 0 });
+      n.refs++;
+    }
+    let pc = 0;
+    for (let i = 0; i < nL; i++) {
+      const a = this.nodes.get(la[i]), b = this.nodes.get(lb[i]), line = [a.x, a.z];
+      for (let q = 0; q < inner[i]; q++) line.push(pts[(pc + q) * 2], pts[(pc + q) * 2 + 1]);
+      pc += inner[i];
+      line.push(b.x, b.z);
+      const cum = [0];
+      for (let q = 2; q < line.length; q += 2) cum.push(cum[cum.length - 1] + Math.hypot(line[q] - line[q - 2], line[q + 1] - line[q - 1]));
+      const l = { a, b, pts: line, cum, len: cum[cum.length - 1], kind: kind[i], width: width[i] / 10, w: Array.from(w.subarray(i * 9, i * 9 + 9), dec), cross: null, block: key, rate: 0 };
+      a.links.push(l); b.links.push(l); block.links.push(l);
+    }
+    for (let c = 0; c < nC; c++) block.links[cl[c]].cross = { edge: ce[c], node: cn[c], lights: cf[c] & 1 };
+    // (count: the people at it now; another group comes only to one nobody is at)
+    for (let s = 0; s < nS; s++) block.spots.push({ x: sxz[s * 2], z: sxz[s * 2 + 1], kind: sk[s], heading: (sh[s] / 256) * Math.PI * 2, link: block.links[sl[s]], w: Array.from(sw.subarray(s * 9, s * 9 + 9), dec), count: 0 });
+    block.nodeIds = ids;
+    this.blocks.set(key, block);
+    this.rebuild();
+  }
+  remove(key) {
+    const block = this.blocks.get(key);
+    this.blocks.delete(key);
+    for (const l of block.links) { l.dead = true; l.a.links = l.a.links.filter((q) => q !== l); l.b.links = l.b.links.filter((q) => q !== l); }
+    for (const id of block.nodeIds) { const n = this.nodes.get(id); if (n && --n.refs <= 0) this.nodes.delete(id); }
+    this.rebuild();
+  }
+  rebuild() {
+    this.links = []; this.spots = []; this.cells.clear();
+    for (const b of this.blocks.values()) if (b !== 'loading') { this.links.push(...b.links); this.spots.push(...b.spots); }
+    for (const l of this.links) { const m = Math.floor(l.pts.length / 4) * 2, k = Math.floor(l.pts[m] / 64) + ',' + Math.floor(l.pts[m + 1] / 64); if (!this.cells.has(k)) this.cells.set(k, []); this.cells.get(k).push(l); }
+    this.version = (this.version ?? 0) + 1;
+  }
+  // links with their middle within r of (x, z)
+  near(x, z, r) {
+    const out = [];
+    for (let i = Math.floor((x - r) / 64); i <= Math.floor((x + r) / 64); i++) for (let j = Math.floor((z - r) / 64); j <= Math.floor((z + r) / 64); j++)
+      for (const l of this.cells.get(i + ',' + j) ?? []) { const m = Math.floor(l.pts.length / 4) * 2; if (Math.hypot(l.pts[m] - x, l.pts[m + 1] - z) <= r) out.push(l); }
+    return out;
+  }
+}
+// a point along a link at distance u from its start: [x, z, dx, dz] (before its start or past its end, on along its
+// first or last stretch: one come onto it from beside its end is still a step or two short of it, enter). w: within
+// this of a bend (m), the way turns from the one stretch's to the next's, so that one walking beside the line, as
+// far out as w allows, goes round the bend and does not jump across it (a bend of 40 degrees and a person 1.8 m out:
+// 1.2 m in a frame)
+function pointOn(l, u, out, w = 0) {
+  const c = l.cum, p = l.pts, n = c.length - 1;
+  let k = 1;
+  while (k < n && (c[k] < u || c[k] === c[k - 1])) k++; // (and past a stretch of no length: a point twice over)
+  const seg = c[k] - c[k - 1] || 1, t = Math.max(c[k - 1] > 0 ? 0 : -Infinity, Math.min(c[k] < c[n] ? 1 : Infinity, (u - c[k - 1]) / seg));
+  const ax = p[(k - 1) * 2], az = p[(k - 1) * 2 + 1], bx = p[k * 2], bz = p[k * 2 + 1];
+  out[0] = ax + (bx - ax) * t; out[1] = az + (bz - az) * t; out[2] = (bx - ax) / seg; out[3] = (bz - az) / seg;
+  if (w > 0 && n > 1) {
+    // (the bend at this stretch's start, or at its end, and how far from it; half the way of the other stretch's there)
+    const from = u - c[k - 1], to = c[k] - u, j = from < to ? k - 1 : k + 1, at = from < to ? from : to;
+    if (j >= 1 && j <= n) {
+      const W = Math.min(w, (c[k] - c[k - 1]) / 2, (c[j] - c[j - 1]) / 2);
+      if (at < W) {
+        const s = c[j] - c[j - 1], ox = (p[j * 2] - p[(j - 1) * 2]) / s, oz = (p[j * 2 + 1] - p[(j - 1) * 2 + 1]) / s, a = 0.5 * (1 - at / W);
+        const x = out[2] * (1 - a) + ox * a, z = out[3] * (1 - a) + oz * a, m = Math.hypot(x, z);
+        if (m > 1e-3) { out[2] = x / m; out[3] = z / m; }
+      }
+    }
+  }
+  return out;
+}
+// the point of a link nearest (x, z): [u, how far]
+function nearestOn(l, x, z) {
+  const c = l.cum, p = l.pts;
+  let bu = 0, bd = Infinity;
+  for (let k = 1; k < c.length; k++) {
+    const ax = p[(k - 1) * 2], az = p[(k - 1) * 2 + 1], ex = p[k * 2] - ax, ez = p[k * 2 + 1] - az, L2 = ex * ex + ez * ez || 1;
+    const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)), d = Math.hypot(ax + ex * t - x, az + ez * t - z);
+    if (d < bd) { bd = d; bu = c[k - 1] + t * (c[k] - c[k - 1]); }
+  }
+  return [bu, bd];
+}
+
+// ---------------------------------------------------------------- the crowd
+export class People {
+  // base: the area's tiles; surface, lift: the streets' heights (streamer); models: the avatars' folder
+  static async load({ base, models = 'models/people/crowd', surface, lift, renderer }) {
+    const walks = new Walks(base);
+    const [ok, manifest] = await Promise.all([walks.init(), fetch(`${models}/people.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
+    if (!ok || !manifest) return null;
+    const p = new People(walks, manifest, models, surface, lift, renderer);
+    await p.loadAssets();
+    return p;
+  }
+  constructor(walks, manifest, models, surface, lift, renderer) {
+    Object.assign(this, { walks, manifest, models, surface, lift, renderer });
+    this.group = new THREE.Group(); this.group.name = 'people';
+    this.shadow = SHADOW; // (their shadows' offsets, in metres: __app.people.shadow)
+    this.people = []; this.free = Array.from({ length: POOL }, (_, i) => POOL - 1 - i);
+    this.density = 1; this.enabled = true; this.ready = false;
+    this.stats = { people: 0, drawn: 0, target: 0, moves: {} }; // (moves: the transitions begun, by name)
+    this.cars = []; this.signals = null; this.T = 0;
+    this.v = [0, 0, 0, 0];
+  }
+  async loadAssets() {
+    const M = this.manifest, base = this.models;
+    // the clips of each sex
+    const sexes = new Map(await Promise.all(M.groups.map(async (g) => {
+      const [move, still, moves] = await Promise.all([loader.loadAsync(`${base}/${g.move}`), loader.loadAsync(`${base}/${g.still}`),
+        g.moves ? loader.loadAsync(`${base}/${g.moves}`).catch((e) => { console.warn('crowd transitions', g.moves, e); return null; }) : null]);
+      return [g.id, prepareClips(move, still, moves)];
+    })));
+    // each person's clips and look (4 texels a person)
+    const rowsOf = Math.ceil((POOL * 4) / 1024);
+    this.data = new Float32Array(1024 * rowsOf * 4);
+    const people = new THREE.DataTexture(this.data, 1024, rowsOf, THREE.RGBAFormat, THREE.FloatType);
+    people.needsUpdate = true; this.dataTexture = people;
+    // the atlases, one layer each
+    const avatars = M.avatars, images = await Promise.all(avatars.map((a) => loadImage(`${base}/${a.id}.webp`).catch(() => null)));
+    const AW = 768, AH = 512, layers = new Uint8Array(AW * AH * 4 * avatars.length);
+    const canvas = new OffscreenCanvas(AW, AH), ctx = canvas.getContext('2d', { willReadFrequently: true });
+    // (drawn through a canvas: where alpha is below 1, the skin's mark, the colour loses a little precision)
+    images.forEach((im, i) => { if (!im) return; ctx.clearRect(0, 0, AW, AH); ctx.drawImage(im, 0, 0, AW, AH); layers.set(ctx.getImageData(0, 0, AW, AH).data, i * AW * AH * 4); });
+    const atlas = new THREE.DataArrayTexture(layers, AW, AH, avatars.length);
+    Object.assign(atlas, { colorSpace: THREE.SRGBColorSpace, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, anisotropy: 4, flipY: false });
+    atlas.needsUpdate = true;
+    const textures = { uBones: { value: null }, uPeople: { value: people }, uAtlas: { value: atlas } };
+    // the two batches
+    const tris = avatars.reduce((s, a) => s + a.triangles.LOD0 + a.triangles.LOD1 + a.triangles.LOD2, 0);
+    this.body = new THREE.BatchedMesh(POOL, Math.ceil(tris * 1.3), tris * 3 + 3000, personMaterial(false, textures));
+    this.hair = new THREE.BatchedMesh(POOL, Math.ceil(tris * 0.5), Math.ceil(tris * 1.2), personMaterial(true, textures));
+    for (const [bm, cut] of [[this.body, false], [this.hair, true]]) {
+      bm.customDepthMaterial = personDepth(cut, textures);
+      bm.castShadow = true; bm.receiveShadow = true; bm.frustumCulled = false; bm.sortObjects = !cut;
+      bm.name = cut ? 'people hair' : 'people';
+      this.group.add(bm);
+    }
+    // the avatars: their bodies into the batches, their clips into the pose texture
+    this.avatars = avatars.map((a, i) => ({ ...a, layer: i, geo: null, base: a.skin?.[0] ?? 66 }));
+    await Promise.all(this.avatars.map(async (a) => {
+      const gltf = await loader.loadAsync(`${base}/${a.id}.glb`).catch((e) => { console.warn('crowd avatar', a.id, e); return null; });
+      if (!gltf) return;
+      a.gltf = gltf;
+    }));
+    // (the pose texture at its size first, every avatar's frames written straight into it; and the page let go between
+    // one avatar and the next: the 39 in one piece held it some 1.7 s as the title came up)
+    const frames = this.avatars.reduce((n, a) => n + (a.gltf && sexes.get(a.group) ? framesOfAll(sexes.get(a.group).clips) : 0), 0);
+    const H = Math.max(1, Math.ceil((frames * NB * 3) / W_BONES)), data = new Uint16Array(W_BONES * H * 4);
+    let row = 0;
+    for (const a of this.avatars) {
+      if (!a.gltf) continue;
+      try {
+        const sex = sexes.get(a.group), baked = bakeAvatar(a.gltf, sex.clips, data, row);
+        row += baked.frames;
+        a.clips = baked.clips;
+        // (its stride against the clips' rig's: a child's legs are some four fifths of it, and it takes more steps)
+        a.stride = sex.leg > 0 && baked.leg > 0 ? baked.leg / sex.leg : 1;
+        a.geo = [0, 1, 2].map((lod) => ({ body: null, hair: null, lod }));
+        for (const { lod, cutout, geometry } of avatarGeometries(a.gltf)) a.geo[lod][cutout ? 'hair' : 'body'] = (cutout ? this.hair : this.body).addGeometry(geometry);
+        if (a.geo.some((g) => g.body == null)) a.geo = null;
+      } catch (e) { console.warn('crowd avatar', a.id, e.message); a.geo = null; }
+      a.gltf = null;
+      await breathe();
+    }
+    this.avatars = this.avatars.filter((a) => a.geo);
+    const bones = new THREE.DataTexture(data, W_BONES, H, THREE.RGBAFormat, THREE.HalfFloatType);
+    bones.needsUpdate = true;
+    textures.uBones.value = bones;
+    if (!this.avatars.length) return;
+    // the pool: every slot an instance in both batches, hidden until someone takes it
+    const g0 = this.avatars[0].geo, h0 = this.avatars.find((a) => a.geo[1].hair != null)?.geo[1].hair;
+    for (let i = 0; i < POOL; i++) {
+      this.body.addInstance(g0[2].body); this.body.setVisibleAt(i, false);
+      if (h0 != null) { this.hair.addInstance(h0); this.hair.setVisibleAt(i, false); }
+    }
+    this.hasHair = h0 != null;
+    this.byRole = new Map();
+    for (const a of this.avatars) for (const r of a.roles) { if (!this.byRole.has(r)) this.byRole.set(r, []); this.byRole.get(r).push(a); }
+    this.ready = true;
+  }
+
+  // ---------------------------------------------------------------- who, where
+  rateOf(l, h) { let r = 0; for (let p = 0; p < 9; p++) if (l.w[p]) r += l.w[p] * dayShare(p, h); return r; }
+  spotRate(s, h) { let r = 0; for (let p = 0; p < 9; p++) if (s.w[p]) r += s.w[p] * dayShare(p, h); return r; }
+  // the kind of person for a place at an hour (from what brings people there)
+  roleFor(w, h) {
+    const share = (p) => w[p] * dayShare(p, h), all = w.reduce((s, _, p) => s + share(p), 0) || 1;
+    const dawnOrDusk = (h >= 5 && h < 8.5) || (h >= 16.5 && h < 19.5), day = h >= 9 && h < 17.5;
+    return weighted([
+      ['everyday', 1],
+      ['office', 1.6 * share(P.OFFICE) / all],
+      ['clinic', share(P.HEALTH) / all > 0.25 ? 0.8 * share(P.HEALTH) / all : 0], // (near a hospital or a clinic, not across town)
+      ['work', 0.03],
+      ['running', (dawnOrDusk ? 0.3 : 0.03) * (0.05 + share(P.LEISURE) / all) + (dawnOrDusk ? 0.01 : 0)],
+      ['beach', day && share(P.LEISURE) / all > 0.5 && w[P.LEISURE] > 3 ? 0.4 : 0], // (the streets along the sand and its paths, about a tenth of the beach's walks; not a block away)
+    ]);
+  }
+  // (by its weight: dressed for the heat more often than for an air-conditioned office; fair-haired ones less often
+  // away from where visitors are; not the one just picked, nor one of the same group)
+  avatarFor(role, w, avoid = null) {
+    const list = this.byRole.get(role) ?? this.byRole.get('everyday'), h = this.hour;
+    const visitors = w ? (w[P.SIGHTS] * dayShare(P.SIGHTS, h)) / (this.rateOf({ w }, h) || 1) : 0;
+    this.recent ??= [];
+    const options = list.map((a) => [a, (a.weight ?? 1) * (a.fairHair ? 0.35 + 0.65 * visitors : 1) * (avoid?.has(a) ? 0 : this.recent.includes(a) ? 0.15 : 1)]);
+    const a = options.some(([, x]) => x > 0) ? weighted(options) : pick(list);
+    this.recent.push(a); if (this.recent.length > 6) this.recent.shift();
+    return a;
+  }
+  toneFor(a, w, h) {
+    // fair-skinned avatars take a tone of San Juan's (tourists in the old city and the Condado more often stay fair)
+    if (!a.tint) return [1, 1, 1];
+    const sights = w ? (w[P.SIGHTS] * dayShare(P.SIGHTS, h)) / (this.rateOf({ w }, h) || 1) : 0;
+    let L = weighted(TONES.map(([l, p], i) => [l, i === 0 ? p + sights * 0.5 : p]));
+    if (a.fairHair) L = Math.max(L, 58); // (fair hair over a much darker face reads as a dye job on every head)
+    if (L >= a.base) return [1, 1, 1];
+    // (linear light: the same factor on the three keeps the skin's own warm hue; a touch warmer as it darkens)
+    const k = ((L + 16) / (a.base + 16)) ** 3;
+    return [k, k, k ** 1.06];
+  }
+
+  spawnWalker(l, u, now, fill) {
+    const h = this.hour, dawnOrDusk = (h >= 5 && h < 8.5) || (h >= 16.5 && h < 19.5);
+    const role = (l.kind === KIND.PATH || l.kind === KIND.FOOTWAY) && dawnOrDusk && rnd() < 0.12 ? 'running' : this.roleFor(l.w, h);
+    // with company: a couple, friends, a grown-up and a child (in the morning to school, and later)
+    // (school days: children with a grown-up on the way to school and back, few while school is in, more where
+    // visitors are, families)
+    const inSchool = h >= 8.3 && h < 14.2, sightsShare = (l.w[P.SIGHTS] * dayShare(P.SIGHTS, h)) / (this.rateOf(l, h) || 1);
+    const kids = this.byRole.get('child') && role === 'everyday' && rnd() < (inSchool ? 0.01 + 0.04 * sightsShare : 0.04 + 0.12 * dayShare(P.SCHOOL, h));
+    const company = role === 'running' || role === 'work' ? 0 : kids ? 1 : rnd() < 0.18 ? (rnd() < 0.8 ? 1 : 2) : 0;
+    const dir = rnd() < 0.5 ? 1 : -1, leader = this.person(role, l.w);
+    if (!leader) return 0;
+    const pace = role === 'running' ? 'jog' : role === 'office' ? weighted([['brisk', 2], ['walk', 1], ['walk2', 1]]) : l.w[P.SIGHTS] > 4 ? weighted([['stroll', 2], ['walk', 1], ['walk2', 1]]) : weighted([['walk', 2], ['walk2', 2], ['stroll', 1], ['brisk', 1]]);
+    Object.assign(leader, { state: 'walk', link: l, dir, u: dir > 0 ? u : l.len - u, pace, goal: rnd() * Math.PI * 2, born: now, fade: fill ? 1 : 0, lane: 0.25 + rnd() * 0.7 });
+    leader.lanePref = leader.lane;
+    this.setPace(leader);
+    leader.v = leader.speed;
+    this.place(leader, 0);
+    leader.heading = leader.headingTo;
+    let n = 1;
+    for (let k = 0; k < company; k++) {
+      const f = this.person(kids && k === 0 ? 'child' : role, l.w, new Set([leader, ...(leader.followers ?? [])].map((q) => q.avatar)));
+      if (!f) break;
+      Object.assign(f, { state: 'follow', leader, rank: k + 1, link: l, dir, u: leader.u, pace: leader.pace, born: now, fade: leader.fade, x: leader.x, z: leader.z, heading: leader.heading, clipA: leader.clipA, phase: (leader.phase + 0.5) % 1 });
+      f.cycle = this.cycleOf(f, f.clipA); // (its own: a child beside its grown-up takes more steps)
+      leader.followers = (leader.followers ?? []).concat(f);
+      n++;
+    }
+    return n;
+  }
+  person(role, w, avoid = null) {
+    if (!this.free.length) return null;
+    const a = this.avatarFor(role === 'child' ? 'child' : role, w, avoid);
+    if (!a) return null;
+    const p = { slot: this.free.pop(), avatar: a, role, clips: a.clips, tone: this.toneFor(a, w, this.hour), scale: role === 'child' ? 1 : 0.95 + rnd() * 0.09,
+      x: 0, y: null, z: 0, heading: 0, lat: 0, speed: 0, v: 0, phase: rnd(), clipA: 'idle', clipB: null, phaseB: 0, blend: 0, fade: 0, out: false, lod: -1 };
+    this.people.push(p);
+    return p;
+  }
+  setPace(p) {
+    const c = p.clips[p.pace] ?? p.clips.walk;
+    p.clipA = c === p.clips[p.pace] ? p.pace : 'walk';
+    // (the clip's own pace, a little either side; in the heat of the day a little slower)
+    p.speed = (c.speed || 1.3) * (0.92 + rnd() * 0.14) * (p.role === 'running' ? 1 : this.hour > 11 && this.hour < 16 ? 0.94 : 1);
+    p.cycle = this.cycleOf(p, p.clipA);
+  }
+  // (metres a walk's clip covers in one play, as this one walks it: its size, and its legs against the clips' rig's)
+  cycleOf(p, name) { const c = p.clips[name] ?? p.clips.walk; return (c.speed || 1.3) * c.duration * p.scale * (p.avatar.stride ?? 1); }
+  spawnStill(s, now, fill) {
+    const h = this.hour, kind = s.kind;
+    const n = kind === SPOT.BUS ? 1 + Math.floor(rnd() * 3) : kind === SPOT.SHELTER ? 1 + Math.floor(rnd() * 2) : kind === SPOT.BENCH ? 1 + (rnd() < 0.3 ? 1 : 0) : 2 + (rnd() < 0.35 ? 1 : 0);
+    const role = kind === SPOT.FRONT && rnd() < 0.08 ? 'security' : this.roleFor(s.w, h);
+    let made = 0;
+    const here = new Set();
+    for (let k = 0; k < n; k++) {
+      const p = this.person(k === 0 && role === 'security' ? 'security' : role === 'running' || role === 'beach' ? 'everyday' : role, s.w, here);
+      if (!p) break;
+      let ox = 0, oz = 0, heading = s.heading, clip;
+      if (kind === SPOT.BENCH || kind === SPOT.SHELTER) {
+        // along the seat, facing out
+        const along = (k - (n - 1) / 2) * 0.65, c = Math.cos(s.heading), si = Math.sin(s.heading);
+        ox = c * along + si * 0.12; oz = -si * along + c * 0.12; clip = 'sit';
+      } else if (kind === SPOT.BUS) {
+        // a loose knot by the sign: along the kerb and back from it, turned this way and that (some looking up the
+        // street for the bus)
+        const along = (rnd() - 0.5) * 3.2, back = -0.2 - rnd() * 1.1, c = Math.cos(s.heading), si = Math.sin(s.heading);
+        ox = c * along + si * back; oz = -si * along + c * back; heading += (rnd() < 0.35 ? (rnd() < 0.5 ? 1 : -1) * 1.4 : 0) + (rnd() - 0.5) * 1.1;
+        clip = weighted([['wait', 3], ['idle', 2], ['look', 2], ['call', 1]]);
+      } else {
+        // a few standing round, facing in, talking
+        const a = (k / n) * Math.PI * 2 + rnd() * 0.5, r = 0.55 + rnd() * 0.15;
+        ox = Math.sin(a) * r; oz = Math.cos(a) * r; heading = a + Math.PI; clip = role === 'security' && k === 0 ? 'wait' : weighted([['talk', 4], ['idle', 1], ['call', 0.4]]);
+        if (role === 'security' && k === 0) { ox = oz = 0; heading = s.heading; }
+      }
+      if (!p.clips[clip]) clip = 'idle';
+      here.add(p.avatar);
+      Object.assign(p, { state: 'still', spot: s, x: s.x + ox, z: s.z + oz, heading, clipA: clip, phase: rnd(), until: now + 40 + rnd() * 240, born: now, fade: fill ? 1 : 0, link: s.link });
+      s.count++; made++;
+    }
+    return made;
+  }
+
+  // ---------------------------------------------------------------- the crossings
+  // safe to step out: the crossing's lights (where the simulation has them) and no car coming within the time it
+  // takes to cross
+  canCross(p, l) {
+    const c = l.cross;
+    if (c && c.lights && this.signals && c.node >= 0) {
+      const st = this.signals.approach(c.edge, c.node, this.T);
+      if (st === 'g' || st === 'y') return false;
+    }
+    const ax = l.pts[0], az = l.pts[1], bx = l.pts[l.pts.length - 2], bz = l.pts[l.pts.length - 1], mx = (ax + bx) / 2, mz = (az + bz) / 2;
+    const time = l.len / Math.max(0.8, p.speed) + 1.5;
+    const C = this.cars;
+    for (let i = 0; i < C.length; i += 4) {
+      const dx = C[i] - mx, dz = C[i + 1] - mz, v = C[i + 3];
+      if (dx * dx + dz * dz > (15 + v * time) ** 2) continue;
+      const vx = Math.sin(C[i + 2]) * v, vz = Math.cos(C[i + 2]) * v;
+      for (let t = 0; t <= time; t += 0.5) {
+        const x = C[i] + vx * t, z = C[i + 1] + vz * t;
+        // (distance from the crossing's line)
+        const ex = bx - ax, ez = bz - az, L2 = ex * ex + ez * ez || 1, s = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2));
+        if (Math.hypot(ax + ex * s - x, az + ez * s - z) < 3.2) return false;
+      }
+    }
+    return true;
+  }
+
+  // the next link from a node: away from where it came, the way it was heading more likely, busier ways more
+  // likely, a crossing now and then
+  nextLink(p, node, from) {
+    const opts = [];
+    let dx = 0, dz = 0;
+    if (from) { const e = pointOn(from, p.dir > 0 ? from.len : 0, this.v); dx = e[2] * p.dir; dz = e[3] * p.dir; }
+    const gx = Math.sin(p.goal), gz = Math.cos(p.goal);
+    for (const l of node.links) {
+      if (l === from || l.dead) continue;
+      const out = l.a === node ? 1 : -1, e = pointOn(l, out > 0 ? Math.min(3, l.len) : Math.max(0, l.len - 3), this.v);
+      const ox = (e[0] - node.x), oz = (e[1] - node.z), ol = Math.hypot(ox, oz) || 1;
+      const straight = from ? (ox * dx + oz * dz) / ol : 0, toward = (ox * gx + oz * gz) / ol;
+      let w = (0.15 + Math.min(6, this.rateOf(l, this.hour))) * Math.exp(1.4 * toward + 0.8 * straight);
+      if (l.kind === KIND.CROSSING) w *= from?.kind === KIND.MEDIAN ? 4 : p.role === 'running' ? 0.15 : 0.45;
+      if (l.kind === KIND.MEDIAN) w *= from?.kind === KIND.CROSSING ? 0.5 : 0.02;
+      if (p.role === 'running' && (l.kind === KIND.STEPS)) w *= 0.05;
+      opts.push([[l, out], w]);
+    }
+    if (!opts.length) return from && !from.dead ? [from, from.a === node ? 1 : -1] : null;
+    return weighted(opts);
+  }
+
+  // ---------------------------------------------------------------- each frame
+  // view: { camera, focus (what is looked at), hour, T (seconds of the day), cars: [x, z, heading, speed, ...],
+  // signals (SimSignals or null), detail (the governor's share), player: { x, z } or null }
+  update(dt, view) {
+    if (!this.ready) return;
+    const { camera } = view, now = (this.now = (this.now ?? 0) + dt);
+    this.hour = view.hour; this.T = view.T; this.cars = view.cars ?? []; this.signals = view.signals ?? null; this.player = view.player ?? null;
+    // the cars by 10 m cell, for the ones in their way (carIn)
+    const C = this.cars, grid = this.carGrid ??= new Map();
+    if ((this.gridFrame = (this.gridFrame ?? 0) + 1) % 600 === 0) grid.clear(); else for (const a of grid.values()) a.length = 0;
+    for (let i = 0; i < C.length; i += 4) { const k = Math.floor(C[i] / 10) * 4096 + Math.floor(C[i + 1] / 10); let a = grid.get(k); if (!a) grid.set(k, (a = [])); a.push(i); }
+    const eye = camera.position, ground = this.surface(eye.x, eye.z), up = Math.max(0, eye.y - ground);
+    // where people are kept: round what the view looks at, from street level out to a few hundred metres up
+    const on = this.enabled && up < 320; // (from higher a person is a pixel or less)
+    if (this.frozen) { this.draw(dt, camera, eye, new THREE.Vector3()); return; }
+    // (what is looked at: the controls' target, or in a directed shot where the view meets the ground)
+    let fx, fz;
+    if (view.focus) { fx = view.focus.x; fz = view.focus.z; }
+    else { const d = camera.getWorldDirection(new THREE.Vector3()), t = Math.min(600, Math.max(20, up / Math.max(0.05, -d.y))); fx = eye.x + d.x * t; fz = eye.z + d.z * t; }
+    const cx = up < 60 ? eye.x * 0.6 + fx * 0.4 : fx, cz = up < 60 ? eye.z * 0.6 + fz * 0.4 : fz;
+    const R = Math.min(FAR, 170 + up * 0.9) * (0.6 + 0.4 * (view.detail ?? 1));
+    if (on) this.walks.update(cx, cz, R + 600);
+    const jumped = this.last && Math.hypot(this.last[0] - cx, this.last[1] - cz) > 120; // (a cut, a teleport)
+    this.last = [cx, cz];
+
+    // how many there should be: every 1 s (or after a jump), the links round about and their people at this hour
+    if (on && (jumped || !this.census || now - this.census.at > 1 || this.census.version !== this.walks.version)) {
+      const links = this.walks.near(cx, cz, R), spots = this.walks.spots.filter((s) => Math.hypot(s.x - cx, s.z - cz) < R);
+      let total = 0;
+      const cum = [];
+      for (const l of links) { if (l.kind === KIND.CROSSING) continue; l.rate = this.rateOf(l, this.hour); const n = (l.rate * l.len) / 100; total += n; cum.push([l, total]); }
+      let stills = 0;
+      const scum = [];
+      for (const s of spots) { const n = Math.min(1.5, this.spotRate(s, this.hour) * 0.15); stills += n; scum.push([s, stills]); }
+      this.census = { at: now, links, cum, total, spots, scum, stills, version: this.walks.version };
+    }
+    const scale = this.density * (0.5 + 0.5 * (view.detail ?? 1));
+    const want = on && this.census ? Math.min(POOL - 40, (this.census.total + this.census.stills * 2) * scale) : 0;
+    this.stats.target = Math.round(want);
+    // fewer than wanted: some come (all at once after a cut: the street is full when the picture comes)
+    // (after a cut, at the start, and while the walks round about arrive: the street is full when it is first seen)
+    if (this.walks.version !== this.seenVersion) { this.seenVersion = this.walks.version; this.fillUntil = now + 1.5; }
+    if (on && this.census?.total > 0) {
+      const fill = jumped || !this.filled || now < this.fillUntil;
+      let budget = fill ? 400 : 6;
+      // (at a spot or walking: whichever is further short of what the census wants; by chance, as it was, those who
+      // left the spots walked on, held the count, and nobody stood at a spot again: 26 to 1 in twelve minutes)
+      let stills = 0; for (const p of this.people) if (p.state === 'still') stills++;
+      const wantStills = this.census.stills * 2 * scale, wantWalks = this.census.total * scale;
+      while (this.people.length < want && budget-- > 0 && this.free.length > 3) {
+        let made = 0;
+        const short = this.census.scum.length && wantStills > 0 && (wantWalks <= 0 || stills / wantStills < (this.people.length - stills) / wantWalks);
+        for (let k = 0; short && !made && k < 4; k++) {
+          const s = bisect(this.census.scum, rnd() * this.census.stills);
+          if (s && !s.count && this.spawnOk(s.x, s.z, eye, fill)) stills += made = this.spawnStill(s, now, fill);
+        }
+        if (!made && (!short || this.people.length - stills < wantWalks)) {
+          // (and when the spots picked are taken, or in plain view: one walking instead, if fewer walk than should)
+          const l = bisect(this.census.cum, rnd() * this.census.total);
+          if (!l) break;
+          const u = rnd() * l.len, e = pointOn(l, u, this.v);
+          if (this.spawnOk(e[0], e[1], eye, fill)) this.spawnWalker(l, u, now, fill);
+        }
+      }
+      this.filled = true;
+    }
+    if (!on) this.filled = false;
+
+    // each one: on, faded out, gone
+    const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+    for (let i = this.people.length - 1; i >= 0; i--) {
+      const p = this.people[i], d = Math.hypot(p.x - cx, p.z - cz);
+      // (and one who has left its spot, a while later and out of sight, as one comes, spawnOk: on its way somewhere,
+      // its place taken by whoever the census is short of)
+      const leave = !on || d > R * 1.25 || p.link?.dead || (p.leader && p.leader.gone) || (this.people.length > want * 1.15 + 20 && d > R * 0.8 && !p.leader)
+        || (p.away && now > p.away && (this.frame + p.slot) % 20 === 0 && !this.seen(p, 70));
+      if (leave) p.out = true;
+      p.fade = Math.max(0, Math.min(1, p.fade + (p.out ? -dt : dt) / 0.6));
+      if (p.out && (p.fade <= 0 || !on)) { this.release(p); this.people.splice(i, 1); continue; }
+      if (p.state === 'walk' || p.state === 'wait' || p.state === 'cross') this.walk(p, dt, now);
+      else if (p.state === 'approach') this.approach(p, dt, now);
+      else if (p.state === 'still' && p.tr) { const d = this.stepTrans(p, dt); p.x += Math.sin(p.heading) * d; p.z += Math.cos(p.heading) * d; }
+      else if (p.state === 'still' && now > p.until) this.leaveSpot(p, now);
+    }
+    for (const p of this.people) if (p.state === 'follow') this.follow(p, dt);
+    // the ones in each lane: who is in front of whom (each 1/4 s), and a slower one ahead slows those behind
+    this.queues(dt);
+    this.draw(dt, camera, eye, camDir);
+    this.stats.people = this.people.length;
+  }
+  spawnOk(x, z, eye, fill) {
+    if (fill) return true;
+    // (not out of nothing in plain view, close by)
+    const d = Math.hypot(x - eye.x, z - eye.z);
+    return d > 70 || !this.inView(x, z);
+  }
+  // (one that could be seen going: within r, and in view)
+  seen(p, r = 150) { const eye = this.camera?.position; return !!eye && Math.hypot(p.x - eye.x, p.z - eye.z) < r && this.inView(p.x, p.z); }
+  inView(x, z) {
+    const cam = this.camera; if (!cam) return false;
+    const v = new THREE.Vector3(x, this.surface(x, z) + 1, z).project(cam);
+    return v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+  }
+  release(p) {
+    p.gone = true;
+    this.free.push(p.slot);
+    this.body.setVisibleAt(p.slot, false);
+    if (this.hasHair) this.hair.setVisibleAt(p.slot, false);
+    if (p.spot) p.spot.count = Math.max(0, p.spot.count - 1);
+    if (p.followers) for (const f of p.followers) f.out = true;
+  }
+  leaveSpot(p, now) {
+    // off along the way the spot is on: from a seat, up first; from beside the way, onto it as it walks; from further,
+    // a straight leg to it first. Where the way is further still, or behind the seat's back, it stays until nobody is
+    // looking, and is gone.
+    const s = p.spot, l = s?.link;
+    if (!l || l.dead || p.clipA === 'sit' && rnd() < 0.5) { p.until = now + 30 + rnd() * 120; return; }
+    const [bu, d] = nearestOn(l, p.x, p.z), e = pointOn(l, bu, this.v);
+    const seat = s.kind === SPOT.BENCH || s.kind === SPOT.SHELTER, behind = seat && (e[0] - p.x) * Math.sin(s.heading) + (e[1] - p.z) * Math.cos(s.heading) < -0.3 * d;
+    if (d > SEAT_REACH || (behind && d > SEAT_NEAR)) {
+      if (this.seen(p)) p.until = now + 10 + rnd() * 20; else p.out = true;
+      return;
+    }
+    if (p.clipA === 'sit' && this.begin(p, 'standup', (q) => { this.hold(q, 'idle'); this.leaveSpot(q, this.now); })) return;
+    s.count = Math.max(0, s.count - 1); p.spot = null; p.away = now + 30 + rnd() * 60;
+    // (the way along it it faces more, or either)
+    const along = Math.sin(p.heading) * e[2] + Math.cos(p.heading) * e[3], dir = Math.abs(along) > 0.3 ? Math.sign(along) : rnd() < 0.5 ? 1 : -1;
+    p.goal = rnd() * Math.PI * 2; p.pace = weighted([['walk', 2], ['walk2', 2], ['stroll', 1]]); this.setPace(p);
+    if (d > SEAT_NEAR) { p.state = 'approach'; p.to = { x: e[0], z: e[1], link: l, dir, u: bu, until: now + 12 }; }
+    else { this.enter(p, l, dir, bu); p.state = 'walk'; }
+    if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null);
+  }
+  // (the straight leg from a spot to its way, setting off as it goes; there, along the way)
+  approach(p, dt, now) {
+    const to = p.to, dx = to.x - p.x, dz = to.z - p.z, d = Math.hypot(dx, dz);
+    let step;
+    if (p.tr) { step = this.stepTrans(p, dt); p.v = dt ? step / dt : 0; }
+    else { p.v += (p.speed - p.v) * Math.min(1, dt * 3); step = p.v * dt; }
+    p.headingTo = Math.atan2(dx, dz);
+    if (d <= Math.max(step, 0.3) || now > to.until || to.link.dead) {
+      p.to = null; this.enter(p, to.link, to.dir, to.u); p.state = 'walk'; this.place(p, dt);
+      return;
+    }
+    // (on the way it faces, turning to the spot: no sliding sideways)
+    p.x += Math.sin(p.heading) * step; p.z += Math.cos(p.heading) * step;
+  }
+  // ---------------------------------------------------------------- the transitions
+  // A transition's clip played once from its start (the clip before fading out under it), the person carried along
+  // its travel (k: scaled, to end where it must); at its end, `then`: the clip it ends in (from that clip's first pose,
+  // the transition's last), or a function
+  begin(p, name, then) {
+    const c = p.clips[name];
+    if (!c?.trans) return false;
+    p.clipB = p.clipA; p.phaseB = p.phase; p.blend = 1; p.clipA = name; p.phase = 0;
+    p.tr = { name, t: 0, c, then, k: 1 };
+    this.stats.moves[name] = (this.stats.moves[name] ?? 0) + 1;
+    return true;
+  }
+  // The seat nearest (x, z) within r (a bench, a shelter's), where one sits on it, facing out: the visitor's walker
+  seatNear(x, z, r = 2.5) {
+    let best = null, bd = r;
+    for (const s of this.walks.spots) {
+      if (s.kind !== SPOT.BENCH && s.kind !== SPOT.SHELTER) continue;
+      const d = Math.hypot(s.x - x, s.z - z);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best && { x: best.x + Math.sin(best.heading) * 0.12, z: best.z + Math.cos(best.heading) * 0.12, heading: best.heading };
+  }
+  travelAt(c, t) {
+    const f = THREE.MathUtils.clamp(t / c.duration, 0, 1) * (c.frames - 1), i = Math.floor(f), w = f - i;
+    return c.travel[i] * (1 - w) + c.travel[Math.min(i + 1, c.frames - 1)] * w;
+  }
+  // (on along it by dt: how far it carried the person)
+  stepTrans(p, dt) {
+    const tr = p.tr, a = this.travelAt(tr.c, tr.t);
+    tr.t += dt;
+    const d = (this.travelAt(tr.c, tr.t) - a) * p.scale * tr.k;
+    if (tr.t >= tr.c.duration) {
+      p.tr = null;
+      if (typeof tr.then === 'function') tr.then(p);
+      else if (tr.then === 'walk' || tr.then === 'idle') this.hold(p, tr.then);
+      else { p.clipA = 'walk'; p.phase = 0; this.switchClip(p, tr.then); }
+    }
+    return d;
+  }
+  // (straight into a clip at its first pose: the transition's last)
+  hold(p, clip) { p.clipA = clip; p.phase = 0; p.clipB = null; p.blend = 0; }
+  // A car whose way it is in, or will be in a second and a half: [across, along, heading] of it from the car (across:
+  // to the car's right), or null
+  carIn(p) {
+    const C = this.cars, grid = this.carGrid, i0 = Math.floor(p.x / 10), j0 = Math.floor(p.z / 10), out = this.threat ??= [0, 0, 0];
+    if (!grid || !C.length) return null;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const list = grid.get((i0 + a) * 4096 + j0 + b);
+      if (!list) continue;
+      for (const i of list) {
+        const dx = p.x - C[i], dz = p.z - C[i + 1], v = C[i + 3], r = 4 + v * 1.5;
+        if (dx * dx + dz * dz > r * r) continue;
+        const s = Math.sin(C[i + 2]), c = Math.cos(C[i + 2]), along = dx * s + dz * c, across = dx * c - dz * s;
+        if (Math.abs(across) < 1.8 && along > -2.8 && along < 2.8 + v * 1.5) { out[0] = across; out[1] = along; out[2] = C[i + 2]; return out; }
+      }
+    }
+    return null;
+  }
+
+  // at a crossing it must wait at: there, standing, waiting
+  arrive(p, next, now) {
+    p.tr = null; // (setting off still, and there already: it stops where it is)
+    p.state = 'wait'; p.next = next; p.waitFrom = now; p.v = 0; // (where it is: just past the end of a short way, at times)
+    this.switchClip(p, weighted([['wait', 2], ['idle', 2], ['look', 1]]));
+  }
+  switchClip(p, clip) {
+    const next = clip ?? p.pace;
+    if (next === p.clipA) return;
+    p.clipB = p.clipA; p.phaseB = p.phase; p.blend = 1; p.clipA = next; p.phase = rnd() * (STILL.includes(next) ? 1 : 0) || p.phase;
+  }
+  walk(p, dt, now) {
+    let l = p.link;
+    if (!l || l.dead) { p.out = true; return; }
+    if (p.state === 'wait') {
+      p.v = 0;
+      if ((now - (p.check ?? 0)) > 0.25) {
+        p.check = now;
+        // (a minute and a quarter without a gap: it gives up and goes back the way it came; it went across into the
+        // traffic before)
+        const go = this.canCross(p, p.next[0]), giveUp = !go && now - p.waitFrom > 75;
+        if (go) { this.enter(p, p.next[0], p.next[1]); p.state = 'cross'; if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null); }
+        else if (giveUp) { this.turnBack(p); p.next = null; p.state = 'walk'; if (!this.begin(p, 'start', p.pace)) this.switchClip(p, null); }
+      }
+    } else if (p.tr) {
+      // carried along a transition (setting off, stopping)
+      const d = this.stepTrans(p, dt);
+      p.v = dt ? d / dt : 0; p.u = p.tr?.name.startsWith('stop') ? Math.min(p.u + d, l.len - 0.01) : p.u + d;
+      if (p.u >= l.len && p.state !== 'wait') this.onward(p, l, now);
+    } else {
+      // pace: its own, or the one in front's when close
+      let target = p.speed;
+      if (p.ahead) { const gap = p.ahead.gap - 1.2; target = Math.min(target, Math.max(0, gap) * 1.2, gap < 1.4 ? p.ahead.p.v + 0.05 : target); }
+      // A car coming through where it walks (a shared street, a footway over a driveway, the crossing it is on): the
+      // simulated cars keep to their recorded way and cannot stop for it, so it gets out of theirs, across its way
+      // from the car's line and slowing, or waiting for one coming across its way; on a crossing it hurries over.
+      const car = this.carIn(p);
+      p.dodge = false; // (stepping out of a car's way, or yours: quicker across than walking would carry it, place)
+      if (car) {
+        if (p.state === 'cross' || l.kind === KIND.CROSSING) target = Math.max(target, 1.9);
+        else {
+          const k = Math.cos(car[2] - p.heading); // (the car along its way, or across it)
+          if (Math.abs(k) > 0.5) { p.lane = -Math.sign(car[0]) * k > 0 ? 1 : -1; target = Math.min(target, 0.5); p.dodge = true; }
+          else {
+            // (across: not stepping into its way, or quickly out of it)
+            const toward = car[0] * (Math.sin(p.heading) * Math.cos(car[2]) - Math.cos(p.heading) * Math.sin(car[2])) < 0;
+            target = toward && Math.abs(car[0]) > 1.1 && car[1] > 0 ? 0 : Math.max(target, 1.9);
+          }
+        }
+      }
+      // the one you are (walking, cycling): stepped round, not walked through
+      const pl = this.player;
+      if (pl) {
+        const dx = pl.x - p.x, dz = pl.z - p.z, d = Math.hypot(dx, dz), hs = Math.sin(p.heading), hc = Math.cos(p.heading);
+        if (d < 2.4 && dx * hs + dz * hc > 0) { p.lane = -dx * hc + dz * hs > 0 ? -0.8 : 1; target = Math.min(target, Math.max(0.25, (d - 0.7) * 0.8)); p.dodge = true; }
+      }
+      p.v += (target - p.v) * Math.min(1, dt * 3);
+      p.u += p.v * dt;
+      // A crossing ahead it will have to wait at (its next link picked now): it stops, from the foot it is on, to stand
+      // at the kerb (the stop's travel fitted to the way left). One it may cross now, it walks straight on to.
+      const stop = p.clips.stopL;
+      if (stop?.trans && p.state === 'walk' && !p.plan && p.v > 0.6) {
+        const left = l.len - p.u, reach = stop.reach * p.scale;
+        if (left < reach + 0.25 && left > reach * 0.6) {
+          p.plan = this.nextLink(p, p.dir > 0 ? l.b : l.a, l) ?? 'none';
+          if (p.plan !== 'none' && p.plan[0].kind === KIND.CROSSING && !this.canCross(p, p.plan[0])) {
+            const ph = MOVE.includes(p.clipA) ? p.phase : 0, gap = (a) => (a - ph + 1) % 1;
+            const plan = p.plan;
+            if (this.begin(p, gap(0.30) < gap(0.78) ? 'stopL' : 'stopR', (q) => { q.plan = null; this.hold(q, 'idle'); this.arrive(q, plan, this.now); })) p.tr.k = left / reach;
+          }
+        }
+      }
+      if (p.u >= l.len) this.onward(p, l, now);
+    }
+    this.place(p, dt);
+  }
+  // at a node: on to the next link (the one planned, or one picked now); at a crossing it may not cross yet, first wait
+  onward(p, l, now) {
+    const node = p.dir > 0 ? l.b : l.a, next = p.plan && p.plan !== 'none' ? p.plan : this.nextLink(p, node, l);
+    p.plan = null;
+    if (!next) this.turnBack(p);
+    else if (next[0].kind === KIND.CROSSING && p.state !== 'cross' && !(p.clips.stopL?.trans && this.canCross(p, next[0]))) this.arrive(p, next, now);
+    else {
+      // (from where it is, just past the end of this one, as far across it as it was)
+      this.put(p);
+      this.enter(p, next[0], next[1]); p.state = next[0].kind === KIND.CROSSING ? 'cross' : 'walk';
+    }
+  }
+  // where: along the link, keeping to the right of the way it walks (dt 0: there at once); across it no faster than
+  // its pace along it allows (SIDE), or than a step out of a car's way (DODGE)
+  place(p, dt) {
+    const l = p.link, half = Math.max(0, l.width / 2 - 0.35), want = l.kind === KIND.CROSSING ? p.lane * 0.5 : Math.min(half, p.lane * half);
+    if (!dt) p.lat = want;
+    else {
+      const room = (p.dodge ? DODGE : SIDE * Math.abs(p.v)) * dt; p.lat += Math.max(-room, Math.min(room, (want - p.lat) * Math.min(1, dt * 1.5)));
+      // (and what is left to walk off, settle)
+      if (p.ox || p.oz) { const m = Math.hypot(p.ox, p.oz), k = Math.max(0, m - SIDE * Math.abs(p.v) * dt) / m; p.ox *= k; p.oz *= k; }
+    }
+    const e = this.put(p);
+    if ((p.v > 0.05 || !dt) && (e[2] || e[3])) p.headingTo = Math.atan2(e[2] * p.dir, e[3] * p.dir);
+  }
+  // (x, z from how far along its link it is and how far across, and what it has still to walk off; past its end, on
+  // along its last stretch; a link of no length, where it was)
+  put(p) {
+    const l = p.link, e = pointOn(l, p.dir > 0 ? p.u : l.len - p.u, this.v, 0.3 + 1.6 * Math.abs(p.lat)), dx = e[2] * p.dir, dz = e[3] * p.dir;
+    if (dx || dz) { p.x = e[0] - dz * p.lat + (p.ox || 0); p.z = e[1] + dx * p.lat + (p.oz || 0); }
+    return e;
+  }
+  // (still at (x, z), whatever its way now says: the difference kept, to be walked off, place; up to OFF_MAX)
+  settle(p, x, z) {
+    p.ox = p.oz = 0; this.put(p);
+    const ox = x - p.x, oz = z - p.z;
+    if (Math.hypot(ox, oz) <= OFF_MAX) { p.ox = ox; p.oz = oz; p.x = x; p.z = z; }
+  }
+  // Onto link l, going dir, from where it stands: as far along it and across it as that is (a crossing's start is a
+  // turn from the sidewalk's end, a seat a step from its way; at most OFF_MAX across), measured from `at` (u from the
+  // link's start), and from there over to its own side as it walks (place)
+  enter(p, l, dir, at = dir > 0 ? 0 : l.len) {
+    const x = p.x, z = p.z, e = pointOn(l, at, this.v), dx = e[2] * dir, dz = e[3] * dir, rx = x - e[0], rz = z - e[1];
+    p.link = l; p.dir = dir; p.plan = null;
+    p.u = Math.max(-OFF_MAX, Math.min(l.len + OFF_MAX, (dir > 0 ? at : l.len - at) + rx * dx + rz * dz));
+    p.lat = Math.max(-OFF_MAX, Math.min(OFF_MAX, rz * dx - rx * dz));
+    this.settle(p, x, z); // (a way that bends, a corner's arc: not quite where its first stretch says)
+    // its place across the way: right of centre (people keep right), some further out than others
+    p.lane = p.lanePref = 0.25 + rnd() * 0.7;
+  }
+  // (back the way it came, from where it is: the same side of the way, now on its left)
+  turnBack(p) { const x = p.x, z = p.z; p.dir = -p.dir; p.u = Math.max(0, p.link.len - p.u); p.lat = -p.lat; this.settle(p, x, z); }
+  follow(f, dt) {
+    const L = f.leader;
+    if (!L || L.gone) { f.out = true; return; }
+    // beside the one it walks with, or behind on a narrow sidewalk
+    // (and in single file, behind, where a car comes through: the one in front has stepped aside: carIn)
+    const l = L.link, narrow = !l || l.width < 1.7 || L.state === 'cross' || !!this.carIn(f);
+    const side = f.rank === 1 ? -1 : 1, back = narrow ? 0.9 * f.rank : 0.15, lat = L.lat + (narrow ? 0 : side * 0.62), u = Math.min(l.len, L.u - back);
+    const e = pointOn(l, L.dir > 0 ? u : l.len - u, this.v, 0.3 + 1.6 * Math.abs(lat)), dx = e[2] * L.dir, dz = e[3] * L.dir;
+    const tx = e[0] - dz * lat, tz = e[1] + dx * lat;
+    // (eased there, and no faster than a step or so more than the leader's pace: where it is to be swings round as the
+    // leader turns onto the next way, or goes single file)
+    const gap = Math.hypot(tx - f.x, tz - f.z), k = Math.min(1, dt * 6, gap > 0 ? (Math.max(0.4, L.v) * 1.6 * dt) / gap : 1);
+    f.x += (tx - f.x) * k; f.z += (tz - f.z) * k;
+    f.v = L.v; f.state = 'follow';
+    const still = L.state === 'wait';
+    // (setting off or stopping as the one it walks with does)
+    if (L.tr) { if (f.clipA !== L.clipA && f.clips[L.clipA]) { f.clipB = f.clipA; f.phaseB = f.phase; f.blend = 1; f.clipA = L.clipA; } }
+    else if (still && f.clipA !== 'idle') this.switchClip(f, 'idle');
+    else if (!still && f.clipA !== L.clipA && !STILL.includes(L.clipA)) { this.switchClip(f, L.clipA); f.cycle = this.cycleOf(f, L.clipA); }
+    if (L.v > 0.05) f.headingTo = Math.atan2(dx, dz);
+  }
+  queues(dt) {
+    this.qt = (this.qt ?? 0) + dt;
+    if (this.qt < 0.25) return;
+    this.qt = 0;
+    const lanes = new Map();
+    for (const p of this.people) {
+      p.ahead = null;
+      if (p.lanePref != null) p.lane += (p.lanePref - p.lane) * 0.12; // (back to its own side, once past)
+      if ((p.state !== 'walk' && p.state !== 'cross') || !p.link) continue;
+      const k = p.link; if (!lanes.has(k)) lanes.set(k, []); lanes.get(k).push(p);
+    }
+    for (const list of lanes.values()) {
+      if (list.length < 2) continue;
+      for (const p of list) {
+        let best = null;
+        for (const q of list) {
+          if (q === p || q.dir !== p.dir || Math.abs(q.lat - p.lat) > 0.55) continue;
+          const gap = q.u - p.u;
+          if (gap > 0 && gap < 6 && (!best || gap < best.gap)) best = { p: q, gap };
+        }
+        // overtaking: a slower one close ahead, room further out: step out to pass
+        if (best && best.p.v < p.speed - 0.15 && best.gap < 3) p.lane = Math.min(1, p.lane + 0.35);
+        p.ahead = best;
+        // and side by side with another (either way): a step apart
+        for (const q of list) {
+          if (q === p || Math.abs((q.dir === p.dir ? q.u : q.link.len - q.u) - p.u) > 0.9) continue;
+          const lq = q.dir === p.dir ? q.lat : -q.lat; // (its offset, from this one's side)
+          if (Math.abs(lq - p.lat) < 0.55) p.lane = Math.max(-1, Math.min(1, p.lane + (p.lat >= lq ? 0.3 : -0.3)));
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- drawing
+  draw(dt, camera, eye, camDir) {
+    this.camera = camera;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), pos = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
+    const D = this.data;
+    let drawn = 0, seen = 0;
+    this.frame = (this.frame ?? 0) + 1;
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)), at = new THREE.Vector3();
+    for (const p of this.people) {
+      const c = p.clips[p.clipA] ?? p.clips.idle;
+      // the clip runs on: a walk at the pace it is carried, standing still in its own time, a transition once through
+      // (a follower's as its leader's)
+      if (this.frozen && p.tr) {
+        // (a lineup's transition, over and over, carried along as it would be)
+        p.tr.t = (p.tr.t + dt) % (p.tr.c.duration + 0.6);
+        const d = this.travelAt(p.tr.c, p.tr.t) * p.scale; p.x = p.x0 + Math.sin(p.heading) * d; p.z = p.z0 + Math.cos(p.heading) * d;
+      }
+      const tr = p.tr ?? (p.leader?.tr && p.leader.clipA === p.clipA ? p.leader.tr : null);
+      if (tr) p.phase = THREE.MathUtils.clamp(tr.t / c.duration, 0, 1) * (c.frames - 1) / c.frames;
+      else if (TRANS.includes(p.clipA)) p.phase = (c.frames - 1) / c.frames;
+      else if (MOVE.includes(p.clipA)) p.phase = (p.phase + (p.v * dt) / (p.cycle || c.speed * c.duration || 1)) % 1;
+      else p.phase = (p.phase + dt / c.duration) % 1;
+      if (p.blend > 0) {
+        const b = p.clips[p.clipB];
+        if (b && !TRANS.includes(p.clipB)) p.phaseB = (p.phaseB + (MOVE.includes(p.clipB) ? (p.v * dt) / (this.cycleOf(p, p.clipB) || 1) : dt / b.duration)) % 1;
+        p.blend = Math.max(0, p.blend - dt / (tr ? 0.2 : 0.35));
+      }
+      // the heading eases round
+      if (p.headingTo != null) { const d = Math.atan2(Math.sin(p.headingTo - p.heading), Math.cos(p.headingTo - p.heading)); p.heading += d * Math.min(1, dt * 7); }
+      const dist = Math.hypot(p.x - eye.x, p.z - eye.z, (p.y ?? eye.y) - eye.y);
+      const lod = this.forceLod ?? lodAt(dist, p.lod);
+      // its height: on the street as drawn, looked up again when it has moved a little (or now and then)
+      if (p.y == null || Math.abs(p.x - p.hx) + Math.abs(p.z - p.hz) > (lod < 2 ? 0.35 : 1.5) || (this.frame + p.slot) % 15 === 0) {
+        p.hy = streetAt(this.surface, p.x, p.z, p.y ?? this.surface(p.x, p.z)) + ((p.leader ?? p).link?.kind === KIND.CROSSING ? 0 : this.lift(p.x, p.z));
+        p.hx = p.x; p.hz = p.z;
+      }
+      p.y = p.y == null || Math.abs(p.hy - p.y) > 2 ? p.hy : p.y + (p.hy - p.y) * Math.min(1, dt * 12);
+      const visible = dist < FAR && p.fade > 0;
+      const a = p.avatar, g = a.geo[lod];
+      if (!visible) { if (p.lod !== -1) { this.body.setVisibleAt(p.slot, false); if (this.hasHair) this.hair.setVisibleAt(p.slot, false); p.lod = -1; } continue; }
+      if (p.lod !== lod) {
+        this.body.setGeometryIdAt(p.slot, g.body); this.body.setVisibleAt(p.slot, true);
+        if (this.hasHair) { if (g.hair != null) { this.hair.setGeometryIdAt(p.slot, g.hair); this.hair.setVisibleAt(p.slot, true); } else this.hair.setVisibleAt(p.slot, false); }
+        p.lod = lod;
+      }
+      q.setFromAxisAngle(Y, p.heading); s.setScalar(p.scale); pos.set(p.x, p.y, p.z);
+      m.compose(pos, q, s);
+      this.body.setMatrixAt(p.slot, m);
+      if (this.hasHair && g.hair != null) this.hair.setMatrixAt(p.slot, m);
+      const o = p.slot * 16, B = p.blend > 0 ? p.clips[p.clipB] : null;
+      D[o] = c.start; D[o + 1] = c.frames; D[o + 2] = p.phase; D[o + 3] = B ? p.blend : 0;
+      D[o + 4] = B ? B.start : 0; D[o + 5] = B ? B.frames : 1; D[o + 6] = B ? p.phaseB : 0; D[o + 7] = a.layer;
+      D[o + 8] = p.tone[0]; D[o + 9] = p.tone[1]; D[o + 10] = p.tone[2]; D[o + 11] = p.fade;
+      drawn++;
+      if (dist < 120 && frustum.containsPoint(at.set(p.x, p.y + 1, p.z))) seen++;
+    }
+    this.dataTexture.needsUpdate = true;
+    this.stats.drawn = drawn; this.stats.seen = seen;
+  }
+  // (for looking at them: every avatar in a row at (x, z), facing `heading`, each twice: as drawn, and with the
+  // darkest tone it may take; the crowd stands aside meanwhile, until lineup(null))
+  lineup(x, z, heading = 0, clip = 'idle', ids = null) {
+    for (const p of this.people) this.release(p);
+    this.people.length = 0;
+    this.frozen = x != null;
+    if (!this.frozen) return;
+    const ax = Math.cos(heading), az = -Math.sin(heading), list = this.avatars.filter((a) => !ids || ids.includes(a.id)).flatMap((a) => (a.tint ? [[a, false], [a, true]] : [[a, false]]));
+    list.forEach(([a, dark], i) => {
+      const p = this.person('everyday', null);
+      if (!p) return;
+      const k = (((a.fairHair ? 58 : 42) + 16) / (a.base + 16)) ** 3, o = (i - (list.length - 1) / 2) * 0.9;
+      Object.assign(p, { avatar: a, clips: a.clips, tone: dark && k < 1 ? [k, k, k ** 1.06] : [1, 1, 1], scale: 1, state: 'still', x: x + ax * o, z: z + az * o, heading, clipA: a.clips[clip] ? clip : 'idle', fade: 1, until: Infinity, label: `${a.id}${dark ? ' dark' : ''}` });
+      if (a.clips[clip]?.trans) Object.assign(p, { tr: { name: clip, t: 0, c: a.clips[clip], then: null, k: 1 }, x0: p.x, z0: p.z });
+    });
+  }
+}
