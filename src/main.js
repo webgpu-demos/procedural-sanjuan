@@ -293,6 +293,14 @@ if (params.get('traffic') !== '0') scene.add(traffic.group);
 // The simulated morning (tools/sim): every car a trip SUMO drove. Without a time in the link it opens on it,
 // running in real time from before dawn.
 let sim = WANT_SIM ? await SimTraffic.load(SIM_BASE, streamer.surface, roads, (x, z) => streamer.ground(x, z), drawnDecks) : null;
+// A run made on other roads than these tiles' drives its cars off the painted lanes (tools/deploy.sh refuses to
+// publish one): in development, said in the console. (The run's index has the sha1 of the roads.json it was made on.)
+if (import.meta.env.DEV && sim?.index.roads) {
+  fetch(`tiles/${AREA}/${manifest.roads}`).then((r) => r.arrayBuffer()).then((b) => crypto.subtle.digest('SHA-1', b)).then((d) => {
+    const hex = [...new Uint8Array(d)].map((v) => v.toString(16).padStart(2, '0')).join('');
+    if (hex !== sim.index.roads) console.warn(`the simulated run was made on other roads (${sim.index.roads.slice(0, 8)}) than these tiles' (${hex.slice(0, 8)}): run tools/sim again on this roads.json`);
+  }).catch(() => {});
+}
 // its signals: the heads at the junctions show what the simulation's lights showed (before any tile is built)
 const simSignals = sim && await early.signals.then((j) => j && new SimSignals(j, roads)).catch(() => null);
 if (simSignals) { props.signalSlot = (x, z, rot) => simSignals.slot(x, z, rot); props.mats.lens.uniforms.uSig.value = simSignals.texture; }
@@ -1006,6 +1014,8 @@ function cullSmall() {
         if (!o.isInstancedMesh) return;
         const key = String((Array.isArray(o.material) ? o.material[0] : o.material).customProgramCacheKey?.() ?? '');
         if (o.userData.parked) tile.userData.small.push(o.userData.parked === 'near' ? [o, 0, NEAR_PARKED] : [o, NEAR_PARKED, FAR_PARKED]);
+        // (a far tree's crown: its simple one out to FAR_SMALL, the one of a few triangles past it, props.js)
+        else if (o.userData.crown) tile.userData.small.push(o.userData.crown === 'distant' ? [o, FAR_SMALL, Infinity] : [o, 0, FAR_SMALL]);
         else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, 0, FAR_SMALL]);
       });
       const [x, z] = tile.name.slice(5).split('_').map(Number);

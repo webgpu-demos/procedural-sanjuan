@@ -24,6 +24,7 @@ const BAND = 110;                                       // a car hands over from
 const MOVE = 0.4, DRIFT = 2.0;
 const AROUND = [-1, -0.5, 0.5, 1]; // (where else along its track a model's painted lane is looked up, in spans of about 24 m)
 const DETAIL = 250;                                     // within this, the full model; beyond, a lighter one
+const ABREAST = 2.5;                                    // metres between two cars side by side, at least (relane)
 // a 24 m cell's number (the corrected levels by cell, fixAt): the cell east of it is +1, north +CELLS
 const CELLS = 1 << 16;
 const reversed = (pts) => { const out = []; for (let k = pts.length - 3; k >= 0; k -= 3) out.push(pts[k], pts[k + 1], pts[k + 2]); return out; };
@@ -267,10 +268,12 @@ export class SimTraffic {
     if (!best) return null;
     const g = best, u = bu, d = bdd;
     const fromRight = g.sumo / 2 - 0.5 - d / g.sw;                // SUMO's lane, counted from the right
-    // (more lanes in SUMO than painted, where the paint is narrower than OSM's count: SUMO's lanes share the painted
-    // width evenly, so that two cars side by side in SUMO do not ride in one painted lane, the one through the other)
+    // (more lanes in SUMO than painted, where the paint is narrower than OSM's count or SUMO's network widened a join:
+    // SUMO's lanes share the painted width evenly, so that two cars side by side in SUMO do not ride in one painted
+    // lane; and no closer than ABREAST, spilling evenly onto the shoulders where the paint is too narrow for that: four
+    // in two painted lanes were drawn 1.8 m apart, the one through the other, on PR-18 in the jam)
     const lane = g.sumo > g.painted
-      ? Math.min(g.painted - 0.55, Math.max(-0.45, (fromRight + 0.5) * (g.painted / g.sumo) - 0.5))
+      ? (g.painted - 1) / 2 + (fromRight - (g.sumo - 1) / 2) * Math.max(g.painted / g.sumo, ABREAST / g.lw)
       : Math.min(g.painted - 0.55, Math.max(-0.45, fromRight + g.painted - g.sumo));
     const at = g.s0 + u;
     // (the painted centre's offset from the OSM line, to the right of the way travelled)
