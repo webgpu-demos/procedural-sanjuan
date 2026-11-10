@@ -24,6 +24,16 @@ const num = (v) => {
   return /'|ft|feet/.test(String(v)) ? n * 0.3048 : n;
 };
 
+// Roofs on posts, not buildings: building=roof and its kin. OSM also writes "roof;yes", "yes;roof" and "roof;house"
+// (22 ways in San Juan), which an exact match let through as solid blocks, and carports (18) are the same thing.
+// Canopies are drawn from them: tools/pipeline/extras.mjs.
+export const roofLike = (t) => [t.building, t['building:part']].some((v) => v != null && String(v).split(';').some((k) => /^(roof|carport)$/.test(k.trim())));
+// Not above the ground: location=underground, and a station a layer below the street (the Tren Urbano's at Río
+// Piedras, building=train_station layer=-1, stood 16 m tall on Calle Arroyo). Not every layer=-1: 133 buildings
+// carry one here, most of them houses on a slope.
+const underground = (t) => t.location === 'underground'
+  || ((num(t.layer) ?? 0) < 0 && (t.building === 'train_station' || t.railway === 'station' || t.public_transport === 'station'));
+
 const HOUSE = new Set(['house', 'detached', 'semidetached_house', 'terrace', 'bungalow', 'residential', 'farm', 'cabin', 'static_caravan', 'hut']);
 const SMALL = new Set(['garage', 'garages', 'shed', 'hut', 'kiosk', 'carport', 'toilets', 'service', 'container', 'cabin', 'transformer_tower']);
 const CIVIC = new Set(['public', 'civic', 'government', 'townhall', 'courthouse', 'fire_station', 'police', 'military', 'barracks', 'castle', 'fort']);
@@ -107,14 +117,16 @@ const ringAreaLL = (r, proj) => {
 };
 const centroidLL = (r) => [r.reduce((s, p) => s + p[0], 0) / r.length, r.reduce((s, p) => s + p[1], 0) / r.length];
 
-// OSM buildings: [{ id, tags, polygons: [[outer, ...holes]] (lon/lat rings), part }]
+// OSM buildings: [{ id, tags, polygons: [[outer, ...holes]] (lon/lat rings), part }]; and, as `.roofs` of the list,
+// the outlines left out as roofs on posts or as underground ([[lon, lat], ...]): no building, but OSM has the place
 function readOsmBuildings(file) {
   const { elements } = JSON.parse(fs.readFileSync(file, 'utf8'));
   const nodes = new Map(), ways = new Map(), out = [], inRelation = new Set();
+  out.roofs = [];
   for (const e of elements) { if (e.type === 'node') nodes.set(e.id, [e.lon, e.lat]); else if (e.type === 'way') ways.set(e.id, e); }
   const ll = (ids) => ids.map((id) => nodes.get(id)).filter(Boolean);
   for (const e of elements) {
-    if (e.type !== 'relation' || !e.tags?.building) continue;
+    if (e.type !== 'relation' || !e.tags?.building || roofLike(e.tags) || underground(e.tags)) continue;
     const members = (role) => e.members.filter((m) => m.type === 'way' && (role === 'inner' ? m.role === 'inner' : m.role !== 'inner') && ways.has(m.ref)).map((m) => ways.get(m.ref).nodes);
     e.members.forEach((m) => { if (m.type === 'way') inRelation.add(m.ref); });
     const outers = stitch(members('outer')).map(ll), inners = stitch(members('inner')).map(ll);
@@ -124,7 +136,8 @@ function readOsmBuildings(file) {
   for (const w of ways.values()) {
     const t = w.tags ?? {};
     if (!t.building && !t['building:part']) continue;
-    if (t.building === 'roof' || t.building === 'no' || t['building:part'] === 'roof') continue; // canopies: tools/pipeline/extras.mjs
+    if (roofLike(t) || underground(t)) { if (w.nodes.length >= 4 && w.nodes[0] === w.nodes.at(-1)) out.roofs.push(ll(w.nodes)); continue; } // canopies: tools/pipeline/extras.mjs
+    if (t.building === 'no') continue;
     if (inRelation.has(w.id) && !t.building && !t['building:part']) continue;
     if (w.nodes.length < 4 || w.nodes[0] !== w.nodes.at(-1)) continue;
     out.push({ id: `w${w.id}`, tags: t, polygons: [[ll(w.nodes)]], part: !t.building && !!t['building:part'] });
@@ -253,11 +266,55 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
 
   // FEMA buildings that OSM does not have: no OSM building in or over them
   const osmIndex = new PolyIndex(32);
-  for (const b of out) osmIndex.add([b.polygons[0][0].map(([lon, lat]) => proj.project(lon, lat))]);
+  // (and the OSM outlines' corners, by cell: the same question asked the other way round, below)
+  const CORNER = 32, corners = new Map();
+  for (const b of out) {
+    const ring = b.polygons[0][0].map(([lon, lat]) => proj.project(lon, lat));
+    osmIndex.add([ring]);
+    for (const p of ring) { const k = Math.floor(p[0] / CORNER) + ',' + Math.floor(p[1] / CORNER); if (!corners.has(k)) corners.set(k, []); corners.get(k).push(p); }
+  }
+  // The roofs and the underground outlines OSM has (readOsmBuildings): FEMA reads a canopy off the imagery as a
+  // building, and where OSM says it is a roof the FEMA outline under it came through as a block all the same. The
+  // two are the same thing when the middle of either lies in the other (a shop FEMA merged with its canopy is not:
+  // it stays).
+  const roofIndex = new PolyIndex(32), roofMiddles = new Map();
+  for (const ll of osm.roofs) {
+    const ring = ll.slice(0, -1).map(([lon, lat]) => proj.project(lon, lat));
+    if (ring.length < 3) continue;
+    roofIndex.add([ring]);
+    const m = [ring.reduce((s, p) => s + p[0], 0) / ring.length, ring.reduce((s, p) => s + p[1], 0) / ring.length], k = Math.floor(m[0] / CORNER) + ',' + Math.floor(m[1] / CORNER);
+    if (!roofMiddles.has(k)) roofMiddles.set(k, []);
+    roofMiddles.get(k).push(m);
+  }
+  // how far inside the ring's edge (x, z) lies
+  const inset = (x, z, r) => {
+    let best = Infinity;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const ax = r[j][0], az = r[j][1], dx = r[i][0] - ax, dz = r[i][1] - az, l2 = dx * dx + dz * dz, t = l2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+      best = Math.min(best, Math.hypot(x - ax - dx * t, z - az - dz * t));
+    }
+    return best;
+  };
+  // An OSM building reaching a metre or more into the FEMA outline: the outline is that building again (or the
+  // block it stands in), drawn round it as a second one. The test above asks only whether FEMA's corners lie in an
+  // OSM building, and misses an OSM building inside a larger FEMA outline unless its middle is where FEMA's is: 196
+  // of San Juan's 4,079 FEMA-only outlines held an OSM corner, 106 of them a metre or more in (the rest are
+  // neighbours whose walls the two surveys put a few decimetres across each other: both stand).
+  const REACH = 1;
+  const holdsOsm = (f) => {
+    const ring = f.rings[0];
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    for (let i = Math.floor(x0 / CORNER); i <= Math.floor(x1 / CORNER); i++) for (let k = Math.floor(z0 / CORNER); k <= Math.floor(z1 / CORNER); k++) {
+      for (const [x, z] of corners.get(i + ',' + k) ?? []) if (x > x0 && x < x1 && z > z0 && z < z1 && inRings(x, z, f.rings) && inset(x, z, ring) >= REACH) return true;
+      for (const [x, z] of roofMiddles.get(i + ',' + k) ?? []) if (inRings(x, z, f.rings)) return true;
+    }
+    return false;
+  };
   for (const f of fema) {
     if (usedFema.has(f.i) || !f.height || f.area < 12) continue;
     const ring = f.rings[0], [cx, cz] = [ring.reduce((s, p) => s + p[0], 0) / ring.length, ring.reduce((s, p) => s + p[1], 0) / ring.length];
-    if (osmIndex.has(cx, cz) || ring.some(([x, z]) => osmIndex.has(x, z))) continue;
+    if (osmIndex.has(cx, cz) || ring.some(([x, z]) => osmIndex.has(x, z)) || roofIndex.has(cx, cz) || holdsOsm(f)) continue;
     const inHeritage = !!heritageRing && inRings(cx, cz, heritageRing);
     const usage = usageOf({ building: 'yes' }, f, inHeritage);
     const gers = garita?.at(...centroidLL(f.ll[0]))?.gers ?? null; // Garita's building (an imagery detection, mostly) under it

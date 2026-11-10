@@ -57,7 +57,7 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   cracking, utility-cut patches and trenches with sealed edges, tar snakes, oil drips, potholes (after slop-newyork's
   road material).
 - **People on foot** (`people.js`): the sidewalks, crossings, footways and plazas walked by as many people as would be
-  there at that hour (below), each one of 38 of Microsoft's [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox)
+  there at that hour (below), each one of 39 of Microsoft's [Rocketbox](https://github.com/microsoft/Microsoft-Rocketbox)
   avatars (MIT), chosen for a San Juan street: everyday clothes for the heat, office clothes in the Milla de Oro, a
   clinic's whites and scrubs, runners on the promenades at dawn, swimwear by the beach, children with a grown-up; not
   the library's winter clothes, other countries' uniforms, or headscarves and robes. Most of the library is fair;
@@ -76,7 +76,7 @@ Streams the 256 m tiles around the camera; meshing runs in Web Workers (`src/wor
   at San Juan, volumetric clouds, sun shadows, ambient occlusion, bloom, day and night on San Juan's clock
   (AST, UTC−4 all year).
 
-Drag to pan, right-drag to rotate, WASD to move, N for day/night, click a building to inspect it.
+Drag to pan, right-drag to rotate, WASD to move, N for sound, G for the settings panel and readout, click a building to inspect it.
 URL parameters: `?area=condado`, `?night=1`, `?time=18.5`, `?cam=x,z,distance,azimuth,elevation`, `?radius=1500`.
 
 ## Garita, the island above it (`src/shared/twin.js`)
@@ -116,6 +116,14 @@ npm run compile    # data/raw -> public/tiles/<area>/      (seconds; several min
 npm run preview    # top-down render -> data/preview/<area>.png
 npm test           # tile format round trip + checks over the compiled areas
 ```
+
+No building stands in a road: `compile` takes out (or notches, keeping the rest of its footprint) a building that a
+drawn street-level centreline runs into by half a metre or more, and paves the slot (`tools/pipeline/roadclear.mjs`;
+forts and landmark models excepted). Tiles compiled before that rule are patched in place, without a recompile
+(which would delete `sim/`): `node tools/pipeline/clearroads.mjs --area=<id> [--dry-run] [--list]`. It copies every
+file it changes to `data/tiles-backup/before-clearroads-<id>/` first (with `cleared.json`, the list of what it did),
+flags a removed building `NO_SOLID` so the tile's building order and ids stay as they were, and is safe to run again.
+`npm test` (`roads-clear.test.mjs`) fails on an area that still needs it.
 
 All scripts take `--area=<id>` (default `sanjuan`). Areas are defined in `tools/pipeline/config.mjs` as an
 origin, a bounding box and a default view:
@@ -222,8 +230,8 @@ foot, by bike, by car and by helicopter (below: the car rides the ground or the 
 against the buildings' walls and the simulated cars, which fade rather than drive through you), the **apagón** (at
 5:45 the grid fails: windows, street lamps and every signal go dark in a wave from the Monacillos transmission
 centre, and the rush is simulated without them, every dark signal an all-way stop as the law has it; it plays as a
-scene of its own: the dark rolling across the city, Ponce de León and Roosevelt with its signals dead, the jam two
-hours on), riding with any car (click it: where it comes from, why it drives, its delay), the jam map, the lancha
+scene of its own: the dark rolling across the city, Avenida 65 de Infantería with its signals dead, the jam an
+hour and a half on), riding with any car (click it: where it comes from, why it drives, its delay), the jam map, the lancha
 crossing to Cataño on its timetable, and plenas and more on the radio ("Callejón de Panderetas", "Fiesta de la
 Memoria", "Romanoctubre", "Island Call and Response", "Bounce Playful" and "Perdona mi vida", made for the project
 with Suno, one after the other, round again; in the apagón the radio dies with the power,
@@ -341,7 +349,8 @@ npm run deploy     # vite build (with the compiled areas in public/) -> force-pu
 
 GitHub Pages serves that branch (Settings → Pages → Deploy from a branch → `gh-pages`, `/`). The build uses
 relative URLs (`base: './'` in `vite.config.js`), so it works under `https://<owner>.github.io/<repo>/`.
-The branch holds only the latest build (about 210 MB with all four areas); compile the areas before deploying.
+The branch holds only the latest build (about 210 MB with all four areas); compile the areas before deploying,
+and run `npm test` (an area compiled before the road rule needs `clearroads.mjs`, above).
 
 ## Compiled output (`public/tiles/<area>/`)
 

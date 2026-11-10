@@ -242,14 +242,19 @@ export class Driver {
     let v = this.speed;
     // engine, brakes, reverse; rolling resistance and air
     if (gas) v += (v < 0 ? 14 : 5.6 * (1 - (v / top) ** 2) * (boost ? 1.6 : 1)) * dt; // (0-100 km/h in about 6 s)
-    if (brake) v -= (v > 0.5 ? 16 : 5 * (1 - Math.min(1, -v / REVERSE))) * dt;
+    if (brake) v -= (v > 0.5 ? 9.5 : 5 * (1 - Math.min(1, -v / REVERSE))) * dt; // (as hard as tyres hold on dry asphalt: it was 1.6 g)
     if (!gas && !brake) v -= Math.sign(v) * Math.min(Math.abs(v), (0.5 + 0.06 * Math.abs(v)) * dt);
     if (hand) v -= Math.sign(v) * Math.min(Math.abs(v), 7 * dt);
-    v = THREE.MathUtils.clamp(v, -REVERSE, top + 2);
+    // (held to the push's top speed whether Shift is down or not: let go at 58 m/s, the car was at 46 the next frame.
+    // Over its top speed the engine's share above is negative: it comes down on its own.)
+    v = THREE.MathUtils.clamp(v, -REVERSE, BOOST + 2);
     // steering: the lock closes as the speed rises; the wheel comes back by itself
     const lock = 0.6 / (1 + Math.abs(v) / 11);
     this.steer += (steerIn * lock - this.steer) * (1 - Math.exp(-dt * (steerIn ? 5 : 7)));
-    const yaw = (v / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.7 : 1);
+    // (and no tighter than the tyres hold: 8.5 m/s² across, 12 let go with the handbrake. The wheel alone turned it
+    // at 31 m/s² at 20 m/s and 8 g flat out, a U-turn 23 m wide at 158 km/h.)
+    const most = (hand ? 12 : 8.5) / Math.max(Math.abs(v), 3);
+    const yaw = THREE.MathUtils.clamp((v / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.7 : 1), -most, most);
     this.heading += yaw * dt;
     // the course follows the heading with grip (the handbrake lets go of it: a slide)
     const grip = hand ? 1.6 : 9;
@@ -262,7 +267,13 @@ export class Driver {
     // (and the water's edge: the sea, a lagoon, a river, unless a deck crosses it there at the car's height; set
     // down in the water, it drives out of it)
     const water = (x, z) => this.wet(x, z) && !this.wet(this.x, this.z) && this.decks?.at(x, z, this.y + 0.5, 2.4) == null;
-    let hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => { const x = nx + c * a + s * b, z = nz - s * a + c * b; return this.walls.blocked(x, z) || water(x, z); });
+    // (and on a flyover, its parapets: a probe neither on a deck's paving at the car's level nor on the street at
+    // about that level, past the deck's end, is a wall, as for the simulated cars, roadlevel.js offCorners. Nothing
+    // held the car up there: through the parapet it hung in the air for three metres and glided down. Only where
+    // the car itself stands on what it may: somewhere the decks do not cover as drawn, it can still drive out.)
+    const paved = (x, z) => this.decks.cornerOn(x, z, this.y) || (this.decks.ground.on(x, z) && Math.abs(streetAt(this.surface, x, z, this.y) + this.lift(x, z) - this.y) < 0.4);
+    const parapet = this.onDeck && paved(this.x, this.z) ? (x, z) => !paved(x, z) : () => false;
+    let hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => { const x = nx + c * a + s * b, z = nz - s * a + c * b; return this.walls.blocked(x, z) || water(x, z) || parapet(x, z); });
     // the street's things and the vehicles round about (collide.js: the simulated cars, the traffic, the car
     // parked): one met from outside stops it; one it is already inside of it drives out of (set down in a queue,
     // the first seconds it may drive through the cars at all: ghost)
@@ -287,16 +298,20 @@ export class Driver {
     // (the asphalt as drawn, a bridge's deck at street level included; the kerb up onto a sidewalk)
     const ground = streetAt(this.surface, this.x, this.z, this.y) + this.lift(this.x, this.z), deck = this.decks?.at(this.x, this.z, this.y + 0.5, 2.4) ?? null;
     const want = deck != null && Math.abs(deck - this.y) < 2.4 ? deck : ground;
+    this.onDeck = want !== ground && want - ground > 1; // (up on a flyover, not a deck at street level)
     // (no steeper than a road climbs: the elevation model has the odd bridge embankment in it, a wall to drive into)
-    const moved = Math.hypot(nx - this.x, nz - this.z) + Math.abs(v) * dt, climb = 0.35 * moved + 0.02;
+    const moved = Math.hypot(nx - this.x, nz - this.z) + Math.abs(v) * dt, climb = 0.35 * moved + 1.2 * dt; // (by the time gone, not the frame: it settled twice as fast at 120 Hz)
     this.y += THREE.MathUtils.clamp((want - this.y) * (1 - Math.exp(-dt * 12)), -climb * 2, climb);
-    // pitch and roll from the ground under the wheels (on a deck: level)
-    if (want === ground) {
-      const f = this.surface(this.x + s * 1.4, this.z + c * 1.4, -2) - this.surface(this.x - s * 1.4, this.z - c * 1.4, -2);
-      const r = this.surface(this.x + c * 0.9, this.z - s * 0.9, -2) - this.surface(this.x - c * 0.9, this.z + s * 0.9, -2);
-      this.pitch += (-Math.atan(f / 2.8) - this.pitch) * (1 - Math.exp(-dt * 8));
-      this.roll += (Math.atan(r / 1.8) - this.roll) * (1 - Math.exp(-dt * 8));
-    } else { this.pitch *= Math.exp(-dt * 8); this.roll *= Math.exp(-dt * 8); }
+    // pitch and roll from what is under the wheels: the street as drawn (a bridge at street level is its deck, not the
+    // river bed under it, which is what the bare terrain gave: the car tilted to it), or the deck it is on, fore and
+    // aft (level across). On a flyover's ramp it was drawn level, its nose in the deck.
+    {
+      const at = want === ground ? (x, z) => streetAt(this.surface, x, z, this.y) : (x, z) => this.decks.at(x, z, this.y + 0.5, 2.4) ?? want;
+      const f = at(this.x + s * 1.4, this.z + c * 1.4) - at(this.x - s * 1.4, this.z - c * 1.4);
+      const r = want === ground ? at(this.x + c * 0.9, this.z - s * 0.9) - at(this.x - c * 0.9, this.z + s * 0.9) : 0;
+      this.pitch += (-Math.atan(THREE.MathUtils.clamp(f, -0.6, 0.6) / 2.8) - this.pitch) * (1 - Math.exp(-dt * 8));
+      this.roll += (Math.atan(THREE.MathUtils.clamp(r, -0.4, 0.4) / 1.8) - this.roll) * (1 - Math.exp(-dt * 8));
+    }
     // the body leans out of a turn and dips under the brakes
     const lean = THREE.MathUtils.clamp(yaw * v * 0.012, -0.06, 0.06), dive = brake && v > 1 ? 0.025 : gas ? -0.012 : 0;
     this.bump *= Math.exp(-dt * 6);

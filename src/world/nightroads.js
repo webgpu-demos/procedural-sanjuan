@@ -47,6 +47,7 @@ export function buildNightRoads(roads, extent) {
   const t = new THREE.DataTexture(r, W, H, THREE.RedFormat);
   t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
   t.unpackAlignment = 1;
+  t.anisotropy = 8; // (seen far off at a grazing angle: the lit streets stay lines instead of a glow)
   t.needsUpdate = true;
   shared.uNightRoads.value = t;
   shared.uNightRoadsRect.value.set(extent.minX, extent.minZ, W * PX, H * PX);

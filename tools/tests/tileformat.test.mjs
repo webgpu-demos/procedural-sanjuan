@@ -49,7 +49,10 @@ for (const id of Object.keys(AREAS)) {
     const areaEN = (r) => { let s = 0; for (let i = 0, n = r.length / 2; i < n; i++) { const j = (i + 1) % n; s += r[j * 2] * r[i * 2 + 1] - r[i * 2] * r[j * 2 + 1]; } return s / 2; };
     let nB = 0;
     for (const tl of m.tiles) {
-      const t = decodeTile(new Uint8Array(fs.readFileSync(path.join(dir, tl.file))).buffer);
+      const bytes = new Uint8Array(fs.readFileSync(path.join(dir, tl.file))), t = decodeTile(bytes.buffer);
+      // decoded and encoded again, the same bytes: what lets a tool change one thing in a compiled tile and leave
+      // the rest as it was (tools/pipeline/clearroads.mjs)
+      assert.ok(Buffer.compare(Buffer.from(encodeTile(t)), Buffer.from(bytes)) === 0, `${tl.file}: decode -> encode does not give it back`);
       assert.equal(t.buildings.length, tl.buildings);
       assert.equal(t.props.length, tl.props);
       for (const p of t.props) assert.ok(Number.isFinite(p.x) && Number.isFinite(p.z) && p.scale > 0);

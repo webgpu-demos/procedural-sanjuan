@@ -64,11 +64,12 @@ vec2 traceMirror(vec3 P, vec3 R, float jitter) {
 void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
   outputColor = vec4(inputColor.rgb, 1.0);
   float pane = 1.0 - inputColor.a;
-  if (pane < 0.02 || depth >= 1.0) return;
-
-  vec3 P = viewPosition(uv, depth);
   // the mirror's normal from the depth buffer: walls and water are flat, so neighbouring pixels give it
-  vec3 N = normalize(cross(dFdx(P), dFdy(P)));
+  // (worked out before any pixel returns: the derivatives come from the neighbouring pixels of the 2x2 quad, and
+  // a neighbour that has returned already gives an undefined one, a speckle along the edge of every pane)
+  vec3 P = viewPosition(uv, depth), dPx = dFdx(P), dPy = dFdy(P);
+  if (pane < 0.02 || depth >= 1.0) return;
+  vec3 N = normalize(cross(dPx, dPy));
   vec3 V = normalize(P);
   if (dot(N, V) > 0.0) N = -N;
   bool level = (mat3(uCameraWorld) * N).y > 0.85;  // water

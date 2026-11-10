@@ -14,7 +14,7 @@ import { DrawnDecks } from './roadlevel.js';
 import { Fleet, BODY_OF, lookOf, wheelBlur } from './fleet.js';
 import { TYPES, dissolve, beamGeometry, beamTexture } from './traffic.js';
 import { shared } from './materials.js';
-import { LAMP_LAYER, lampMaterial, lampUniforms } from './lamplight.js';
+import { lampMaterial, lampUniforms } from './lamplight.js';
 
 const NEAR = 700, MID = 2800, LIGHTS = 12000;           // metres from the camera (near: the default; sim.near)
 const NONE = []; // (an empty cell: a lookup that finds nothing makes no array; never added to. Not frozen: a frozen array is iterated the slow way, allocating)
@@ -29,8 +29,6 @@ const CELLS = 1 << 16;
 const reversed = (pts) => { const out = []; for (let k = pts.length - 3; k >= 0; k -= 3) out.push(pts[k], pts[k + 1], pts[k + 2]); return out; };
 const cellKey = (x, z) => (Math.floor(z / 24) + CELLS / 2) * CELLS + Math.floor(x / 24) + CELLS / 2;
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-// (an easing step k taken n frames running: what is left of a gap shrinks as it would have one frame at a time)
-const over = (k, n) => (n <= 1 ? k : 1 - (1 - k) ** n);
 const MAX_NEAR = 4500, MAX_MID = 40000, MAX_LIGHTS = 120000;
 
 const hash = (v) => { v = Math.imul(v ^ (v >>> 16), 0x45d9f3b); v = Math.imul(v ^ (v >>> 16), 0x45d9f3b); return ((v ^ (v >>> 16)) >>> 0) / 4294967296; };
@@ -66,12 +64,15 @@ export class SimTraffic {
   static NEAR = NEAR;
   // base: the scenario's folder (tiles/<area>/sim/<scenario>); surface(x, z): height of the road surface.
   static async load(base, surface, roads = null, ground = surface, drawn = null) {
-    const index = await fetch(`${base}/index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    // (with the AMA's buses, tools/sim/gtfs.py: route, headsign, colour by vehicle id; fetched together)
+    const [index, buses] = await Promise.all([
+      fetch(`${base}/index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${base}/../buses.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+    ]);
     if (!index) return null;
     const sim = new SimTraffic(base, index, surface);
     if (roads) sim.raise(roads, ground, drawn);
-    // the AMA's buses (tools/sim/gtfs.py): route, headsign, colour by vehicle id
-    sim.buses = await fetch(`${base}/../buses.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+    sim.buses = buses;
     return sim;
   }
 
@@ -83,10 +84,15 @@ export class SimTraffic {
     this.worker = new Worker(new URL('./simworker.js', import.meta.url), { type: 'module' });
     this.requests = new Map();
     this.worker.onmessage = ({ data: { id, W, error } }) => {
+      if (!this.requests.has(id)) return; // (called off)
       const w0 = this.requests.get(id); this.requests.delete(id);
       if (error || !W) { console.warn('track window', w0, error); this.windows.delete(w0); this.failed.set(w0, performance.now()); return; }
-      W.cursor = new Uint16Array(W.n); W.heading = new Float32Array(W.n).fill(NaN);
-      this.carry(w0, W); this.windows.set(w0, W);
+      W.cursor = new Uint16Array(W.n); W.heading = new Float32Array(W.n).fill(NaN); W.carried = new Float32Array(W.n).fill(NaN);
+      // (the knot before each track's first and after its last, where the windows either side have them, and whether
+      // it is a car setting off on the window's first second: link())
+      W.ends = new Float32Array(W.n * 6).fill(NaN); W.fresh = new Uint8Array(W.n);
+      this.windows.set(w0, W);
+      this.link(w0 - this.index.window, w0); this.link(w0, w0 + this.index.window);
     };
     this.nextRequest = 0; this.failed = new Map(); // window start -> when it last failed (tried again after a while)
     this.group = new THREE.Group(); this.group.name = 'simulated traffic';
@@ -114,7 +120,10 @@ export class SimTraffic {
     boxGeo.setAttribute('aHide', this.boxHide);
     // (the lamp uniforms too, which every material otherwise gets by default: a sampler left unset collides
     // with the shadow map's, and then no box is drawn at all)
-    boxMat.onBeforeCompile = (shader) => { lampUniforms(shader); dissolve(shader); }; boxMat.customProgramCacheKey = () => 'car-box-v2';
+    // (dissolved the other way round from the model: across the band where one hands over to the other, the box is
+    // drawn in just the pixels the model leaves out. Each left out its own share of the same pattern: half way, a
+    // quarter of the car's pixels were drawn twice and a quarter not at all, a stipple of holes that crawled.)
+    boxMat.onBeforeCompile = (shader) => { lampUniforms(shader); dissolve(shader, true); }; boxMat.customProgramCacheKey = () => 'car-box-v3';
     this.boxes = new THREE.InstancedMesh(boxGeo, boxMat, MAX_MID);
     this.boxes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.boxes.frustumCulled = false; this.boxes.count = 0;
@@ -365,19 +374,48 @@ export class SimTraffic {
     return (!!W && W !== 'loading') || this.failed.has(w0);
   }
 
-  // A car keeps the way it faced at the end of the window before (a long wait in a jam can span a whole window).
-  carry(w0, W) {
-    const prev = this.windows.get(w0 - this.index.window);
-    if (!prev || prev === 'loading') return;
-    const at = new Map();
-    for (let i = 0; i < prev.n; i++) if (!Number.isNaN(prev.heading[i])) at.set(prev.vid[i], prev.heading[i]);
-    for (let i = 0; i < W.n; i++) { const h = at.get(W.vid[i]); if (h !== undefined) W.heading[i] = h; }
+  // Two windows that follow one another, both here: a car on the road across the hour between them
+  //  - keeps the way it faced at the end of the first (a long wait in a jam can span a whole window);
+  //  - has its curve the same in both. A window's track runs from the knot at or before its start to the one at or
+  //    after its end, and the curve through a track's first and last knots had nothing beyond them to take its
+  //    slope from: the same stretch, between the knots either side of the hour, was one curve in the first window and
+  //    another in the second, and at the hour the car stepped from one to the other, a metre and more where it was
+  //    turning or braking. Each takes the missing knot from the other (W.ends: t, x, z before its first knot and after
+  //    its last);
+  //  - is not a car setting off. A track whose first knot falls on the hour itself read as one that starts there (it
+  //    starts at or after the window's start), and was faded in: a quarter of the cars on the road, and at some hours
+  //    nearly all, gone in a frame and back over a second, every two and a half minutes. Only one the first window
+  //    did not have is (W.fresh).
+  link(a0, b0) {
+    const A = this.windows.get(a0), B = this.windows.get(b0);
+    if (!A || !B || A === 'loading' || B === 'loading') return;
+    const at = new Map(); // vehicle -> its track still on the road at the end of A
+    for (let i = 0; i < A.n; i++) if (A.K[(A.start[i] + A.count[i] - 1) * 4] >= A.t1) at.set(A.vid[i], i);
+    for (let i = 0; i < B.n; i++) {
+      const s = B.start[i] * 4, t = B.K[s];
+      if (t > B.t0) continue;
+      const j = at.get(B.vid[i]);
+      if (j === undefined) { if (t === B.t0) B.fresh[i] = 1; continue; }
+      // (the way it faced at the end of A, for a car standing as B begins: the way it came there, or else as last
+      // drawn. Not A's heading as it was when B arrived, seconds into A: a car that turned a corner since stood at
+      // its old angle, then swung round as it pulled away)
+      const came = this.restHeading(A, j, A.t1, NaN, false);
+      B.carried[i] = came ?? A.heading[j];
+      // A's track ends [.., p, q, r] where B's begins [q, r, n, ..] (q: the knot at or before the hour, r: the one at
+      // or after it): B takes p, A takes n. (Found by their times: the two were cut from one list of knots.)
+      const a0k = A.start[j] * 4, r = (A.start[j] + A.count[j] - 1) * 4, K = A.K;
+      let q = r; while (q > a0k && K[q] > t + 0.01) q -= 4;
+      if (Math.abs(K[q] - t) > 0.06) continue; // (not the same knot: tracks of two different cuts)
+      if (q > a0k) { B.ends[i * 6] = K[q - 4]; B.ends[i * 6 + 1] = K[q - 3]; B.ends[i * 6 + 2] = K[q - 1]; }
+      const n = s + (r - q) / 4 * 4 + 4; // (B's knot after the one that is A's last)
+      if (n <= (B.start[i] + B.count[i] - 1) * 4 && Math.abs(B.K[n - 4] - K[r]) < 0.06) { A.ends[j * 6 + 3] = B.K[n]; A.ends[j * 6 + 4] = B.K[n + 1]; A.ends[j * 6 + 5] = B.K[n + 3]; }
+    }
   }
 
   // Position at time T along track i of window W, into out[0..2]; false if outside the track.
   static at(W, i, T, out) {
-    const s = W.start[i], c = W.count[i], K = W.K;
-    if (T < K[s * 4] || T > K[(s + c - 1) * 4]) return false;
+    const s = W.start[i], c = W.count[i], K = W.K, first = s * 4, last = (s + c - 1) * 4;
+    if (T < K[first] || T > K[last]) return false;
     let j = W.cursor[i];
     if (j >= c - 1) j = c - 2;
     while (j < c - 2 && K[(s + j + 1) * 4] <= T) j++;
@@ -394,36 +432,54 @@ export class SimTraffic {
     // 18 m/s in a frame, and lurched once a second: most of the hard braking seen in the opening that the simulation
     // did not do.) Its speed no more than twice the slower step's either side (Steffen's limit): a car stopping at a
     // knot comes to rest there and does not run on past it and back.
-    const ax = K[a + 1], az = K[a + 3], bx = K[b + 1], bz = K[b + 3];
-    if (c < 3) { out[0] = ax + (bx - ax) * f; out[2] = az + (bz - az) * f; return true; }
-    const first = s * 4, last = (s + c - 1) * 4;
-    const speed = (u, v) => Math.hypot(K[v + 1] - K[u + 1], K[v + 3] - K[u + 3]) / Math.max(1e-6, K[v] - K[u]);
-    const slope = (o, k) => {
-      // (the velocity at knot k, over this step's time)
-      const lo = k > first ? k - 4 : k, hi = k < last ? k + 4 : k, span = Math.max(1e-6, K[hi] - K[lo]);
-      let vx = (K[hi + 1] - K[lo + 1]) / span, vz = (K[hi + 3] - K[lo + 3]) / span;
-      const v = Math.hypot(vx, vz), most = 2 * Math.min(k > first ? speed(k - 4, k) : Infinity, k < last ? speed(k, k + 4) : Infinity);
-      if (v > most) { vx *= most / v; vz *= most / v; }
-      o[0] = vx * dt; o[1] = vz * dt; return o;
-    };
-    const ta = slope(SimTraffic.ta, a), tb = slope(SimTraffic.tb, b);
-    const f2 = f * f, f3 = f2 * f, h00 = 2 * f3 - 3 * f2 + 1, h10 = f3 - 2 * f2 + f, h01 = 3 * f2 - 2 * f3, h11 = f3 - f2;
-    out[0] = h00 * ax + h10 * ta[0] + h01 * bx + h11 * tb[0];
-    out[2] = h00 * az + h10 * ta[1] + h01 * bz + h11 * tb[1];
+    // (Written out, with no helper made per call: this is called for every car on the road every frame and several
+    // times for each one seen; with two closures and six hypots it was 112 ns a call, 2.9 ms a frame at the rush
+    // hour and a pause for the garbage every few frames. 33 ns so.)
+    const ax = K[a + 1], az = K[a + 3], bx = K[b + 1], bz = K[b + 3], ex = bx - ax, ez = bz - az;
+    const E = W.ends, e = i * 6;
+    if (c < 3 && !(E && (E[e] === E[e] || E[e + 3] === E[e + 3]))) { out[0] = ax + ex * f; out[2] = az + ez * f; return true; }
+    const here = Math.sqrt(ex * ex + ez * ez) / dt; // (this step's speed)
+    // the velocity at a: over the knots either side of it (the one before: the track's, or the window before's)
+    let vax = ex / dt, vaz = ez / dt, vbx = vax, vbz = vaz, pt = NaN, px = 0, pz = 0;
+    if (a > first) { pt = K[a - 4]; px = K[a - 3]; pz = K[a - 1]; } else if (E && E[e] === E[e]) { pt = E[e]; px = E[e + 1]; pz = E[e + 2]; }
+    if (pt === pt) {
+      const span = Math.max(1e-6, K[b] - pt), dx = ax - px, dz = az - pz;
+      vax = (bx - px) / span; vaz = (bz - pz) / span;
+      const v = Math.sqrt(vax * vax + vaz * vaz), most = 2 * Math.min(Math.sqrt(dx * dx + dz * dz) / Math.max(1e-6, K[a] - pt), here);
+      if (v > most) { vax *= most / v; vaz *= most / v; }
+    }
+    // and at b
+    let nt = NaN, nx = 0, nz = 0;
+    if (b < last) { nt = K[b + 4]; nx = K[b + 5]; nz = K[b + 7]; } else if (E && E[e + 3] === E[e + 3]) { nt = E[e + 3]; nx = E[e + 4]; nz = E[e + 5]; }
+    if (nt === nt) {
+      const span = Math.max(1e-6, nt - K[a]), dx = nx - bx, dz = nz - bz;
+      vbx = (nx - ax) / span; vbz = (nz - az) / span;
+      const v = Math.sqrt(vbx * vbx + vbz * vbz), most = 2 * Math.min(here, Math.sqrt(dx * dx + dz * dz) / Math.max(1e-6, nt - K[b]));
+      if (v > most) { vbx *= most / v; vbz *= most / v; }
+    }
+    const f2 = f * f, f3 = f2 * f, h10 = (f3 - 2 * f2 + f) * dt, h01 = 3 * f2 - 2 * f3, h11 = (f3 - f2) * dt;
+    out[0] = ax + h01 * ex + h10 * vax + h11 * vbx;
+    out[2] = az + h01 * ez + h10 * vaz + h11 * vbz;
     return true;
   }
-  static ta = [0, 0];
-  static tb = [0, 0];
 
   // ---------------------------------------------------------------- the frame
   update(T, camera, dt = 1 / 60) {
     const W = this.windows.get(this.windowStart(T));
     const span = this.index.window;
-    this.ensure(this.windowStart(T)); this.ensure(this.windowStart(T) + span); this.ensure(this.windowStart(T) - span);
+    // (the window under the clock and the one after it. The one before was fetched too: the clock does not run back,
+    // and after a jump along the time line it was a third window to bring in and unpack for nothing. One already
+    // here, the clock having run on out of it, stays until the next: link().)
+    this.ensure(this.windowStart(T)); this.ensure(this.windowStart(T) + span);
     // drop windows far from the clock (a rush-hour window decodes to tens of MB), but those a directed shot has
-    // asked to keep (this.keep: [from, to] in seconds, the time the shot plays through)
+    // asked to keep (this.keep: [from, to] in seconds, the time the shot plays through); one still on its way is
+    // called off (simworker.js), or a drag along the time line left a queue of them ahead of the one wanted
     const keep = this.keep;
-    for (const k of this.windows.keys()) if (Math.abs(k - this.windowStart(T)) > span && !(keep && k + span > keep[0] && k < keep[1])) this.windows.delete(k);
+    for (const [k, w] of this.windows) {
+      if (Math.abs(k - this.windowStart(T)) <= span || (keep && k + span > keep[0] && k < keep[1])) continue;
+      this.windows.delete(k);
+      if (w === 'loading') for (const [id, w0] of this.requests) if (w0 === k) { this.requests.delete(id); this.worker.postMessage({ cancel: id }); }
+    }
     if (T < this.begin || T >= this.end) { this.hide(); return; }
     if (!W || W === 'loading') return; // (the window is on its way: the cars hold where they were for a frame or two)
 
@@ -439,7 +495,17 @@ export class SimTraffic {
     // A seen car's height follows the street exactly, but a step of more than half a metre from one frame to the
     // next (onto a deck, off it) is eased over a tenth of a second, or at the speed of the opening the car would
     // hop. (Eased only from one frame to the next: a car first seen, or after a cut, is put down.)
-    const ease = 1 - Math.exp(-dt / 0.1), frame = ++this.frameNo;
+    const frame = ++this.frameNo;
+    // (the simulation's seconds since the last frame: what turns a car's wheels. They turned by the frame's own time:
+    // with the clock stopped, or waiting for a window, a standing queue's slow cars stood with their wheels turning,
+    // and at four times the speed they turned a quarter as fast as the car went.)
+    const gone = T - (this.lastT ?? T), dT = Math.max(0, Math.min(8, gone)); this.lastT = T;
+    // (by day, how far a car beyond the boxes may come nearer in a frame: its own 45 m/s and the camera's move. The
+    // camera's place last frame: a cut, or a flight, counts.)
+    const eyeWas = this.eyeWas ??= [cx, cy, cz], eyeMoved = Math.hypot(cx - eyeWas[0], cy - eyeWas[1], cz - eyeWas[2]);
+    eyeWas[0] = cx; eyeWas[1] = cy; eyeWas[2] = cz;
+    const closing = 45 * Math.max(dT, dt) + eyeMoved * 1.5 + 1, skip = W.skip ??= new Int32Array(W.n);
+    if (eyeMoved > 400 || Math.abs(gone) > 5) skip.fill(0); // (a cut, or the clock moved by hand: anything may be anywhere)
     if (frame % 120 === 0) {
       for (const [k, v] of this.heights) if (frame - v[1] > 60) this.heights.delete(k);
       for (const map of [this.corr, this.trail]) for (const [k, v] of map) if (frame - v[2] > 60) map.delete(k);
@@ -467,12 +533,19 @@ export class SimTraffic {
         }
         continue;
       }
+      // By day a car beyond the boxes is not drawn at all, and need not be looked at until it could have come within
+      // them: the frame it was last worked out and how far off it was say when (W.skip). Every car on the road, thirty
+      // thousand at the rush hour, was put on its track every frame to find that out, most of the cars' time by day.
+      if (skip[i] > frame && W.vid[i] !== this.followed) { active++; continue; }
       if (!SimTraffic.at(W, i, T, p)) { far[f7 + 5] = -1e9; continue; }
       active++;
       const dx = p[0] - cx, dz = p[2] - cz, d2 = dx * dx + dz * dz + (p[1] - cy) * (p[1] - cy);
       const vid = W.vid[i], followed = vid === this.followed;
       // (beyond the boxes only the lamps show, and only from dusk to dawn)
-      if (!followed && (d2 > LIGHTS * LIGHTS || (d2 > MID * MID && night <= 0.02))) continue;
+      if (!followed && (d2 > LIGHTS * LIGHTS || (d2 > MID * MID && night <= 0.02))) {
+        if (night <= 0.02 && d2 > (MID + 150) * (MID + 150)) skip[i] = frame + Math.min(90, Math.floor((Math.sqrt(d2) - MID - 100) / closing));
+        continue;
+      }
       let heading = W.heading[i], speed = 0, hadQ = false, hadR = false, rawHeading = NaN;
       // A box beyond the models (past sim.near): its way, speed and brake lights, and its place on what is drawn (its
       // painted lane, the corrected level, the deck or the street under it), worked out every 4th frame, a quarter of
@@ -551,10 +624,17 @@ export class SimTraffic {
         // enough (and the ground is not looked up for tens of thousands).
         // (the simulation's height for it, put on the corrected levels: fixAt)
         const fixed = seen && this.fixes?.size ? this.fixAt(p[0], p[2], p[1], heading) : null; sy = fixed ?? p[1]; road = fixed == null ? null : this.fixEdge;
-        const rx = p[0], rz = p[2];
+        // The track is the car's front bumper (SUMO's place for a vehicle: in a standing queue the tracks are a
+        // leader's length and SUMO's 2 m apart, whatever follows), and the bodies are drawn about their middles: its
+        // middle is half its length back along the way it faces. (Drawn with its middle on the track, every car stood
+        // half its length ahead of where it was: over the stop line by two metres and more, a bus six, and a bus in a
+        // queue stood a metre or two inside the car in front of it.)
+        const half = seen ? TYPES[W.type[i]].L / 2 : 0;
+        const rx = p[0] - sin * half, rz = p[2] - cos * half;
         let cx = 0, cz = 0;
         if ((d2 < MID * MID || followed) && this.laneCells) {
-          const m = this.relane(p, heading);
+          const mid = this.mid ??= [0, 0, 0]; mid[0] = rx; mid[2] = rz;
+          const m = this.relane(mid, heading);
           let sx = m ? m[0] : 0, sz = m ? m[1] : 0, n = 1, any = !!m;
           // (a full model: the move into its painted lane taken as well where its track has it a little before and
           // after, about 24 m either way, and averaged: where SUMO's lanes and the painted ones change in number, three
@@ -602,8 +682,8 @@ export class SimTraffic {
           if (cx !== 0 || cz !== 0) stood = this.drawn.stand(this.surface, rx + cx, rz + cz, sy, heading, road);
         }
         p[0] = rx + cx; p[2] = rz + cz;
-        // Its heading: from its rear axle, dragged at a wheelbase behind where SUMO has it (a trailer's hitch, the
-        // tractrix: a car's tail follows its nose and never goes sideways). Taken from the track half a second either
+        // Its heading: from its rear axle, dragged behind its front bumper, where SUMO has it (a trailer's hitch, the
+        // tractrix: a car's tail follows its nose and never goes sideways), four fifths of its length back. Taken from the track half a second either
         // way and eased, it slid: SUMO moves a car into the next lane at walking pace three metres across to one along.
         // (Behind SUMO's place, not the one shown: the moves onto what is drawn come and go a little from frame to frame,
         // and a car dragged by them wagged its tail.) A car first seen, after a cut, or put down metres from where it
@@ -611,8 +691,8 @@ export class SimTraffic {
         // (the track's knots are SUMO's seconds, the way between them straight: dragged along it, a car on a curve turned
         // in a jolt every second. The nose it drags by is the track eased over a second, half before and half after.)
         if (seen) {
-          const K = TYPES[W.type[i]].L * 0.55; let tr = this.trail.get(vid);
-          const fx = hadQ && hadR ? (q[0] + 2 * rx + r[0]) / 4 : rx, fz = hadQ && hadR ? (q[2] + 2 * rz + r[2]) / 4 : rz;
+          const K = TYPES[W.type[i]].L * 0.8; let tr = this.trail.get(vid);
+          const fx = hadQ && hadR ? (q[0] + 2 * px0 + r[0]) / 4 : px0, fz = hadQ && hadR ? (q[2] + 2 * pz0 + r[2]) / 4 : pz0;
           if (tr && tr[2] >= frame - 8 && (fx - tr[4]) ** 2 + (fz - tr[5]) ** 2 < 64) {
             const bx = fx - tr[0], bz = fz - tr[1], b = Math.sqrt(bx * bx + bz * bz);
             if (b > 1e-4) {
@@ -635,13 +715,25 @@ export class SimTraffic {
           const cv = this.corr.get(vid);
           if (cv && cv[2] === frame && (cv[3] || cv[4])) { const s = Math.max(4, speed); heading = Math.atan2(Math.sin(heading) * s + cv[3], Math.cos(heading) * s + cv[4]); }
           sin = Math.sin(heading); cos = Math.cos(heading);
+          // (its middle again, behind its bumper the way it now faces)
+          p[0] = px0 - sin * half + cx; p[2] = pz0 - cos * half + cz;
         }
         raised = !!stood?.deck;
         y = seen ? stood.y : sy;
         if (seen) {
+          // (a step in what it stands on, onto a deck or off it: taken up as a height over the surface that dies away
+          // in a tenth of a second. [that height, the frame, the surface's level, x, z] Eased only while more than
+          // half a metre was left of it, the last half metre was a hop in one frame, and a kerb's or a deck joint's
+          // 20 cm was not eased at all.)
           const h = this.heights.get(vid);
-          if (h && h[1] >= frame - 8 && Math.abs(y - h[0]) < 12 && Math.abs(y - h[0]) > 0.5) y = h[0] + (y - h[0]) * over(ease, frame - h[1]); // (a step: onto a deck, off it)
-          if (h) { h[0] = y; h[1] = frame; } else this.heights.set(vid, [y, frame]);
+          if (h && h[1] >= frame - 8) {
+            const run = Math.hypot(p[0] - h[3], p[2] - h[4]), step = y - h[2];
+            let over0 = h[0] * Math.exp(-(frame - h[1]) * dt / 0.1);
+            if (Math.abs(step) > 0.08 + 0.12 * run && Math.abs(step) < 12) over0 -= step; // (not the road's own slope)
+            h[0] = Math.abs(over0) < 0.004 ? 0 : over0; h[1] = frame; h[2] = y; h[3] = p[0]; h[4] = p[2];
+            y += h[0];
+          } else if (h) { h[0] = 0; h[1] = frame; h[2] = y; h[3] = p[0]; h[4] = p[2]; }
+          else this.heights.set(vid, [0, frame, y, p[0], p[2]]);
         }
         if (box) {
           // (numbers only, so that they are kept as numbers, not each in a box of its own: raised 0 or 1, the pitch NaN till known)
@@ -653,7 +745,7 @@ export class SimTraffic {
       // second as watched: its track starts or ends inside this window, not at its edge.
       const s0 = W.start[i] * 4, s1 = (W.start[i] + W.count[i] - 1) * 4, fade = Math.max(1, this.rate * 0.5);
       let shown = 1;
-      if (W.K[s0] >= W.t0) shown = Math.min(shown, (T - W.K[s0]) / fade);
+      if (W.K[s0] > W.t0 || W.fresh[i]) shown = Math.min(shown, (T - W.K[s0]) / fade); // (on the hour itself: only one the window before did not have, link())
       if (W.K[s1] < W.t1 - 0.5) shown = Math.min(shown, (W.K[s1] - T) / fade);
       shown = smooth(0, 1, shown);
       if (followed) this.view = { x: p[0], y, z: p[2], heading, speed, vid, type: W.type[i], brake };
@@ -708,7 +800,7 @@ export class SimTraffic {
           }
           // its wheels turn with the way it goes (eased over cuts: a car first seen starts where its id puts it)
           const r = this.fleet.wheelRadius(look.body), sp0 = this.spins.get(vid);
-          const dist = sp0 && sp0[1] === frame - 1 ? sp0[0] + speed * dt : hash(vid) * 40;
+          const dist = sp0 && sp0[1] === frame - 1 ? sp0[0] + speed * dT : hash(vid) * 40;
           if (sp0) { sp0[0] = dist; sp0[1] = frame; } else this.spins.set(vid, [dist, frame]);
           // its turn signal, blinking where its track turns a few seconds on (at a junction's pace, not a curve's)
           let left = 0, right = 0;
@@ -776,7 +868,13 @@ export class SimTraffic {
     this.stats = { active, near: this.fleet.count, mid, lights, nearSpeed: nearN ? nearSpeed / nearN : null, nearStopped, nearCount: nearN };
   }
 
-  dispose() { this.worker.terminate(); this.windows.clear(); }
+  // (another run takes its place, main.js setScenario: its buffers on the GPU go too, 7 MB and more a run otherwise left)
+  dispose() {
+    this.worker.terminate(); this.windows.clear();
+    this.fleet.dispose();
+    for (const o of [this.boxes, this.lights]) { o.geometry.dispose(); o.material.dispose(); }
+    this.beam.map?.dispose(); this.beam.dispose();
+  }
 
   hide() {
     this.fleet.hide();
@@ -784,29 +882,30 @@ export class SimTraffic {
     this.stats = { active: 0, near: 0, mid: 0, lights: 0 };
   }
 
-  // The way a standing car faces: the way it came (the last stretch of its track before T where it moved), or
-  // for a car that has not moved yet, the way it will go.
-  restHeading(W, i, T) {
+  // The way a standing car faces: the way it came (the last stretch of its track before T where it moved; else, its
+  // track having come over from the window before, the way it came there: link()), or for a car that has not moved
+  // yet, the way it will go. (ahead false: only the way it came, or null)
+  restHeading(W, i, T, carried = W.carried?.[i] ?? NaN, ahead = true) {
     const s = W.start[i], c = W.count[i], K = W.K;
     const dir = (j) => { const a = (s + j) * 4, b = a + 4, dx = K[b + 1] - K[a + 1], dz = K[b + 3] - K[a + 3]; return dx * dx + dz * dz > 0.25 ? Math.atan2(dx, dz) : null; };
     let j = 0;
     while (j < c - 2 && K[(s + j + 1) * 4] <= T) j++;
     for (let k = j; k >= 0; k--) { const h = dir(k); if (h != null) return h; }
+    if (!Number.isNaN(carried)) return carried;
+    if (!ahead) return null;
     for (let k = j + 1; k < c - 1; k++) { const h = dir(k); if (h != null) return h; }
     return 0;
   }
 
-
-
-  // Cars within `radius` of (x, z) at time T that will still be driving `until` seconds on: [{ vid, x, z, heading }].
   // Whether car vid is on the road at T (its window loaded)
   alive(vid, T) {
     const W = this.windows.get(this.windowStart(T));
     if (!W || W === 'loading') return false;
     const p = [0, 0, 0];
-    for (let i = 0; i < W.n; i++) if (W.vid[i] === vid) return SimTraffic.at(W, i, T, p);
+    for (let i = 0; i < W.n; i++) if (W.vid[i] === vid && SimTraffic.at(W, i, T, p)) return true; // (a car set down further on has two tracks)
     return false;
   }
+  // Cars within `radius` of (x, z) at time T that will still be driving `until` seconds on: [{ vid, x, z, heading }].
   carsNear(T, x, z, radius, until = 60) {
     const W = this.windows.get(this.windowStart(T)), out = [];
     if (!W || W === 'loading') return out;

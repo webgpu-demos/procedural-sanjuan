@@ -8,7 +8,6 @@
 import polygonClipping from 'polygon-clipping';
 import { TILE } from '../../src/shared/geo.js';
 import { carriageWidth } from './roadsplit.mjs';
-import { PolyIndex } from './landscape.mjs';
 
 // sidewalk width (m) on each side, by road class
 const SIDEWALK = {
@@ -44,10 +43,12 @@ function widen(pts, h, emit) {
 }
 
 // edges: road graph edges (with .span set: street-level bridges); pos: node id -> [x, z];
-// buildings: [{ polygons: [[outer, ...holes]] }] in world metres; bounds: { minX, maxX, minZ, maxZ };
-// removable(b): a building that may be dropped if it stands in the middle of a street.
-// Returns { outlines: [{ tx, tz, polygon }], motorway: [{ tx, tz, polygon }], removed: Set of buildings, stats }.
-export function buildRoadSurfaces({ edges, pos, buildings, bounds, flyover, removable = () => false }) {
+// buildings: [{ polygons: [[outer, ...holes]] }] in world metres, already clear of the centrelines (roadclear.mjs:
+// what a road ran into was removed or notched there, expressway and all; the rule that stood here dropped a FEMA
+// outline lying mostly in a widened street, and the expressway's pieces were never in its index);
+// bounds: { minX, maxX, minZ, maxZ }.
+// Returns { outlines: [{ tx, tz, polygon }], motorway: [{ tx, tz, polygon }], stats }.
+export function buildRoadSurfaces({ edges, pos, buildings, bounds, flyover }) {
   const tiles = new Map(); // "tx_tz" -> { tx, tz, street: [], motorway: [], buildings: [] }
   const tileAt = (tx, tz) => {
     const k = tx + '_' + tz;
@@ -61,10 +62,10 @@ export function buildRoadSurfaces({ edges, pos, buildings, bounds, flyover, remo
     for (let tx = Math.floor(x0 / TILE); tx <= Math.floor(x1 / TILE); tx++)
       for (let tz = Math.floor(z0 / TILE); tz <= Math.floor(z1 / TILE); tz++) tileAt(tx, tz)[list].push(ring);
   };
-  const pieces = [];
   const stats = { edges: 0, motorwayEdges: 0, tiles: 0, failed: 0, skipped: 0, outlines: 0, motorway: 0 };
   for (const e of edges) {
-    if (e.tunnel || (e.bridge && !e.span) || flyover(e)) continue;
+    // (a passage through a building is at street level, though OSM files it as a tunnel: roadclear.mjs cut its slot)
+    if ((e.tunnel && !e.passage) || (e.bridge && !e.span) || flyover(e)) continue;
     const hw = e.highway.replace('_link', ''), pts = e.ids.map(pos), carriage = carriageWidth(e);
     if (hw === 'motorway') {
       stats.motorwayEdges++;
@@ -72,18 +73,9 @@ export function buildRoadSurfaces({ edges, pos, buildings, bounds, flyover, remo
       continue;
     }
     stats.edges++;
-    widen(pts, carriage / 2 + (SIDEWALK[hw] ?? 1.5), (r) => { pieces.push(r); spread(r, 'street'); });
+    widen(pts, carriage / 2 + (SIDEWALK[hw] ?? 1.5), (r) => spread(r, 'street'));
   }
-  // a removable building (a FEMA outline) lying mostly in the widened streets is a structure over the road
-  const streets = new PolyIndex(16);
-  for (const r of pieces) streets.add([r]);
-  const removed = new Set();
-  for (const b of buildings) {
-    if (!removable(b)) continue;
-    const ring = b.polygons[0][0], inside = ring.filter(([x, z]) => streets.has(x, z)).length / ring.length;
-    if (inside > 0.7 && streets.has(b.cx, b.cz)) removed.add(b);
-  }
-  for (const b of buildings) if (!removed.has(b)) for (const rings of b.polygons) spread(rings[0], 'buildings');
+  for (const b of buildings) for (const rings of b.polygons) spread(rings[0], 'buildings');
 
   const outlines = [], motorway = [];
   for (const t of tiles.values()) {
@@ -121,5 +113,5 @@ export function buildRoadSurfaces({ edges, pos, buildings, bounds, flyover, remo
       }
     } catch { stats.failed++; /* the tile goes without road surfaces */ }
   }
-  return { outlines, motorway, removed, stats };
+  return { outlines, motorway, stats };
 }

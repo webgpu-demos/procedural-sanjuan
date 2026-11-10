@@ -7,7 +7,7 @@
 //   <out>/dataset.yaml                           classes and splits, for `yolo train data=<out>/dataset.yaml`
 //   <out>/run.json                               the options of the run
 // Run the client first (npm run dev, or a built copy served anywhere), then for example:
-//   node tools/synth/export.mjs --url=http://localhost:5173/ --area=sanjuan --frames=400 --damage=0.25 --out=data/synth/sj
+//   node tools/synth/export.mjs --url=http://localhost:5280/ --area=sanjuan --frames=400 --damage=0.25 --out=data/synth/sj
 // Needs Chrome (or Chromium): found in the usual places, or --chrome=<path> / CHROME=<path>. puppeteer-core drives it.
 // Options (defaults):
 //   --frames=200 --size=1280x960 --hfov=73.7 (a DJI Phantom 4 / Mavic class camera) --alt=50,120 (m above ground)
@@ -23,7 +23,7 @@ import path from 'node:path';
 const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : process.argv.includes(`--${k}`) ? true : d; };
 const range = (s) => String(s).split(',').map(Number);
 const O = {
-  url: arg('url', 'http://localhost:5173/'), area: arg('area', 'sanjuan'), out: path.resolve(arg('out', 'data/synth/out')),
+  url: arg('url', 'http://localhost:5280/'), area: arg('area', 'sanjuan'), out: path.resolve(arg('out', 'data/synth/out')),
   frames: Number(arg('frames', 200)), size: String(arg('size', '1280x960')).split('x').map(Number), hfov: Number(arg('hfov', 73.7)),
   alt: range(arg('alt', '50,120')), pitch: range(arg('pitch', '-90,-70')), hour: range(arg('hour', '8.5,16.5')), damage: Number(arg('damage', 0.2)),
   box: arg('box', null), seed: Number(arg('seed', 1)), val: Number(arg('val', 0.1)), minPixels: Number(arg('min-pixels', 40)), maxBlock: Number(arg('max-block', 0.02)),

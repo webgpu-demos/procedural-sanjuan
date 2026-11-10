@@ -17,7 +17,6 @@ const CSS = `
   transition: opacity 0.4s ease, transform 0.4s ease; }
 .hud button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 .hud-off .hud, .hud-hidden .hud { opacity: 0; pointer-events: none; }
-.hud-off .hud.keep { opacity: 1; pointer-events: auto; }
 .hud .panel { background: var(--hud-glass); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
   border: 1px solid var(--hud-border); border-radius: var(--hud-r); box-shadow: var(--hud-shadow); }
 .hud kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 5px; font: 650 10.5px var(--hud-font);
@@ -35,6 +34,7 @@ const CSS = `
 #hud-tr .seg:hover { background: rgba(255,255,255,0.08); color: var(--hud-text); }
 #hud-tr .seg.on { background: var(--hud-text); color: #15161a; }
 #hud-tr .seg .lbl { display: none; } #hud-tr .seg.on .lbl { display: inline; }
+#hud-tr .seg[hidden] { display: none; } /* (an area with no places: no "Ir a") */
 #hud-tr .div { width: 1px; height: 22px; background: rgba(255,255,255,0.1); margin: 0 4px; }
 .hud-pop { position: fixed; z-index: 990; min-width: 250px; padding: 6px; font-family: var(--hud-font); color: var(--hud-text); background: var(--hud-glass-strong);
   border: 1px solid var(--hud-border); border-radius: 14px; box-shadow: var(--hud-shadow); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
@@ -128,8 +128,8 @@ const icon = (k) => `<svg class="icon" viewBox="0 0 24 24">${ICON[k]}</svg>`;
 export const MODES = [
   { id: 'explore', label: 'Explorar', key: '1', icon: 'explore', hints: [['Arrastra', 'Mover'], ['Clic der.', 'Girar'], ['Rueda', 'Acercar'], ['W A S D', 'Desplazar']] },
   { id: 'walk', label: 'Caminar', key: '2', icon: 'walk', hints: [['W S', 'Caminar'], ['A D', 'Girar'], ['Shift', 'Correr'], ['Espacio', 'Saltar'], ['F', 'Sentarse'], ['E', 'Al carro']] },
-  { id: 'bike', label: 'Bici', key: '3', icon: 'bike', hints: [['W', 'Pedalear'], ['S', 'Frenar'], ['A D', 'Dobla'], ['Shift', 'Rápido'], ['E', 'Al carro']] },
-  { id: 'car', label: 'Manejar', key: '4', icon: 'car', hints: [['W S', 'Acelerar / Frenar'], ['A D', 'Dobla'], ['Espacio', 'Freno de mano'], ['Shift', 'Turbo'], ['E', 'Bajarse']] },
+  { id: 'bike', label: 'Bici', key: '3', icon: 'bike', hints: [['W', 'Pedalear'], ['S', 'Frenar'], ['A D', 'Girar'], ['Shift', 'Rápido'], ['E', 'Al carro']] },
+  { id: 'car', label: 'Manejar', key: '4', icon: 'car', hints: [['W S', 'Acelerar / Frenar'], ['A D', 'Girar'], ['Espacio', 'Freno de mano'], ['Shift', 'Turbo'], ['E', 'Bajarse']] },
   { id: 'fly', label: 'Volar', key: '5', icon: 'fly', hints: [['W S', 'Avanzar'], ['A D', 'Girar'], ['Espacio', 'Subir'], ['C', 'Bajar'], ['Shift', 'Turbo']] },
 ];
 const TIMES = [
@@ -226,7 +226,10 @@ export class Hud {
     // (a click leaves no button focused: Space would press it again)
     document.addEventListener('click', (e) => { const b = e.target.closest?.('.hud button, .hud-pop button'); if (b && e.detail > 0) b.blur(); });
     addEventListener('keydown', (e) => {
-      if (document.activeElement?.tagName === 'INPUT' || e.metaKey || e.ctrlKey || e.altKey || this.locked) return;
+      // (not while the title or a directed shot has the page, hud-off; nor while typing: the time slider, once
+      // dragged, keeps the focus, and is not typed into)
+      const a = document.activeElement, typing = a?.tagName === 'INPUT' && (a.type === 'text' || a.type === 'number');
+      if (typing || e.metaKey || e.ctrlKey || e.altKey || document.body.classList.contains('hud-off')) return;
       const m = MODES.find((x) => x.key === e.key);
       if (m && !this.mapOpen) { app.setMode(m.id); return; }
       if (e.code === 'KeyM') this.toggleMap();
@@ -295,15 +298,20 @@ export class Hud {
     this.padButtons(this.app.mode);
   }
   padButtons(mode) {
-    const B = { car: [['Freno', 'Space'], ['Turbo', 'ShiftLeft'], ['Bajarse', 'KeyE', true]], walk: [['Saltar', 'Space'], ['Correr', 'ShiftLeft'], ['Sentarse', 'KeyF', true], ['Carro', 'KeyE', true]], bike: [['Freno', 'Space'], ['Rápido', 'ShiftLeft'], ['Carro', 'KeyE', true]],
+    // (tap: one press, as a key's; F is held, as a key is: the walker looks for it going down, player.js)
+    const B = { car: [['Freno', 'Space'], ['Turbo', 'ShiftLeft'], ['Bajarse', 'KeyE', true]], walk: [['Saltar', 'Space'], ['Correr', 'ShiftLeft'], ['Sentarse', 'KeyF'], ['Carro', 'KeyE', true]], bike: [['Freno', 'Space'], ['Rápido', 'ShiftLeft'], ['Carro', 'KeyE', true]],
       fly: [['Subir', 'Space'], ['Bajar', 'KeyC'], ['Turbo', 'ShiftLeft']] }[mode] ?? [];
     const box = this.pad.querySelector('.btns');
+    // (a button held as the mode changes is taken away under the finger, and its pointerup never comes)
+    box.querySelectorAll('button').forEach((b) => this.keys.delete(b.dataset.code));
     box.innerHTML = B.map(([l, c, tap]) => `<button data-code="${c}" data-tap="${tap ? 1 : ''}">${l}</button>`).join('');
     box.querySelectorAll('button').forEach((b) => {
       const code = b.dataset.code, tap = !!b.dataset.tap;
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down');
-        if (tap) dispatchEvent(new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase() })); else this.keys.add(code);
+        // (a tap's keydown, and the key let go at once: main's listener holds it until a keyup that never comes,
+        // and the helicopter, later, climbed on E by itself)
+        if (tap) { dispatchEvent(new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase() })); this.keys.delete(code); } else this.keys.add(code);
       });
       const up = () => { b.classList.remove('down'); if (!tap) this.keys.delete(code); };
       b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
@@ -332,7 +340,9 @@ export class Hud {
     this.t += dt;
     if (this.mode !== app.mode) this.setMode(app.mode);
     const v = app.view(), focus = v ?? app.focus();
-    this.drawRadar(focus, v?.heading ?? app.lookHeading()); // (every frame: it glides)
+    // (every frame: it glides; not while the HUD is hidden, the title, a directed shot, the clean view)
+    const shown = !document.body.classList.contains('hud-off') && !document.body.classList.contains('hud-hidden');
+    if (shown) this.drawRadar(focus, v?.heading ?? app.lookHeading());
     if (this.t < 0.2) return;
     this.t = 0;
     if (app.soundOn() !== this.soundShown) { this.soundShown = app.soundOn(); this.syncSound(); }
@@ -360,7 +370,9 @@ export class Hud {
   // ---------------------------------------------------------------- the minimap
   drawRadar(at, heading) {
     const c = this.radar, dpr = Math.min(2, devicePixelRatio || 1), W = c.clientWidth, H = c.clientHeight;
-    if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
+    // (whole pixels: at a ratio of 1.1 or 1.25 the canvas was made anew every frame, its width never the product)
+    const w = Math.round(W * dpr), h = Math.round(H * dpr);
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     const g = c.getContext('2d'), s = 0.42 * dpr; // pixels per metre (about 280 m across)
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height);
     g.fillStyle = 'rgba(14,16,19,0.55)'; g.fillRect(0, 0, c.width, c.height);
@@ -412,7 +424,8 @@ export class Hud {
   }
   drawMap() {
     const c = this.mapCanvas, dpr = Math.min(2, devicePixelRatio || 1), W = c.clientWidth, H = c.clientHeight, v = this.view;
-    if (c.width !== W * dpr || c.height !== H * dpr) { c.width = W * dpr; c.height = H * dpr; }
+    const w = Math.round(W * dpr), h = Math.round(H * dpr);
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     const g = c.getContext('2d'), s = v.scale * dpr;
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height);
     g.translate(c.width / 2, c.height / 2);

@@ -31,6 +31,7 @@ async function photo(base, proj, rect) {
   gradePhoto(canvas);
   const t = new THREE.CanvasTexture(canvas);
   t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8; // (only ever seen at a grazing angle, far off: without it the island blurs into a smear)
   return t;
 }
 

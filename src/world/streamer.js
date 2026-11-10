@@ -16,6 +16,9 @@ import { shared } from './materials.js';
 const WORKERS = Math.min(4, Math.max(2, (navigator.hardwareConcurrency || 4) >> 1));
 const MAX_IN_FLIGHT = WORKERS * 2;
 const NEAR_EYE = 600; // metres round the camera always streamed in full, however far ahead it looks
+// Distance (m) from the eye beyond which a chunk of distant blocks leaves out its small houses, and its middling
+// buildings too (meshing.js BLOCK_LOD): within 7 km of the Condado they were 1.4 of 1.7 million triangles
+const BLOCK_SMALL = 2500, BLOCK_MID = 4500;
 // Distance (m) from the eye within which a tile shows its full-size photo atlas instead of the small one.
 const ROOFS_FULL = 600, WALLS_FULL = 900;
 
@@ -31,6 +34,17 @@ export function frozen(o) {
 }
 
 function released() { this.array = null; } // (a BufferAttribute's onUpload: its array is on the GPU, the copy here goes)
+// A tile's mesh that is only ever drawn lets go of its arrays once they are on the GPU (`keep`: the attributes the
+// main thread still reads), and is not tested by a click's ray (main.js picks facades only). Round Hato Rey the
+// tiles held 186 MB of copies of what the GPU had; drive.js reads the facades' position, normal and index (the walls
+// and roofs it runs into), synth.js their aBldg.
+function drawnOnly(mesh, keep = null) {
+  const g = mesh.geometry;
+  for (const [name, a] of Object.entries(g.attributes)) if (!keep?.includes(name)) a.onUpload(released);
+  if (g.index && !keep?.includes('index')) g.index.onUpload(released);
+  if (!keep) mesh.raycast = () => {};
+  return mesh;
+}
 
 function geometry(arrays, attrs) {
   const g = new THREE.BufferGeometry();
@@ -83,7 +97,8 @@ export class Streamer {
     shared.uLoadedRect.value.set(this.mask.x0 * size, this.mask.z0 * size, this.mask.w * size, this.mask.h * size);
     this.workers = Array.from({ length: WORKERS }, () => {
       const w = new Worker(new URL('./tileWorker.js', import.meta.url), { type: 'module' });
-      w.postMessage({ type: 'init', decks, channels, tileSize: this.manifest.tileSize, grid: { ...this.grid, data: data.slice().buffer } });
+      const own = data.slice().buffer; // (each worker's copy, handed over: posted as it was, it was copied again)
+      w.postMessage({ type: 'init', decks, channels, tileSize: this.manifest.tileSize, grid: { ...this.grid, data: own } }, [own]);
       w.onmessage = (e) => {
         this.arrived.push(e.data); // (taken in update(), a few at a time)
         // (and with no frames to take them in, the page hidden, after a moment all at once: a city loading in a
@@ -193,6 +208,15 @@ export class Streamer {
     const chunks = this.blockRadius > this.radius ? this.manifest.blocks?.chunks ?? [] : [], span = (this.manifest.blocks?.size ?? 4) * size;
     const chunkDist = ([cx, cz]) => Math.max(0, Math.hypot((cx + 0.5) * span - focus.x, (cz + 0.5) * span - focus.z) - span * 0.71);
     for (const [key, b] of this.blocks) if (b.state === 'ready' && (!chunks.length || chunkDist(b.chunk) > this.blockRadius + this.hysteresis * 2)) this.unloadBlocks(key);
+    // (and how much of each is drawn: the small houses not beyond BLOCK_SMALL from the eye, the middling buildings not
+    // beyond BLOCK_MID, times the governor's detail; meshing.js blockMesh puts them last in the index)
+    for (const b of this.blocks.values()) {
+      if (!b.cuts) continue;
+      const [cx, cz] = b.chunk, h = Math.max(0, Math.hypot((cx + 0.5) * span - eye.x, (cz + 0.5) * span - eye.z) - span * 0.71);
+      const d = Math.hypot(h, eye.y) / this.detail, was = b.mesh.geometry.drawRange.count;
+      const count = d > BLOCK_MID * (was <= b.cuts[0] ? 0.9 : 1) ? b.cuts[0] : d > BLOCK_SMALL * (was <= b.cuts[1] ? 0.9 : 1) ? b.cuts[1] : Infinity;
+      if (count !== was) b.mesh.geometry.setDrawRange(0, count);
+    }
     // load, nearest first: full tiles, then (with what is left of the workers) the distant blocks
     if (this.inFlight >= MAX_IN_FLIGHT) return;
     const wanted = [];
@@ -239,6 +263,7 @@ export class Streamer {
     // looks for facades: before, it also tested each of the blocks' millions of triangles).
     for (const a of [...Object.values(geo.attributes), geo.index]) a.onUpload(released);
     b.mesh = new THREE.Mesh(geo, this.materials.blocks);
+    b.cuts = msg.mesh.cuts;
     b.mesh.raycast = () => {};
     b.mesh.name = `blocks ${msg.key}`;
     this.scene.add(frozen(b.mesh));
@@ -282,22 +307,22 @@ export class Streamer {
     t.lifts = msg.mesh.lifts; // (how high the paving stands: lift())
     const atlases = [];
 
-    const ground = new THREE.Mesh(geometry(terrain, [['position', 3], ['normal', 3]]), this.materials.terrain);
+    const ground = drawnOnly(new THREE.Mesh(geometry(terrain, [['position', 3], ['normal', 3]]), this.materials.terrain));
     ground.receiveShadow = true;
     group.add(ground);
 
     if (roads.position.length) {
-      const m = new THREE.Mesh(geometry(roads, [['position', 3], ['normal', 3], ['color', 3], ['aLayer', 1]]), this.materials.road);
+      const m = drawnOnly(new THREE.Mesh(geometry(roads, [['position', 3], ['normal', 3], ['color', 3], ['aLayer', 1]]), this.materials.road));
       m.receiveShadow = true;
       group.add(m);
     }
     if (paint.position.length) {
-      const m = new THREE.Mesh(geometry(paint, [['position', 3], ['normal', 3], ['color', 3], ['aLayer', 1]]), this.materials.paint);
+      const m = drawnOnly(new THREE.Mesh(geometry(paint, [['position', 3], ['normal', 3], ['color', 3], ['aLayer', 1]]), this.materials.paint));
       m.receiveShadow = true;
       group.add(m);
     }
     if (decals.position.length) {
-      const m = new THREE.Mesh(geometry(decals, [['position', 3], ['normal', 3], ['uv', 2]]), this.props.mats.decal);
+      const m = drawnOnly(new THREE.Mesh(geometry(decals, [['position', 3], ['normal', 3], ['uv', 2]]), this.props.mats.decal));
       m.receiveShadow = true;
       m.renderOrder = 2;
       group.add(m);
@@ -323,21 +348,21 @@ export class Streamer {
         group.userData.own = [m.material]; // (kept off the mesh: its userData is the picking record)
         atlases.push(this.atlas(msg.key, t, walls, WALLS_FULL, (map) => { m.material.userData.photo.value = map; m.material.userData.photoOn.value = 1; }));
       }
+      drawnOnly(m, ['position', 'normal', 'index', 'aBldg']);
       m.castShadow = true;
       m.receiveShadow = true;
       m.userData = { tile: msg.key, info, ends: buildings.ends, facade: true };
       group.add(m);
       const d = buildings.details;
       if (d?.position.length) { // what stands on the roofs (meshing.js): left out at a distance with the other small things (main.js)
-        const r = new THREE.Mesh(geometry(d, [['position', 3], ['normal', 3], ['color', 3], ['aFacade', 4], ['aBldg', 4], ['aPhoto', 2]]), m.material);
+        const r = drawnOnly(new THREE.Mesh(geometry(d, [['position', 3], ['normal', 3], ['color', 3], ['aFacade', 4], ['aBldg', 4], ['aPhoto', 2]]), m.material)); // (a click picks the building under it)
         r.castShadow = r.receiveShadow = true;
         r.userData.roofs = true;
-        r.raycast = () => {}; // (a click picks the building under it)
         group.add(r);
       }
     }
     if (models) { // a tile's static models (bridges, street furniture, trees), where the compiler wrote any
-      const m = new THREE.Mesh(geometry(models, [['position', 3], ['normal', 3], ['color', 3]]), this.materials.models);
+      const m = drawnOnly(new THREE.Mesh(geometry(models, [['position', 3], ['normal', 3], ['color', 3]]), this.materials.models));
       m.castShadow = m.receiveShadow = true;
       group.add(m);
     }

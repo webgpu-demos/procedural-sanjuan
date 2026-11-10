@@ -118,8 +118,10 @@ const FACADE_MAIN = /* glsl */ `
   vec3 tuv = vec3(st / uWallScale[int(layer)], layer);
   vec3 wall = diffuseColor.rgb * mix(vec3(1.0), texture(uWallAlb, tuv).rgb * 2.0, uWallDetail[int(layer)]);
   wall *= 0.9 + 0.2 * vnoise(st * 0.11 + seed * 50.0);          // breaks up tiling over large walls
+  // (the maps' green points up the image, and the image's rows run down v, the way gB points: taken the other way,
+  // as it was, a brick's courses and a wall's grooves were lit as ridges along that one axis)
   gNm = texture(uWallNor, tuv).xyz * 2.0 - 1.0;
-  gNm = normalize(vec3(gNm.xy * 0.7, gNm.z));
+  gNm = normalize(vec3(gNm.x * 0.7, -gNm.y * 0.7, gNm.z));
   gRough = 0.82; gMetal = 0.0; gEmissive = vec3(0.0);
   if (layer > 3.5 && layer < 4.5) { gRough = 0.5; gMetal = 0.35; }  // metal siding and roofs
 
@@ -456,11 +458,15 @@ function facadeMaterial(tex) {
       uNight: shared.uNight, uTime: shared.uTime, uWindowLife: shared.uWindowLife, uCityGlass: shared.uCityGlass, uNightBlue: shared.uNightBlue, uGrid: shared.uGrid, uSunDir: shared.uSunDir, uSunGlint: shared.uSunGlint, uGlintOn: shared.uGlintOn, uWallAlb: { value: tex.wall.albedo }, uWallNor: { value: tex.wall.normal },
       uWallScale: { value: tex.wall.scales }, uWallDetail: { value: tex.wall.details }, uShopWords: { value: shopWords() },
     });
+    // (vSynth is the same at every vertex of a building, so it is not `flat`: on Chrome's Metal backend a flat
+    // varying anywhere in the program has every draw's indices rewritten, or made, first (GL's provoking vertex is
+    // the last, Metal's the first), a compute pass and a buffer per draw, some 1 ms a frame over Hato Rey's towers.
+    // synthTarp rounds the one component read as an integer.)
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec4 aFacade;\nattribute vec4 aBldg;\nattribute vec2 aPhoto;\nattribute vec4 aSynth;\nvarying vec4 vFacade;\nvarying vec4 vBldg;\nvarying vec2 vPhoto;\nflat varying vec4 vSynth;\n${WORLD_VARYINGS_VERT}`)
+      .replace('#include <common>', `#include <common>\nattribute vec4 aFacade;\nattribute vec4 aBldg;\nattribute vec2 aPhoto;\nattribute vec4 aSynth;\nvarying vec4 vFacade;\nvarying vec4 vBldg;\nvarying vec2 vPhoto;\nvarying vec4 vSynth;\n${WORLD_VARYINGS_VERT}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvFacade = aFacade;\nvBldg = aBldg;\nvPhoto = aPhoto;\nvSynth = aSynth;\n${WORLD_VARYINGS_SET}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + FACADE_PARS + PHOTO_PARS + 'flat varying vec4 vSynth;\n' + TARP_GLSL)
+      .replace('#include <common>', '#include <common>\n' + FACADE_PARS + PHOTO_PARS + 'varying vec4 vSynth;\n' + TARP_GLSL)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + FACADE_MAIN + PHOTO_MAIN + TARP_MAIN)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = gMetal;')
@@ -470,7 +476,7 @@ function facadeMaterial(tex) {
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.directSpecular += gGlint * smoothstep(0.0, 0.002, dot(reflectedLight.directDiffuse, vec3(0.333)));')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gPane;');
   };
-  m.customProgramCacheKey = () => 'facade-v31';
+  m.customProgramCacheKey = () => 'facade-v32';
   return m;
 }
 
@@ -582,7 +588,7 @@ const GROUND_MAIN = /* glsl */ `
   float blotch = vnoise(st * 0.045);
   diffuseColor.rgb *= mix(a, b, 0.4) * (0.86 + 0.28 * blotch);
   gNm = texture(uGroundNor, vec3(st / sc, layer)).xyz * 2.0 - 1.0;
-  gNm = normalize(vec3(gNm.xy * 0.8, gNm.z));
+  gNm = normalize(vec3(gNm.x * 0.8, -gNm.y * 0.8, gNm.z)); // (green up the image, rows down v: as the walls')
   gRough = layer < 0.5 ? 0.86 - 0.12 * blotch : layer > 4.5 ? 0.62 - 0.1 * blotch : 0.93; // (worn adoquines have a sheen)
   // the asphalt of the roads (not the open ground's paving): worn, cracked and patched, the odd pothole (ROAD_WEAR)
   // (the pixel's size taken outside the branch: derivatives need every pixel round it to take them)
@@ -635,7 +641,7 @@ const GROUND_MAIN = /* glsl */ `
                    * mix(1.0, 0.85 + 0.3 * vnoise(st * 0.083 + 7.1), 1.0 - smoothstep(3.0, 12.0, px)) * (0.92 + 0.16 * blotch);
       diffuseColor.rgb = mix(cls, photo * 0.55, 0.2) * detail;
       gNm = mix(mix(texture(uGroundNor, vec3(pst, 0.0)).xyz, texture(uGroundNor, vec3(dst, 3.0)).xyz, warm), texture(uGroundNor, vec3(gst, 2.0)).xyz, veg) * 2.0 - 1.0;
-      gNm = normalize(vec3(gNm.xy * 0.55, gNm.z));
+      gNm = normalize(vec3(gNm.x * 0.55, -gNm.y * 0.55, gNm.z));
     }
   }
   // Grass is not one green: patches tens of metres across burnt toward straw where it is dry, and others darker and
@@ -792,7 +798,7 @@ function groundMaterial(tex, { fixedLayer = -1, ...params } = {}) {
         '\n#ifdef MATTE\nreflectedLight.indirectSpecular *= MATTE; reflectedLight.directSpecular *= MATTE;\n#endif')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = 1.0 - 0.95 * gMirror;');
   };
-  m.customProgramCacheKey = () => 'ground-v14';
+  m.customProgramCacheKey = () => 'ground-v15';
   return m;
 }
 

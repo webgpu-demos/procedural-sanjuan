@@ -10,7 +10,8 @@
 //   k_<x>_<z>.bin   the buildings alone, 4 x 4 tiles to a file, for the distant blocks of a streamed area
 //   x_<x>_<z>.bin   a tile's landmark models (landmarks.mjs), where it has any
 //   far.bin         the coarse terrain of the area and the island around it, for the distant ground
-// Usage: node tools/pipeline/compile.mjs [--area=sanjuan] [--no-ads]   (--no-ads: leave out the invented billboards, screens and banners)
+// Usage: node tools/pipeline/compile.mjs [--area=sanjuan] [--no-ads] [--force]   (--no-ads: leave out the invented billboards, screens and banners;
+//        --force: compile an area whose folder holds simulated runs, which go with it)
 import fs from 'node:fs';
 import path from 'node:path';
 import polygonClipping from 'polygon-clipping';
@@ -34,6 +35,7 @@ import { readBuildingSources } from './buildings.mjs';
 import { readGarita } from './garita.mjs';
 import { buildSea } from './coast.mjs';
 import { buildRoadSurfaces } from './roadsurface.mjs';
+import { roadIndex, resolve } from './roadclear.mjs';
 import { Tris, fort, morro, uprTower, wallGaritas, domeOn, lighthouse, cathedral, convention, encodeMesh, simplify } from './landmarks.mjs';
 
 const TERRAIN_STEP_DEFAULT = 5; // metres (an area may set its own: config.mjs)
@@ -45,6 +47,25 @@ const COLONIAL = [0xf2c94c, 0xe9a86e, 0x79c2cd, 0x98c49b, 0xe07a5f, 0xc58fa3, 0x
   0xf2a65a, 0xb7a3d6, 0x5fb0b0, 0xe8d6a0, 0xec7b5c, 0xa6c6ee, 0xf6d36b, 0xd4876e, 0x8fb8de, 0xe2b04a];
 
 const area = resolveArea();
+// The area's folder is deleted and written again (the write, at the end), and with it whatever else stands there:
+// the simulated runs (sim/: San Juan's are 980 MB, hours of SUMO, and made on this very road graph), the walks
+// (walkways.mjs), the painted lanes (lanetable.mjs). Not the runs without --force, and not after minutes of work:
+// here, before anything is read.
+{
+  const mine = /^([tkx]_-?\d+_-?\d+\.(bin|ids)|manifest\.json|terrain\.bin|far\.bin|roads\.json|rails\.json|structures\.json|channels\.json)$/;
+  const others = fs.existsSync(area.outDir) ? fs.readdirSync(area.outDir).filter((f) => !mine.test(f)) : [];
+  const size = (f) => { const st = fs.statSync(f); return st.isDirectory() ? fs.readdirSync(f).reduce((n, g) => n + size(path.join(f, g)), 0) : st.size; };
+  const force = process.argv.includes('--force'), writes = !process.argv.some((a) => a.startsWith('--save-lidar-grid='));
+  if (others.length && writes) {
+    const rel = path.relative(process.cwd(), area.outDir), runs = others.includes('sim');
+    console.log(`${rel} holds what this compile does not make, and ${runs && !force ? 'would delete' : 'deletes'} with the folder:`);
+    for (const f of others) console.log(`  ${f}${fs.statSync(path.join(area.outDir, f)).isDirectory() ? '/' : ''}  ${(size(path.join(area.outDir, f)) / 1e6).toFixed(1)} MB`);
+    if (runs && !force) {
+      console.error(`not compiling ${area.id}: its simulated runs (sim/) would go. Move them away or pass --force; a compiled area is changed in place by the tools made for it (tools/pipeline/clearroads.mjs, ids.mjs, reterrain.mjs).`);
+      process.exit(1);
+    }
+  }
+}
 const TERRAIN_STEP = area.terrain ?? TERRAIN_STEP_DEFAULT;
 const proj = makeProjection(...area.origin);
 const t0 = Date.now();
@@ -223,6 +244,15 @@ if (fs.existsSync(path.join(area.rawDir, 'dem', FAR_DEM.id))) {
 const wet = (x, z) => seaIndex.has(x, z) || wetCell[Math.round((z - grid.z0) / grid.step) * grid.w + Math.round((x - grid.x0) / grid.step)] > 0;
 
 // ---------------------------------------------------------------- buildings
+// The buildings with a say of their own (the landmarks section, below, builds their models; the roads leave them be)
+const LANDMARKS = {
+  w59744985: { hint: 0xeeebe2 },                                               // the Capitol: white marble
+  w255583481: { hint: 0xf1e6cc, model: 'cathedral', facing: [-1, 0] },         // San Juan Bautista, its facade on Calle del Cristo
+  w196616058: { hint: 0xebeae4, model: 'convention', facing: [1, -1] },        // the Convention Center, its glass front to the boulevard
+  w561634537: { model: 'morro', land: [1, 0.25] },                             // El Morro, its landward front to the esplanade (east)
+  w464280727: { model: 'uprTower' },                                           // the UPR's Roosevelt Tower, Río Piedras
+  w72836163: { hint: 0xf3ead2, masonry: true },                                // the Baldorioty de Castro building under it (Spanish Revival)
+};
 const tiles = new Map();
 const tileFor = (x, z) => {
   const [tx, tz] = tileOf(x, z), k = tileKey(tx, tz);
@@ -327,12 +357,38 @@ if (argOf('road-levels')) {
   log(`road levels and spans kept from ${path.relative(process.cwd(), argOf('road-levels'))} (${graph.edges.filter((e) => e.span).length} spans)`);
 }
 
+// (the graph as roads.json has it: written at the end, read here by the rule below)
+const roadsOut = {
+  nodes: graph.nodes.map(({ id, p }) => [r2(p[0]), r2(level.get(id) ?? ground(p[0], p[1])), r2(p[1])]),
+  edges: graph.edges.map((edge) => {
+    const { ids, way, spanLength, spanEnds, ...e } = edge;
+    return { ...e, way, pts: ids.flatMap((id) => { const [x, z] = graph.pos(id); return [r2(x), r2(level.get(id)), r2(z)]; }) };
+  }),
+};
+
+// ---------------------------------------------------------------- buildings clear of the roads
+// A building a drawn street-level centreline runs into (tools/pipeline/roadclear.mjs) is removed, or notched for the
+// road, before the buildings are cut out of the widened roads: the road surface then comes out continuous. (The rule
+// before this one dropped a FEMA outline lying mostly in a widened street, and never saw the expressway: San Juan's
+// toll plazas kept their canopies as blocks across PR-22, and 236 buildings stood in a road.)
+const cleared = { removed: 0, notched: 0, failed: 0, metres: 0 };
+const keptBuildings = [];
+{
+  const index = roadIndex(roadsOut.edges);
+  for (const b of allBuildings) {
+    const r = b.flags & BFLAG.MASONRY || LANDMARKS[b.id] ? null : resolve(index, b.polygons, b.height);
+    if (r) cleared.metres += r.roads.reduce((m, road) => m + road.inside, 0);
+    if (r?.action === 'remove') { cleared.removed++; continue; }
+    if (r?.action === 'notch') { b.polygons = r.polygons; cleared.notched++; }
+    if (r?.action === 'failed') cleared.failed++;
+    keptBuildings.push(b);
+  }
+}
+log(`buildings in the roads: ${cleared.removed} removed, ${cleared.notched} notched for ${cleared.metres.toFixed(0)} m of centreline that ran into them${cleared.failed ? ` (${cleared.failed} the clipper could not cut: left)` : ''}`);
+
 // ---------------------------------------------------------------- road surfaces
-// The streets widened to their right-of-way and the buildings cut out of them (roadsurface.mjs). A FEMA
-// outline standing in the middle of a street is a structure over it (a canopy, a bridge), not a building.
-const surf = buildRoadSurfaces({ edges: graph.edges, pos: graph.pos, bounds, flyover, buildings: allBuildings,
-  removable: (b) => b.id.startsWith('f') });
-const keptBuildings = allBuildings.filter((b) => !surf.removed.has(b));
+// The streets widened to their right-of-way and the buildings cut out of them (roadsurface.mjs).
+const surf = buildRoadSurfaces({ edges: graph.edges, pos: graph.pos, bounds, flyover, buildings: keptBuildings });
 for (const b of keptBuildings) {
   const { cx, cz, id, roof, name, ...rest } = b;
   b.entry = rest; // what the tile holds (landmarks below adjust it)
@@ -353,15 +409,8 @@ for (const { tx, tz, polygon } of surf.motorway) {
   idx.road.add(polygons[0]); idx.carriageway.add(polygons[0]);
 }
 log(`road surfaces: ${surf.stats.edges} streets and ${surf.stats.motorwayEdges} expressway edges -> ${surf.stats.outlines} outline pieces, ` +
-  `${surf.stats.motorway} expressway pieces over ${surf.stats.tiles} tiles${surf.stats.failed + surf.stats.skipped ? ` (${surf.stats.failed} tiles failed, ${surf.stats.skipped} pieces left out)` : ''}; ${surf.removed.size} FEMA structures in the street dropped`);
+  `${surf.stats.motorway} expressway pieces over ${surf.stats.tiles} tiles${surf.stats.failed + surf.stats.skipped ? ` (${surf.stats.failed} tiles failed, ${surf.stats.skipped} pieces left out)` : ''}`);
 
-const roadsOut = {
-  nodes: graph.nodes.map(({ id, p }) => [r2(p[0]), r2(level.get(id) ?? ground(p[0], p[1])), r2(p[1])]),
-  edges: graph.edges.map((edge) => {
-    const { ids, way, spanLength, spanEnds, ...e } = edge;
-    return { ...e, way, pts: ids.flatMap((id) => { const [x, z] = graph.pos(id); return [r2(x), r2(level.get(id)), r2(z)]; }) };
-  }),
-};
 const byClass = {};
 let km = 0;
 for (const e of graph.edges) {
@@ -661,14 +710,6 @@ if (lattice) log(`lattice towers (OSM): ${lattice}`);
 // The old city's landmarks as built models (landmarks.mjs), in the static mesh of the tile they stand in: the
 // forts (which take the place of their building there; the distant blocks keep it), the garitas on the city
 // walls, El Morro's lighthouse, the domes OSM maps, the cathedral and the Convention Center.
-const LANDMARKS = {
-  w59744985: { hint: 0xeeebe2 },                                               // the Capitol: white marble
-  w255583481: { hint: 0xf1e6cc, model: 'cathedral', facing: [-1, 0] },         // San Juan Bautista, its facade on Calle del Cristo
-  w196616058: { hint: 0xebeae4, model: 'convention', facing: [1, -1] },        // the Convention Center, its glass front to the boulevard
-  w561634537: { model: 'morro', land: [1, 0.25] },                             // El Morro, its landward front to the esplanade (east)
-  w464280727: { model: 'uprTower' },                                           // the UPR's Roosevelt Tower, Río Piedras
-  w72836163: { hint: 0xf3ead2, masonry: true },                                // the Baldorioty de Castro building under it (Spanish Revival)
-};
 const lmTiles = new Map();
 const lmTris = (x, z) => { const t = tileFor(x, z), k = tileKey(t.tx, t.tz); if (!lmTiles.has(k)) lmTiles.set(k, new Tris()); return lmTiles.get(k); };
 const spots = [], fortPieces = [], lmCount = { forts: 0, garitas: 0, domes: 0, lighthouses: 0, models: 0 };

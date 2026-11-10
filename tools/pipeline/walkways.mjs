@@ -9,11 +9,12 @@
 // busiest hour, about 25 on Calle Fortaleza in Old San Juan, 10 on Ashford in the Condado, 5 on the Milla de Oro, a
 // handful on a residential street of an urbanización. Not a count of anyone.
 //
-// Writes walks.bin next to roads.json (format: readWalks in src/world/people.js).
+// Writes walks.json and walks/<cx>_<cz>.bin (blocks of 1 km) next to roads.json (the format: the write, below; read
+// by readWalks in src/world/people.js).
 // Usage: node tools/pipeline/walkways.mjs [--area=sanjuan]
 import fs from 'node:fs';
 import path from 'node:path';
-import { decodeTile, AREA, PROP } from '../../src/shared/tileformat.js';
+import { decodeTile, AREA, PROP, BFLAG } from '../../src/shared/tileformat.js';
 import { pavedHalf, roadLanes } from '../../src/shared/roadway.js';
 import { makeProjection } from '../../src/shared/geo.js';
 import { PolyIndex, inRings } from './landscape.mjs';
@@ -36,7 +37,9 @@ export const KIND = { SIDEWALK: 0, CORNER: 1, CROSSING: 2, FOOTWAY: 3, PATH: 4, 
 export const SPOT = { BUS: 0, BENCH: 1, FRONT: 2, BAR: 3, PLAZA: 4, SHELTER: 5 };
 
 // ---------------------------------------------------------------- the tiles: surfaces, buildings, furniture
-const idx = { carriageway: new PolyIndex(16), sidewalk: new PolyIndex(16), plaza: new PolyIndex(24), beach: new PolyIndex(32), building: new PolyIndex(24) };
+// (the buildings are not indexed: nothing here asks where one stands, and an index of San Juan's 164,000 footprints,
+// built and never read, was most of what this script held in memory)
+const idx = { carriageway: new PolyIndex(16), sidewalk: new PolyIndex(16), plaza: new PolyIndex(24), beach: new PolyIndex(32) };
 const ext = manifest.extent ?? manifest.bounds;
 const GRID = 20, gx0 = ext.minX, gz0 = ext.minZ, GW = Math.ceil((ext.maxX - ext.minX) / GRID) + 1, GH = Math.ceil((ext.maxZ - ext.minZ) / GRID) + 1;
 const grids = Array.from({ length: NP }, () => new Float32Array(GW * GH));
@@ -67,14 +70,13 @@ for (const t of manifest.tiles) {
   }
   for (const b of tile.buildings) {
     const ring = b.polygons[0]?.[0];
-    if (!ring) continue;
+    if (!ring || b.flags & BFLAG.NO_SOLID) continue; // (taken out of a road, clearroads.mjs: no floors to walk to)
     const fp = Math.abs(ringArea(ring)), floors = b.storeys || Math.max(1, Math.round(b.height / 3.2));
     let cx = 0, cz = 0; for (let k = 0; k < ring.length; k += 2) { cx += ring[k]; cz += ring[k + 1]; }
     cx /= ring.length / 2; cz /= ring.length / 2;
     // (an unknown use in a tower is offices: FEMA files the Milla de Oro's as unclassified)
     const use = b.usage === 461 && floors >= 5 ? [[PROFILE.OFFICE, 0.8]] : USE[b.usage] ?? [];
     for (const [p, s] of use) deposit(p, cx, cz, fp * Math.min(floors, 12) * s);
-    idx.building.add(b.polygons[0].map(ringPts));
   }
   for (const p of tile.props) if (p.kind === PROP.BUS_STOP || p.kind === PROP.BENCH) props.push(p);
   tiles++;

@@ -6,6 +6,9 @@
 //          vehicle (mesh slot, instance: 16 bits), each car being one instance of an instanced mesh
 // Everything that is not labelled still hides what is behind it (ground, trees, props, water), so a label is
 // exactly the visible part. Lines, points, sprites, the sky and transparent effects are left out of this pass.
+// The ids reach the fragment shaders as ordinary varyings, not flat ones (on Chrome's Metal backend a flat varying
+// has every draw's indices rewritten, or made, first): each is the same at all three of a triangle's vertices (a
+// building's, a pile's, an instance's), well under 2^23, and rounded where it is read, so it arrives exact.
 import * as THREE from 'three';
 import { TARP_GLSL } from './tarp.js';
 import { shared } from '../world/materials.js';
@@ -26,7 +29,7 @@ function facadeLabel(slot, side) {
     uniforms: { uSlot: { value: slot } }, side, toneMapped: false, fog: false, lights: false,
     vertexShader: /* glsl */ `
       attribute vec4 aBldg; attribute vec4 aSynth; attribute float aId;
-      flat varying vec4 vSynth; flat varying float vId; flat varying float vKind; varying vec3 vWPos;
+      varying vec4 vSynth; varying float vId; varying float vKind; varying vec3 vWPos;
       void main() {
         vSynth = aSynth; vId = aId; vKind = aBldg.z;
         vec4 w = modelMatrix * vec4(position, 1.0); vWPos = w.xyz;
@@ -34,7 +37,7 @@ function facadeLabel(slot, side) {
       }`,
     fragmentShader: /* glsl */ `
       uniform float uSlot;
-      flat varying vec4 vSynth; flat varying float vId; flat varying float vKind; varying vec3 vWPos;
+      varying vec4 vSynth; varying float vId; varying float vKind; varying vec3 vWPos;
       ${TARP_GLSL}
       void main() {
         float id = floor(vId + 0.5), t = synthTarp(vWPos, vSynth, vKind);
@@ -46,10 +49,10 @@ function facadeLabel(slot, side) {
 const debrisLabel = new THREE.ShaderMaterial({
   toneMapped: false, fog: false,
   vertexShader: /* glsl */ `
-    attribute float aPile; flat varying float vPile;
+    attribute float aPile; varying float vPile;
     void main() { vPile = aPile; ${INSTANCED_VERT} gl_Position = projectionMatrix * viewMatrix * w; }`,
   fragmentShader: /* glsl */ `
-    flat varying float vPile;
+    varying float vPile;
     void main() {
       float id = floor(vPile + 0.5);
       gl_FragColor = vec4(floor(id / 65536.0) / 255.0, mod(floor(id / 256.0), 256.0) / 255.0, mod(id, 256.0) / 255.0, 252.0 / 255.0);
@@ -59,8 +62,8 @@ const debrisLabel = new THREE.ShaderMaterial({
 function vehicleLabel(slot) {
   return new THREE.ShaderMaterial({
     uniforms: { uSlot: { value: slot } }, toneMapped: false, fog: false, side: THREE.DoubleSide,
-    vertexShader: `flat varying float vInst; void main() { vInst = float(gl_InstanceID); ${INSTANCED_VERT} gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform float uSlot; flat varying float vInst;
+    vertexShader: `varying float vInst; void main() { vInst = float(gl_InstanceID); ${INSTANCED_VERT} gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float uSlot; varying float vInst;
       void main() { float id = floor(vInst + 0.5); gl_FragColor = vec4(uSlot / 255.0, floor(id / 256.0) / 255.0, mod(id, 256.0) / 255.0, ${A.VEHICLE}.0 / 255.0); }`,
   });
 }

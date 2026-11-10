@@ -115,8 +115,10 @@ const ROAD_STYLE = {
   [AREA.SIDEWALK]: { lift: 0.2, color: lin([0.63, 0.61, 0.58]), layer: GROUND.PAVERS, kerb: true },
   [AREA.ISLAND]: { lift: 0.22, color: lin([0.36, 0.47, 0.27]), layer: GROUND.GRASS, kerb: true },
   [AREA.OTHER]: { lift: 0.05, color: lin([0.45, 0.45, 0.45]), layer: GROUND.CONCRETE },
-  [AREA.PARK]: { lift: 0.02, color: lin([0.4, 0.5, 0.28]), layer: GROUND.GRASS },
-  [AREA.WOOD]: { lift: 0.02, color: lin([0.3, 0.4, 0.23]), layer: GROUND.GRASS },
+  [AREA.PARK]: { lift: 0.015, color: lin([0.4, 0.5, 0.28]), layer: GROUND.GRASS },
+  // (a wood in a park over it, and a path or a pitch in a park a full centimetre or two over it: at the same
+  // height, or half a centimetre apart, they fought for the depth beyond a few hundred metres, a speckle)
+  [AREA.WOOD]: { lift: 0.025, color: lin([0.3, 0.4, 0.23]), layer: GROUND.GRASS },
   [AREA.PITCH]: { lift: 0.025, color: lin([0.63, 0.56, 0.43]), layer: GROUND.CONCRETE },
   [AREA.WATER]: { lift: 0.08, color: lin([0.12, 0.3, 0.32]), layer: GROUND.WATER },
   [AREA.MARK_WHITE]: { lift: 0.15, color: lin([0.9, 0.9, 0.87]), layer: GROUND.CONCRETE },
@@ -212,7 +214,13 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
     if (deck < 0) barrier(walls[i], walls[i + 1], walls[i + 2], walls[i + 3], -deck);
     else parapet(walls[i], walls[i + 1], walls[i + 2], walls[i + 3]);
   }
+  // (the road's plain outline is drawn only in a tile without carriageways: elsewhere the carriageways, sidewalks and
+  // islands over it cover all but 0.01% of it, measured over a fifth of the city's tiles, and it was a fifth of the
+  // tiles' road triangles, drawn and hidden, and 2 cm under the carriageway it fought with it for the depth far off.
+  // The lifts under the paving, liftRaster, still have it.)
+  const outline = !areas.some((a) => a.kind === AREA.CARRIAGEWAY);
   for (const a of areas) {
+    if (a.kind === AREA.ROAD && !outline) continue;
     const style = styleOf(a), cutting = cut && CUT.has(a.kind) ? cut : clear && CLEAR.has(a.kind) ? clear.cut : null, on = ground && LOW(a, style) ? ground : drape;
     const kept = clear && CLEAR.has(a.kind) ? (x0, z0, x1, z1) => !clear.inside((x0 + x1) / 2, (z0 + z1) / 2) : null;
     for (const rings of a.polygons) {
@@ -360,11 +368,20 @@ function finishOf(b, i, tx, tz) {
 
 // Distant buildings: plain prisms in their wall colour under a flat roof, and nothing else — no windows,
 // parapets or rooftop equipment (the material draws a few lit windows at night). Indexed, positions /
-// normals / colours only.
+// normals / colours only. The triangles come in three runs, by how far off a building still shows (BLOCK_LOD):
+// `index` is the big ones, then the middling, then the small, and `cuts` where the second and third begin, so
+// that a chunk far off draws only the first run or two (streamer.js).
+export const BLOCK_LOD = [
+  { area: 150, height: 12 }, // small: a house (a pixel or two from 2.5 km, over the photo of its own roof)
+  { area: 400, height: 20 }, // middling: a walk-up, a shop
+];
 export function blockMesh(buildings, tx, tz) {
-  const pos = new Buf(1 << 14), nor = new Buf(1 << 14), col = new Buf(1 << 14), idx = [];
+  const pos = new Buf(1 << 14), nor = new Buf(1 << 14), col = new Buf(1 << 14), runs = [[], [], []];
   let v = 0;
   buildings.forEach((b, i) => {
+    if (b.flags & BFLAG.NO_SOLID) return; // (taken out of a road, tools/pipeline/clearroads.mjs: its record only keeps the others' index)
+    const area = Math.abs(b.polygons.reduce((s, rings) => s + rings.reduce((t, r) => t + ringArea(r), 0), 0));
+    const idx = runs[area < BLOCK_LOD[0].area && b.height < BLOCK_LOD[0].height ? 2 : area < BLOCK_LOD[1].area && b.height < BLOCK_LOD[1].height ? 1 : 0];
     // (its roof as near: coated white, bare concrete, now and then red or green; it was its walls' colour, lightened,
     // and from the air the low city was confetti of lilac, mint and pink)
     const { wallCol } = finishOf(b, i, tx, tz), roofCol = b.flags & BFLAG.MASONRY ? wallCol.map((c) => c * 0.82) : lin(flatRoofColour(roofRnd(i, tx, tz)));
@@ -390,7 +407,8 @@ export function blockMesh(buildings, tx, tz) {
       }
     }
   });
-  return { position: pos.done(), normal: nor.done(), color: col.done(), index: v > 65535 ? Uint32Array.from(idx) : Uint16Array.from(idx) };
+  const all = runs[0].concat(runs[1], runs[2]);
+  return { position: pos.done(), normal: nor.done(), color: col.done(), index: v > 65535 ? Uint32Array.from(all) : Uint16Array.from(all), cuts: [runs[0].length, runs[0].length + runs[1].length] };
 }
 
 export function buildingMesh(buildings, tx, tz) {
@@ -406,6 +424,11 @@ export function buildingMesh(buildings, tx, tz) {
   const photo = { pos: new Buf(1 << 12), nor: new Buf(1 << 12), uv: new Buf(1 << 12) }; // roofs with an aerial photo
 
   buildings.forEach((b, i) => {
+    // A building taken out of a road (BFLAG.NO_SOLID, tools/pipeline/clearroads.mjs) is not drawn, and with no walls
+    // nothing runs into it (drive.js reads the walls off this mesh). It still has its place in `ends`, with no
+    // vertices of its own, so a picked vertex finds the same building as before (streamer.js buildingAt) and
+    // `info` and the tile's ids stay in step.
+    if (b.flags & BFLAG.NO_SOLID) { ends.push(pos.length / 3); return; }
     const { material, cat, seed, wallCol, wallLayer, k: used } = finishOf(b, i, tx, tz);
     let k = used;
     const rnd = () => hash3(i * 31 + k++, tx * 13 + 5, tz * 17 + 3);

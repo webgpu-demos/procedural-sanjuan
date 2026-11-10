@@ -108,15 +108,25 @@ function blockChunk(buf) {
   const verts = parts.reduce((s, p) => s + p.mesh.position.length / 3, 0), idx = parts.reduce((s, p) => s + p.mesh.index.length, 0);
   const position = new Float32Array(verts * 3), normal = new Float32Array(verts * 3), color = new Float32Array(verts * 3), aTile = new Float32Array(verts * 2);
   const index = verts > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
-  let v = 0, k = 0;
+  let v = 0;
   for (const { tx, tz, mesh } of parts) {
     const n = mesh.position.length / 3;
     position.set(mesh.position, v * 3); normal.set(mesh.normal, v * 3); color.set(mesh.color, v * 3);
     for (let i = 0; i < n; i++) { aTile[(v + i) * 2] = tx; aTile[(v + i) * 2 + 1] = tz; }
-    for (let i = 0; i < mesh.index.length; i++) index[k + i] = mesh.index[i] + v;
-    v += n; k += mesh.index.length;
+    mesh.first = v; v += n;
   }
-  return { position, normal, color, aTile, index };
+  // (the index run by run, each tile's part of a run after the one before's: blockMesh's big buildings of every tile
+  // first, then the middling, then the small; `cuts` where the second and third runs begin, for the draw range)
+  const cuts = new Uint32Array(2);
+  let k = 0;
+  for (let r = 0; r < 3; r++) {
+    if (r) cuts[r - 1] = k;
+    for (const { mesh } of parts) {
+      const from = r ? mesh.cuts[r - 1] : 0, to = r < 2 ? mesh.cuts[r] : mesh.index.length;
+      for (let i = from; i < to; i++) index[k++] = mesh.index[i] + mesh.first;
+    }
+  }
+  return { position, normal, color, aTile, index, cuts };
 }
 
 self.onmessage = async ({ data: m }) => {
