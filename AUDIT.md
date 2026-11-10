@@ -1,23 +1,77 @@
 # Audit, November 2026: what was fixed and what is left for you
 
-Branch `audit-pass` (from `main` at c8a71ba7). Nothing is committed. `npm test` passes, with a new
-`roads-clear` test. The local tiles in `public/tiles/{sanjuan,condado,hatorey}` were patched in place by
-`tools/pipeline/clearroads.mjs`; the originals are in `data/tiles-backup/before-clearroads-<area>/`. The deployed
-site is unchanged: `npm run deploy` publishes these local tiles, so deploy only once you have looked.
+Two passes. The audit (branch `audit-pass`, PR #48) fixed what the browser code could fix. The pipeline pass
+(branch `pipeline-pass`) fixed the compiler and the simulation tooling, recompiled the three areas, re-ran the
+morning and the apagón on GitHub Actions on the new roads, and published tiles, runs and code together.
 
-**Before any deploy from this checkout, read this.** The published site and this checkout disagree:
-- The **simulated runs here are older and gridlocked**. Here, `sim/morning` was run at share 0.35, with 34,322 teleports, and 41,334 cars were still on the road at the end. The published `morning` was run at share 0.7, with 1,410 teleports; the published `apagon` has 782 teleports against 11,115 here.
-- The **tiles here are newer**: compiled 2026-11-08, against 2026-10-28 for the published ones. The flyover decks sit up to about 3.7 m lower, and `roads.json` differs.
-- `tools/deploy.sh` publishes `sim/morning` and `sim/apagon` from here, so a plain `npm run deploy` would replace the good published runs with the gridlocked ones. Extract the published runs first (about 560 MB), then swap them for `public/tiles/sanjuan/sim/morning` and `apagon`:
+This checkout deploys again. The runs in `public/tiles/sanjuan/sim/` were driven on these tiles' `roads.json` (its
+sha1 is in each run's index), and `tools/deploy.sh` refuses a run made on other roads and a working tree with
+uncommitted changes. The build that was live before is kept as the local branch `gh-pages-before-pipeline`.
 
-  ```bash
-  mkdir -p /tmp/pages && git archive origin/gh-pages tiles/sanjuan/sim/morning tiles/sanjuan/sim/apagon | tar -x -C /tmp/pages
-  ```
+## Pipeline pass
 
-  Then check that their heights agree with the new decks; the published run was driven on the old `roads.json` levels. (The PR-18 measurement below was taken with the published morning on these tiles; it loads and plays.)
-- `lanes.json` is published. It was missing here, so every local load 404'd on it. It is now generated here with `tools/pipeline/lanetable.mjs`, and matches the published one but for 3 of 810 edges.
+### What it changed
+- **Compiler** (`tools/pipeline/`): `--road-levels` keeps an earlier compile's levels on structures only, and
+  ordinary streets take this compile's ground. Skywalks and raised parts keep `min_height` (flag `BFLAG.RAISED`):
+  no walls below the base, an underside, a skywalk's base at least 4.5 m over the highest ground under it; your car
+  and people on foot pass under anything 2.5 m up (`drive.js` `Walls`). Paint is clipped at the kerb and under
+  every sidewalk, and car-park bays are not laid across a sidewalk. Untagged two-way main roads take the lanes
+  that fit between the walls (2 to 4). Invented ads are centred on the Milla de Oro, not the Plaza de Armas.
+  Expressway stretches narrower than what joins them are widened (`pinches.mjs`: 8 in San Juan, among them
+  PR-18 into PR-22 at Hato Rey, 2 → 4). `rebuild.sh` runs the compile and every tool that writes into the area.
+- **Simulation** (`tools/sim/`): trips from and to places in the area set off from the kerb standing and pull in
+  to the kerb; gate trips still come and go at speed. `checknet.py` fails a network with a junction link that
+  starts behind its lane (0 of 84,979; the old net had 22). One table of vehicle and lane sizes
+  (`src/shared/vehicles.json`) for SUMO and the client; the truck had been simulated at 7.0 m and drawn at 5.9 m.
+  `run.py` splits short jam teleports itself. The network and the run record the `roads.json` they were made on.
+- **Client**: where SUMO has more lanes than the paint, cars side by side are drawn at least 2.5 m apart; on a
+  two-way street whose lanes are split unevenly (Calle Notre Dame: 1 north, 3 south), SUMO's road is moved across
+  onto the middle of the paving, where its outer lane had been pushed into the next; ez-tree's
+  unused textures are left out of the bundle (main JS 5.6 MB → 1.6 MB); in development, the console says when a
+  run was made on other roads; `@takram/three-geospatial-effects` and `libsumo` are gone, `sumolib` is pinned.
 
-## Fixed (measured where a number is given)
+### Gates
+Live before = the site as it was (tiles of 2026-10-26/28, run P1). San Juan unless named.
+
+| Measure | Live before | Now | Must be |
+|---|---|---|---|
+| At-grade road points over 0.5 m off the terrain | 0.06% (81% on this checkout's old compile) | 0.03%; Condado 0.2%, Hato Rey 0.01% | under 2% |
+| Skywalks across a road | 2: one removed, one solid | both raised, 4.6 m clear | 0 solid |
+| Paint marks under a sidewalk (0.05 m² or more) | 5,113; Condado 386, Hato Rey 355 | 0 in all three | 0 |
+| Invented ads the client hides | 116 of 138 | 0 of 67 | 0 |
+| House fronts inside a driven lane | 3,272 (major roads 90) | 2,940 (76); Condado 132, Hato Rey 213 | reported |
+| Junction links starting behind their lane | 22 (old net) | 0 of 84,979 | 0 |
+| Roads where SUMO has more lanes than the paint | PR-18 and PR-22 clusters | 0 (16 one-way roads have fewer, 2.6 km) | 0 |
+| Inside-origin cars starting above 5 m/s | 93% (median 41 km/h) | 0.2% (median 11 km/h, first second) | under 5% |
+| Morning teleports / share of counted traffic | 1,410 / 0.45 | 1,433 / 0.453 | at most 2,000 / at least 0.43 |
+| Cars still on the road at 10:15 | 1,388 | 1,215 | at most 2,000 |
+| Drawn overlaps at PR-18, 7:30 (10 checks) | 93 (SUMO's own: 18) | 52 (SUMO's own: 52) | SUMO's own + 5 |
+| Frame cost, benchmark views | see below | at or under the audit's in seven; morning +2.3% | within 3% |
+| Site size | 802 MB | 908 MB (as `tools/deploy.sh` measures it) | under 980 MB |
+| `npm test`, live page with no errors | pass | pass; the production build (`vite preview`) plays the intro with no errors, stalls or GL errors | pass |
+
+House fronts: the lane fit set 4 of 320 untagged streets to two lanes; the rest measure 18 to 40 m between walls,
+so 4 lanes fit. What is left is single buildings standing forward of their neighbours, scattered, and partly the
+lane width now being 3.0 m as in SUMO (it was 3.2 m in `roadway.js`).
+
+Frame cost (`tools/render/views.mjs`, GPU time to the end of the frame, ms): opening 20.6 → 20.8 (median of three
+loads; single loads gave 19.0 to 25.3), oldsj 18.3 → 17.1, condado 27.7 → 23.9, hatorey 26.4 → 23.3, expressway
+25.3 → 23.5, morning 25.6 → 26.2 (median of three: 25.6, 26.2, 26.2; on the new run), night 23.2 → 23.4, sunset
+22.1 → 18.8. Errors 0.
+
+The run is job Q1 (`simres/Q1`). Q2, the same with cars arriving at 3 m/s instead of stopping, came out worse:
+1,535 teleports, 1,869 cars on the road at 10:15, the same 0.45. Gate trips still enter at speed (median 14 km/h
+in their first second) as they should. The intro, every shot frame by frame (`tools/audit/intro.js`), against the
+live site: steps in a car's speed 610 → 534, of over a metre 8 → 4 (one bus at a stop), heights 7,118 → 6,505,
+headings 4,203 → 4,280, bodies inside one another 5 → 3; stalls, blinks and GL errors 0 in both.
+
+The apagón is job B2 (`simres/B2`), from Q1's morning: 788 teleports (live A1: 782), 0.41 of counted traffic (0.41),
+r² 0.43 (0.40), at most 30,969 cars on the road at once. At PR-18 at 7:30 the drawing adds 1 overlap to SUMO's own
+75 (live: 21 to 48); the rest is the ramp merge below. (B1, the same job, ran but brought nothing back: its clone URL
+held the job's token, `set -x` logged it and the first progress push published it, and every push after that was
+refused. `simlab` now clones without a token, scrubs any from what it pushes and keeps the results as an artifact.)
+
+## The audit (PR #48): fixed, measured where a number is given
 
 ### Cars
 - **Procedural traffic** (`src/world/traffic.js`, largely rewritten). Over 1,500 frames:
@@ -29,7 +83,7 @@ site is unchanged: `npm run deploy` publishes these local tiles, so deploy only 
   - Cars carried across the 150 s window boundary no longer fade out and back in. This had hit about a quarter of the cars every 2.5 simulated minutes.
   - Cars are drawn centred on the car, not on SUMO's front-bumper point, so noses no longer overhang stop lines and buses no longer sit inside the car ahead.
   - Jam teleports of 9–50 m in a second are split into a fade out and a fade in (`unlunge`).
-  - The one-second dips to 20 km/h on Las Américas and PR-1 are smoothed: 139 → 0 in the 7:30 window, 0 left in the windows checked (`undip`). They come from backward junction links in the SUMO network; see "Needs a SUMO re-run".
+  - The one-second dips to 20 km/h on Las Américas and PR-1 are smoothed: 139 → 0 in the 7:30 window, 0 left in the windows checked (`undip`). They came from backward junction links in the SUMO network, which the pipeline pass removed (`undip` stays as a guard).
   - Height steps ease out fully.
   - Standing cars face the way they came.
   - Wheels turn on the simulation clock.
@@ -115,7 +169,7 @@ Measured by replaying the crowd headless, before → after:
 - The avatar bake yields between avatars. The longest stall at the title fell from 472 ms to 85–139 ms.
 - Checked in a page at Calle de la Fortaleza: 1,045 people over 450 frames, 0 NaN, largest step 0.21 m, no errors.
 
-### Measured: frame cost of the benchmark views
+### Measured: frame cost of the benchmark views (the audit)
 GPU time to the end of the frame, in ms, from `tools/render/views.mjs` at 1280×720 on this M3. Side-by-side pictures are in `data/renders/views/audit-before-vs-audit-after/`. Errors are 0 in every view.
 
 | View | Before (ms) | After (ms) | Triangles, before → after |
@@ -133,38 +187,38 @@ GPU time to the end of the frame, in ms, from `tools/render/views.mjs` at 1280×
 
 ## For you to review
 
-### Needs a SUMO re-run (`tools/sim`)
-1. **Backward junction links.** The net was built with netconvert's `--ramps.guess`, and 22 junction links start up to 9 m behind where the lane into them ends: PR-18 by Las Américas, and PR-1. The client now hides the dip. The proper fix is to rebuild the net and add a check after netconvert that fails on such links.
-2. **Cars appear and vanish at speed.** `demand.py` uses `departSpeed="max" departPos="random_free"`, and 93% of tracks start above 5 m/s (median 41 km/h). For street trips, use `departSpeed="0"` and `arrivalSpeed="0"`.
-3. **This checkout's runs are not the published ones.** See the warning at the top. Either copy the published runs in, or re-run here at share 0.7 with `index.lanes` and `levels: 'roads'` against the new tiles, then run `validate.py`.
-4. **Lane widths and vehicle sizes disagree.** `roadway.js` uses 3.2 m lanes and the net uses 3.0 m (2.6 m on shared streets). In `demand.py` the truck is 7.0 m against 5.9 m drawn. One shared constants module would settle it.
-5. **4-lane default.** Untagged two-way primary and secondary roads become 4 lanes (79 ways, `osm.mjs`). Driven lanes then run into 3,934 house fronts, though no building is crossed by a centreline. A default of 2, or a cap from the measured wall-to-wall width (`roadsplit.mjs` measures it), changes the network.
-6. **Short teleports.** `run.py` splits a track only on jumps over 60 m. The client now does it at 9 m and up; move it into `run.py`.
-
-### Needs a recompile (it deletes `sim/`, so move it away or `--force`)
-1. **Stale road levels.** With `--road-levels`, ordinary roads keep levels from the old terrain: 81% of at-grade points are more than 0.5 m off `terrain.bin`, and the worst is 49 m.
-2. **Raised building parts.** Skywalks (`building=bridge`) lose their `min_height` and stand as solid blocks across Av. Muñoz Rivera and Calle Feria. Raised parts also get walls 4 m below their base and no underside (`meshing.js` SINK), so the client needs a floor for a raised base.
-3. **Already fixed in the compiler, waiting on a recompile:** roof-like tags (`roof;yes`, carports), underground stations, and FEMA outlines under OSM roofs.
-4. **Invented billboards.** 113 of the 138 invented ads are placed in Old San Juan, where the client hides them all. Centre them on Hato Rey or Santurce instead.
-5. **Paint under sidewalks.** 664 paint polygons lie under a sidewalk and show through it from about 20 m. Clip marks to carriageways.
+### Left from the pipeline pass
+1. **House fronts in a driven lane** (2,940 in San Juan, above): single buildings standing forward of the line of
+   their street. Narrowing a street for one building would make the lane wrong for the rest of it; notching the
+   building (as `roadclear.mjs` does for centrelines) is the other way, and changes buildings people know.
+2. **Trees past 1 km.** Keeping a crown of 20 triangles for every tree past `FAR_SMALL` cost 1.8 ms a frame in the
+   opening's view and 0.9 ms at night, measured in-page in interleaved blocks; batched into one draw per tile it
+   cost as much (the cost goes with the 6,500 crowns, under a pixel each, not with draws or shading). It was taken
+   back out. Tree cover painted into the far ground's colour (`far.js`, from the props' tree density) would keep
+   the green at no cost per frame.
+3. **Condado and Hato Rey** were compiled without `--road-levels` (their road graphs differ from the live ones), so
+   their decks and flyovers take this compile's profile; they have no structures tuned shot by shot.
+4. **`sharp`** is still in devDependencies and imported by nothing in the repository.
 
 ### Cars still drawn inside one another in jams
-On PR-18 at 7:30 (`?time=7.5&cam=4940,6475,300,0,25`), 10 checks over 300 frames:
-- On the published run: 93 overlaps as drawn, against 18 where SUMO has the cars.
-- On this checkout's gridlocked run: 189 against 5.
-
-The extra ones come from the client moving cars onto the painted lanes (`relane`, `fit` in `simtraffic.js`). Where SUMO's lane count and the paint's disagree, it puts cars from two SUMO lanes into one painted lane. The worst clusters are around (5430, 6433–6462) and (4936, 6424). This is not new: `main` draws the same. The fix is to keep the cars' SUMO lane order when mapping, or to let a mapped car fall back to its SUMO lane while another car occupies the target. That needs care with the smoothing that went in with PR #47, so I left it.
+At PR-18 in the 7:30 jam, 52 cars are drawn inside another (53 on another load), and SUMO has the same so. Of the
+first 16 located, 15 are at one merge (x ≈ 5,220, z ≈ 6,420): the PR-18 ramp (way 22221833) joins Avenida Piñero over its last 75 m, and
+netconvert lays the ramp's lane on Piñero's right lane for that stretch (their centre lines 0.1 m apart), so SUMO
+queues cars on both, each blind to the other. The fix is in the network: cut the junction back where two ways meet
+at a slant (`network.mjs`, or netconvert's junction shape at that node), then a new run. The other 45 drawn on the
+first measure were the drawing's (`roadlevel.js` fit pushing Calle Notre Dame's outer lane into the next) and are
+fixed.
 
 ### Decisions
 1. **`covered=yes` roads** notch the building over them, though the road really runs under it. The largest case is a 245 m cut through the Mall of San Juan's car park (`?ll=18.412099,-66.024036`). The thresholds are judgment calls too: keep at least 35% of a building (50% for low ones), and count a road from 0.5 m in.
-2. **Trees vanish beyond about 1 km** (500 m at the lowest detail), because their far crowns are culled with the street furniture. Keeping the current crowns costs about 1 M triangles. A crown of 8–20 triangles would cost 40–100 k. The far crowns are now tagged `userData.crown`, so keeping them is one condition in `cullSmall` (`main.js`): `&& !o.userData.crown`.
+2. **Trees vanish beyond about 1 km** (500 m at the lowest detail). Tried in the pipeline pass and measured too dear; see "Left from the pipeline pass", 2.
 3. **Tokyo/PLATEAU leftovers.**
    - `tower.js` and the `surfaces`/photo-roof path in `streamer.js`, `meshing.js` and `materials.js`. The `aPhoto` attribute is on every building vertex (about 10 MB CPU and 10 MB GPU around Hato Rey) and costs a texture fetch per facade fragment.
    - Vending, shrine, torii and rail-crossing props with no instances.
    - The taxi sign in `carbodies.js`, and the `CAR_LAMPS` uniforms that are always 1. Their unused exports are gone; the rest touches shaders.
    - All are dead with the current data. Delete them, or keep them for another city?
-4. **Dependencies.** `@takram/three-geospatial-effects`, `sharp` and `libsumo` are imported by nothing. `pngjs` and `polygon-clipping` belong in devDependencies.
-5. **Load size.** ez-tree bundles 20 base64 textures (about 3.3 MB of the 5.5 MB JS bundle), and props.js uses 3. Alias its texture module to a stub. The Google Fonts stylesheet also blocks first paint.
+4. **Dependencies.** Done in the pipeline pass, but for `sharp` (above).
+5. **Load size.** ez-tree's textures: done in the pipeline pass (main JS 5.6 → 1.6 MB). The Google Fonts stylesheet still blocks first paint.
 6. **Crowd memory.** About 135 MB of GPU memory and 115 MB of JS heap: the atlas is RGBA8 (KTX2 would be about 8× smaller), and the batches are sized at 1.3× their need. The bake of all 39 avatars blocks about 1 s at the title.
 7. **Seven always-on `backdrop-filter` blurs** over the canvas. Their cost is unmeasured; solid glass would be cheaper.
 8. **Shadow bias.** A 1.2 m depth bias plus normal bias removes contact shadows at wall feet and under rooftop equipment. Tuning it is coupled to `people.js` SHADOW and `carDepth`, and needs eyes.
@@ -179,8 +233,7 @@ The extra ones come from the client moving cars onto the painted lanes (`relane`
 14. **Car and transit physics.** Trains pass stations without stopping. Your car bounces off walls instead of sliding along them, which needs hit normals from `Walls` and `Collider`.
 15. **Scenario switching** rebuilds the simulated traffic from scratch (it no longer leaks). A `setRun()` like `SimSignals.setTimeline` would reuse it.
 16. **Deploy and cleanup.**
-    - `tools/deploy.sh` deploys the working tree under HEAD's hash with no dirty-tree check.
-    - `sim/morning.quarter` and `sim/test25` (583 MB, local only) can probably go.
+    - `tools/deploy.sh` checks the tree and the runs' roads (pipeline pass). The old local runs (`morning`, `apagon`, `morning.quarter`, `test25`) are in `data/sim-archive/` and can probably go.
     - `samples/plena-*.m4a` are untracked.
     - Unused assets:
       - `crowd/moves.json` and `turns.json` are described in the README but never loaded.

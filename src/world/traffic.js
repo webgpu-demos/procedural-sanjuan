@@ -20,6 +20,7 @@ import { lampMaterial } from './lamplight.js';
 import { Fleet, BODY_OF, SCALE_OF, lookOf, wheelBlur } from './fleet.js';
 import { BODY_SPECS, buildCarProxyGeometry } from './carbodies.js';
 import { loftedCarMaterial } from './carmaterial.js';
+import VEHICLES from '../shared/vehicles.json' with { type: 'json' };
 
 const LANE = 3.0;
 const CAR_RADIUS = 330, CARS = 260; // the default number of cars, and the distance from the focus they keep within
@@ -66,13 +67,14 @@ export function beamGeometry(L) {
 // What drives in San Juan: compact cars and sedans, a great many SUVs and pickups, delivery trucks, and the
 // AMA's city buses.
 export const TYPES = [
-  // (L and W: the lofted bodies' own, fleet.js; spec.W the width, the rest the proportions of the models before them)
-  { name: 'compact', share: 0.26, L: 4.15, spec: { L: 4.2, W: 1.78, belt: 0.92, roof: 1.46, z0: 0.18, z1: 0.8, rake: 0.7 } },
-  { name: 'sedan', share: 0.22, L: 4.5, spec: { L: 4.8, W: 1.86, belt: 0.92, roof: 1.44, z0: 0.2, z1: 0.72, rake: 0.75 } },
-  { name: 'suv', share: 0.26, L: 4.7, spec: { L: 4.7, W: 1.94, belt: 1.08, roof: 1.76, z0: 0.12, z1: 0.86, rake: 0.55, tyre: 0.36 } },
-  { name: 'pickup', share: 0.12, L: 5.7, spec: { L: 5.6, W: 2.05, belt: 1.12, roof: 1.84, z0: 0.3, z1: 0.62, rake: 0.5, tyre: 0.38 } },
-  { name: 'truck', share: 0.08, L: 5.9, spec: { L: 7.0, W: 2.0, belt: 1.05, roof: 2.4, z0: 0.76, z1: 0.97, rake: 0.18, tyre: 0.45, box: { h: 2.3, len: 0.7, z: 0.36 } } },
-  { name: 'bus', share: 0.06, L: 12.3, spec: { L: 12.0, W: 2.6, belt: 1.25, roof: 3.1, z0: 0.02, z1: 0.98, rake: 0.14, tyre: 0.48 } },
+  // (L: the lofted bodies' own length, fleet.js, which the simulation gives its cars too: src/shared/vehicles.json;
+  // spec.W the width, the rest the proportions of the models before them)
+  { name: 'compact', share: 0.26, L: VEHICLES.types.compact.length, spec: { L: 4.2, W: 1.78, belt: 0.92, roof: 1.46, z0: 0.18, z1: 0.8, rake: 0.7 } },
+  { name: 'sedan', share: 0.22, L: VEHICLES.types.sedan.length, spec: { L: 4.8, W: 1.86, belt: 0.92, roof: 1.44, z0: 0.2, z1: 0.72, rake: 0.75 } },
+  { name: 'suv', share: 0.26, L: VEHICLES.types.suv.length, spec: { L: 4.7, W: 1.94, belt: 1.08, roof: 1.76, z0: 0.12, z1: 0.86, rake: 0.55, tyre: 0.36 } },
+  { name: 'pickup', share: 0.12, L: VEHICLES.types.pickup.length, spec: { L: 5.6, W: 2.05, belt: 1.12, roof: 1.84, z0: 0.3, z1: 0.62, rake: 0.5, tyre: 0.38 } },
+  { name: 'truck', share: 0.08, L: VEHICLES.types.truck.length, spec: { L: 7.0, W: 2.0, belt: 1.05, roof: 2.4, z0: 0.76, z1: 0.97, rake: 0.18, tyre: 0.45, box: { h: 2.3, len: 0.7, z: 0.36 } } },
+  { name: 'bus', share: 0.06, L: VEHICLES.types.bus.length, spec: { L: 12.0, W: 2.6, belt: 1.25, roof: 3.1, z0: 0.02, z1: 0.98, rake: 0.14, tyre: 0.48 } },
 ];
 
 // Cars parked in car parks (props.js): the lofted bodies' stand-ins (fleet.js), a compact, a sedan, an SUV, a pickup by

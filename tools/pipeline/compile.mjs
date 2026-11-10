@@ -17,11 +17,14 @@ import path from 'node:path';
 import polygonClipping from 'polygon-clipping';
 import { resolveArea, ROOT } from './config.mjs';
 import { makeProjection, TILE, tileOf, tileKey } from '../../src/shared/geo.js';
-import { encodeTile, AREA, BFLAG, PROP, VERSION, SPORT, MATERIAL } from '../../src/shared/tileformat.js';
+import { encodeTile, AREA, BFLAG, PROP, VERSION, SPORT, MATERIAL, PASS } from '../../src/shared/tileformat.js';
 import { readOsm, buildRoadGraph, buildRailways } from './osm.mjs';
 import { buildHeightGrid, sampleGrid, demSource, FAR_DEM } from './terrain.mjs';
 import { applyLidar, LIDAR } from './lidar.mjs';
 import { PolyIndex, readLand, clipRing, placeProps, inRings } from './landscape.mjs';
+import { fitLanes } from './lanefit.mjs';
+import { widenPinches } from './pinches.mjs';
+import { NO_ADS } from '../../src/shared/places.js';
 import { buildMarkings } from './markings.mjs';
 import { splitOutlineRoads } from './roadsplit.mjs';
 import { profileRailways } from './rails.mjs';
@@ -277,11 +280,18 @@ for (const b of src.buildings) {
   // The walls stand on the lowest ground under the outline (they run a few metres below it anyway, see
   // meshing.js); the roof stays where the height puts it above the middle of the building.
   const gc = ground(cx, cz), lowest = Math.min(gc, ...polys[0][0].map(([x, z]) => ground(x, z)));
-  const base = Math.max(lowest, gc - 6) + b.minHeight, height = b.height + (gc - Math.max(lowest, gc - 6));
+  // (one raised off the ground, a skywalk or a raised part: its base where its tags put it over the ground at its middle,
+  // and on a slope over the highest ground under it, so that what passes beneath passes everywhere; a skywalk's
+  // clearance is over the street it crosses, which may be the highest ground under it)
+  const highest = Math.max(gc, ...polys[0][0].map(([x, z]) => ground(x, z)));
+  const raised = b.minHeight > 0 && (b.skywalk || Math.max(gc, highest - 1) + b.minHeight - highest >= PASS);
+  const foot = raised ? (b.skywalk ? highest : Math.max(gc, highest - 1)) : Math.max(lowest, gc - 6);
+  const base = foot + b.minHeight, height = raised ? b.height : b.height + (gc - foot);
   bstats.slope.push(gc - lowest);
   bstats.heights.push(b.height);
   bstats.usage[b.usage] = (bstats.usage[b.usage] ?? 0) + 1;
-  const building = { id: b.id, usage: b.usage, storeys: b.storeys, flags: b.masonry ? BFLAG.MASONRY : 0, base: r2(base), height: r2(height), measuredHeight: b.measured ? r2(height) : -1, polygons: polys, surfaces: [], hint: b.hint, cx, cz, roof: b.roof, name: b.name,
+  if (raised) bstats.raised = (bstats.raised ?? 0) + 1;
+  const building = { id: b.id, usage: b.usage, storeys: b.storeys, flags: (b.masonry ? BFLAG.MASONRY : 0) | (raised ? BFLAG.RAISED : 0), base: r2(base), height: r2(height), measuredHeight: b.measured ? r2(height) : -1, polygons: polys, surfaces: [], hint: b.hint, cx, cz, roof: b.roof, name: b.name,
     gers: b.gers ?? null, ref: /^[wr]\d/.test(b.id) ? b.id : null };
   allBuildings.push(building);
 }
@@ -326,7 +336,7 @@ const useStats = { fromPlaces: 0, fromName: 0 };
 }
 const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0; };
 const s0 = src.stats;
-log(`buildings: ${allBuildings.length} kept of ${s0.osm} OSM outlines (${s0.parts} building parts standing for ${s0.outlinesWithParts} outlines; ${s0.outlinesCapped} outlines kept under raised parts) and ${s0.femaOnly} FEMA-only; ${bstats.dropped} dropped, ${bstats.wet} in the sea`);
+log(`buildings: ${allBuildings.length} kept of ${s0.osm} OSM outlines (${s0.parts} building parts standing for ${s0.outlinesWithParts} outlines; ${s0.outlinesCapped} outlines kept under raised parts) and ${s0.femaOnly} FEMA-only; ${bstats.dropped} dropped, ${bstats.wet} in the sea; ${bstats.raised ?? 0} raised off the ground (skywalks, raised parts)`);
 log(`  heights from: OSM height ${s0.fromHeight}, Garita lidar ${s0.fromLidar}, OSM floors ${s0.fromLevels}, FEMA LiDAR ${s0.fromFema}, default ${s0.fromDefault} (FEMA has ${s0.femaTotal} outlines here)`);
 if (garita) log(`  GERS ids from Garita: ${s0.withGers} of ${src.buildings.length} buildings`);
 log(`  height median ${pct(bstats.heights, 0.5).toFixed(1)} m, p95 ${pct(bstats.heights, 0.95).toFixed(1)} m, max ${pct(bstats.heights, 1).toFixed(1)} m; ground drop under outline p95 ${pct(bstats.slope, 0.95).toFixed(1)} m`);
@@ -335,6 +345,17 @@ log(`  usage codes: ${Object.entries(bstats.usage).sort((a, b) => b[1] - a[1]).m
 // ---------------------------------------------------------------- OSM road graph
 const osm = readOsm(path.join(area.rawDir, 'osm.json'));
 const graph = buildRoadGraph(osm, proj.project, inBounds);
+// the main streets OSM gives no lane count: as many lanes as the room between their buildings holds (lanefit.mjs)
+{
+  const f = fitLanes(graph.edges, graph.pos, allBuildings.filter((b) => !(b.flags & BFLAG.RAISED)));
+  const w = f.widths.sort((a, b) => a - b);
+  log(`untagged two-way main streets: ${f.roads} edges; ${f.two} given two lanes, ${f.four} kept four (${f.open} with no buildings both sides, ${f.byWidth} by their mapped width); wall to wall median ${w.length ? w[w.length >> 1].toFixed(1) : '-'} m`);
+}
+// the expressway's stretches narrower than both what joins them and what follows: as wide as what joins them (pinches.mjs)
+{
+  const w = widenPinches(graph.edges, graph.pos);
+  log(`expressway pinches at joins: ${w.length} widened${w.length ? ` (${w.map((p) => `${p.edge.ref ?? p.edge.name ?? p.edge.highway} ${p.from}->${p.to}`).join(', ')})` : ''}`);
+}
 // road level per node: the ground, or above it on bridges and elevated expressways
 const { level, spans } = profileRoads(graph.edges, graph.pos, ground, wet);
 for (const edge of graph.edges) {
@@ -345,23 +366,30 @@ for (const edge of graph.edges) {
 // (San Juan's: its simulated mornings were driven on them, and its expressway's structures checked shot by shot,
 // src/shared/profile.js; the 10 m grid smooths an embankment's top away, and the profile laid on the lidar ground
 // stood PR-22's approaches up to 7 m off it on walled ramps)
+// Only the structures' levels are kept: bridges, spans, tunnels and the expressway, and the nodes where they meet the
+// streets. Every other road lies on the ground of this compile. (Kept everywhere, an earlier compile's levels on an
+// older ground had 81% of San Juan's ordinary streets more than half a metre off the ground, 49 m at worst.)
 if (argOf('road-levels')) {
   const old = JSON.parse(fs.readFileSync(argOf('road-levels'), 'utf8'));
   if (old.edges.length !== graph.edges.length) throw new Error(`--road-levels: ${old.edges.length} edges, the graph ${graph.edges.length}`);
+  const structure = (edge, o) => o.span || edge.bridge || edge.tunnel || flyover(edge) || edge.highway.startsWith('motorway');
+  const keep = new Map();
   graph.edges.forEach((edge, i) => {
     const o = old.edges[i];
     if (o.way !== edge.way || o.pts.length !== edge.ids.length * 3) throw new Error(`--road-levels: edge ${i} is not way ${edge.way} as it was`);
     edge.span = o.span ? 1 : 0;
-    edge.ids.forEach((id, k) => level.set(id, o.pts[k * 3 + 1]));
+    if (structure(edge, o)) edge.ids.forEach((id, k) => keep.set(id, o.pts[k * 3 + 1]));
   });
-  log(`road levels and spans kept from ${path.relative(process.cwd(), argOf('road-levels'))} (${graph.edges.filter((e) => e.span).length} spans)`);
+  let moved = 0, most = 0;
+  for (const [id, y] of keep) { const d = Math.abs(y - (level.get(id) ?? y)); if (d > 0.5) moved++; most = Math.max(most, d); level.set(id, y); }
+  log(`road levels and spans kept from ${path.relative(process.cwd(), argOf('road-levels'))} on ${keep.size} nodes of structures (${graph.edges.filter((e) => e.span).length} spans; ${moved} more than 0.5 m from this compile's profile, ${most.toFixed(1)} m at most); the streets on this ground`);
 }
 
 // (the graph as roads.json has it: written at the end, read here by the rule below)
 const roadsOut = {
   nodes: graph.nodes.map(({ id, p }) => [r2(p[0]), r2(level.get(id) ?? ground(p[0], p[1])), r2(p[1])]),
   edges: graph.edges.map((edge) => {
-    const { ids, way, spanLength, spanEnds, ...e } = edge;
+    const { ids, way, spanLength, spanEnds, guessed, ...e } = edge;
     return { ...e, way, pts: ids.flatMap((id) => { const [x, z] = graph.pos(id); return [r2(x), r2(level.get(id)), r2(z)]; }) };
   }),
 };
@@ -376,7 +404,7 @@ const keptBuildings = [];
 {
   const index = roadIndex(roadsOut.edges);
   for (const b of allBuildings) {
-    const r = b.flags & BFLAG.MASONRY || LANDMARKS[b.id] ? null : resolve(index, b.polygons, b.height);
+    const r = b.flags & BFLAG.MASONRY || LANDMARKS[b.id] ? null : resolve(index, b.polygons, b.height, b.flags & BFLAG.RAISED ? b.base : -Infinity);
     if (r) cleared.metres += r.roads.reduce((m, road) => m + road.inside, 0);
     if (r?.action === 'remove') { cleared.removed++; continue; }
     if (r?.action === 'notch') { b.polygons = r.polygons; cleared.notched++; }
@@ -388,12 +416,13 @@ log(`buildings in the roads: ${cleared.removed} removed, ${cleared.notched} notc
 
 // ---------------------------------------------------------------- road surfaces
 // The streets widened to their right-of-way and the buildings cut out of them (roadsurface.mjs).
-const surf = buildRoadSurfaces({ edges: graph.edges, pos: graph.pos, bounds, flyover, buildings: keptBuildings });
+// (not those raised over the street, skywalks: the street runs on beneath them)
+const surf = buildRoadSurfaces({ edges: graph.edges, pos: graph.pos, bounds, flyover, buildings: keptBuildings.filter((b) => !(b.flags & BFLAG.RAISED)) });
 for (const b of keptBuildings) {
   const { cx, cz, id, roof, name, ...rest } = b;
   b.entry = rest; // what the tile holds (landmarks below adjust it)
   tileFor(cx, cz).buildings.push(rest);
-  for (const rings of b.polygons) idx.building.add(rings);
+  if (!(b.flags & BFLAG.RAISED)) for (const rings of b.polygons) idx.building.add(rings); // (what stands on the ground)
 }
 const outlineOnly = []; // road outlines to split into carriageway and sidewalk
 for (const { tx, tz, polygon } of surf.outlines) {
@@ -563,6 +592,42 @@ const worldLand = {
   crossingNodes: landRaw.crossingNodes,
 };
 const paint = buildMarkings({ edges: graph.edges, pos: graph.pos, idx, land: worldLand, inBounds });
+// The paint on the carriageway only: a mark reaching past the kerb (a crosswalk's bar, a line laid along the OSM
+// road where the kerb bends in) lay under the sidewalk and showed through it from twenty metres off. A mark with
+// every corner on the carriageway and none on a sidewalk is kept as it is; any other, cut to the carriageway pieces
+// it overlaps, less the sidewalk pieces over them (roadsplit.mjs's sidewalks overlap the carriageway in places: at a
+// corner, where a kerb's ring crosses the road's, and the raised sidewalk covers the paint there).
+{
+  const clip = { whole: 0, cut: 0, gone: 0 }, kept = [];
+  const near = (index, ring) => {
+    const c = index.cell, xs = ring.map((p) => p[0]), zs = ring.map((p) => p[1]), items = new Set();
+    for (let i = Math.floor(Math.min(...xs) / c); i <= Math.floor(Math.max(...xs) / c); i++)
+      for (let j = Math.floor(Math.min(...zs) / c); j <= Math.floor(Math.max(...zs) / c); j++)
+        for (const it of index.grid.get(i + ',' + j) ?? []) items.add(it);
+    return [...items];
+  };
+  for (const m of paint.marks) {
+    const mx = m.ring.reduce((s, p) => s + p[0], 0) / m.ring.length, mz = m.ring.reduce((s, p) => s + p[1], 0) / m.ring.length;
+    const walk = idx.sidewalk.has(mx, mz) || m.ring.some(([x, z]) => idx.sidewalk.has(x, z));
+    if (!walk && m.ring.every(([x, z]) => idx.carriageway.has(x, z))) { kept.push(m); clip.whole++; continue; }
+    const walks = walk ? near(idx.sidewalk, m.ring).map((it) => it.rings.map(close)) : [];
+    let n = 0;
+    for (const it of near(idx.carriageway, m.ring)) {
+      let pieces;
+      try {
+        pieces = polygonClipping.intersection([close(m.ring)], it.rings.map(close));
+        if (walks.length && pieces.length) pieces = polygonClipping.difference(pieces, ...walks);
+      } catch { continue; }
+      for (const poly of pieces) {
+        const ring = poly[0].slice(0, -1);
+        if (ring.length >= 3 && Math.abs(areaEN(ring)) >= 0.02) { kept.push({ kind: m.kind, ring }); n++; }
+      }
+    }
+    if (n) clip.cut++; else clip.gone++;
+  }
+  paint.marks = kept;
+  log(`paint on the carriageway: ${clip.whole} marks whole, ${clip.cut} cut at the kerb or a sidewalk over the road, ${clip.gone} off it left out`);
+}
 for (const m of paint.marks) {
   const ring = m.ring.map(([x, z]) => [r2(x), r2(z)]);
   if (areaEN(ring) < 0) ring.reverse();
@@ -801,10 +866,13 @@ log(`landmarks: ${lmCount.forts} forts, ${lmCount.garitas} garitas, ${lmCount.do
 
 // ---------------------------------------------------------------- signboards
 const places = readPlaces(path.join(area.rawDir, 'osm_poi.json'), proj.project);
-const signBuildings = [...tiles.values()].flatMap((t) => t.buildings.map((b) => ({ ring: b.polygons[0][0], base: b.base, height: b.height, usage: b.usage, storeys: b.storeys < 255 ? b.storeys : 0 })));
+const signBuildings = [...tiles.values()].flatMap((t) => t.buildings.filter((b) => !(b.flags & BFLAG.RAISED)).map((b) => ({ ring: b.polygons[0][0], base: b.base, height: b.height, usage: b.usage, storeys: b.storeys < 255 ? b.storeys : 0 })));
 const signs = placeSigns(places, signBuildings, (x, z) => idx.road.has(x, z));
 // Billboards, screens and banners are invented, not mapped data: --no-ads leaves them out.
-const ads = process.argv.includes('--no-ads') ? [] : placeAds(signBuildings, [0, 0], area.ads ?? 0.3);
+// (round the area's busiest streets, area.adsAt, else its origin; none in Old San Juan, src/shared/places.js)
+const [nx0, nz1] = proj.project(NO_ADS.west, NO_ADS.south), [nx1, nz0] = proj.project(NO_ADS.east, NO_ADS.north);
+const ads = process.argv.includes('--no-ads') ? [] : placeAds(signBuildings, (area.adsAt ?? [area.origin]).map(([lon, lat]) => proj.project(lon, lat)), area.ads ?? 0.3)
+  .filter((s) => !(s.x >= nx0 && s.x <= nx1 && s.z >= nz0 && s.z <= nz1));
 signs.push(...ads);
 log(`ads: ${ads.filter((s) => s.style === 3).length} billboards, ${ads.filter((s) => s.style === 4).length} screens, ${ads.filter((s) => s.style === 5).length} rooftop boards, ${ads.filter((s) => s.style === 6).length} banners`);
 for (const s of signs) if (inBounds(s.x, s.z)) tileFor(s.x, s.z).signs.push({ ...s, x: r2(s.x), y: r2(s.y), z: r2(s.z), w: r2(s.w), h: r2(s.h) });
@@ -815,6 +883,61 @@ const furniture = placeFurniture(path.join(area.rawDir, 'osm_poi.json'), proj.pr
 for (const p of furniture.props) tileFor(p.x, p.z).props.push({ ...p, x: r2(p.x), z: r2(p.z) });
 for (const s of furniture.signs) tileFor(s.x, s.z).signs.push({ ...s, x: r2(s.x), y: r2(s.y), z: r2(s.z), w: r2(s.w), h: r2(s.h) });
 log(`street furniture (OSM): ${Object.entries(furniture.count).map(([k, v]) => `${propName[k]} ${v}`).join(', ')}`);
+
+// ---------------------------------------------------------------- paint under a sidewalk
+// Last, in each tile: what paint still reaches under a sidewalk (a corner of a car park bay's line, a mark on a deck)
+// cut back to the sidewalk's edge. The raised sidewalk is drawn over it, and from afar the paint showed through.
+{
+  let cut = 0, gone = 0;
+  const bboxOf = (ring) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } return [x0, z0, x1, z1]; };
+  for (const t of tiles.values()) {
+    const walks = t.areas.filter((a) => a.kind === AREA.SIDEWALK).flatMap((a) => a.polygons).map((rings) => ({ rings, box: bboxOf(rings[0]) }));
+    if (!walks.length) continue;
+    // (the sidewalks' edges by 4 m cell: a mark across a sidewalk's corner has neither a corner nor its middle on it)
+    const EC = 4, edgeCells = new Map();
+    walks.forEach((w, wi) => { for (const r of w.rings) for (let i = 0; i < r.length; i++) {
+      const [ax, az] = r[i], [bx, bz] = r[(i + 1) % r.length];
+      for (let gx = Math.floor(Math.min(ax, bx) / EC); gx <= Math.floor(Math.max(ax, bx) / EC); gx++)
+        for (let gz = Math.floor(Math.min(az, bz) / EC); gz <= Math.floor(Math.max(az, bz) / EC); gz++) {
+          const k = gx + ',' + gz; if (!edgeCells.has(k)) edgeCells.set(k, []); edgeCells.get(k).push(wi, ax, az, bx, bz);
+        }
+    } });
+    const cross = (ax, az, bx, bz, cx, cz, dx, dz) => {
+      const d1 = (bx - ax) * (cz - az) - (bz - az) * (cx - ax), d2 = (bx - ax) * (dz - az) - (bz - az) * (dx - ax);
+      const d3 = (dx - cx) * (az - cz) - (dz - cz) * (ax - cx), d4 = (dx - cx) * (bz - cz) - (dz - cz) * (bx - cx);
+      return d1 * d2 < 0 && d3 * d4 < 0;
+    };
+    const kept = [];
+    for (const a of t.areas) {
+      if (a.kind !== AREA.MARK_WHITE && a.kind !== AREA.MARK_YELLOW) { kept.push(a); continue; }
+      const ring = a.polygons[0][0], box = bboxOf(ring);
+      const cx = ring.reduce((s, p) => s + p[0], 0) / ring.length, cz = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+      const hit = new Set();
+      walks.forEach((w, wi) => { if (w.box[0] <= box[2] && w.box[2] >= box[0] && w.box[1] <= box[3] && w.box[3] >= box[1] &&
+        (inRings(cx, cz, w.rings) || ring.some(([x, z]) => inRings(x, z, w.rings)))) hit.add(wi); });
+      for (let gx = Math.floor(box[0] / EC); gx <= Math.floor(box[2] / EC); gx++)
+        for (let gz = Math.floor(box[1] / EC); gz <= Math.floor(box[3] / EC); gz++)
+          for (let e = edgeCells.get(gx + ',' + gz) ?? [], k = 0; k < e.length; k += 5) {
+            if (hit.has(e[k])) continue;
+            for (let i = 0; i < ring.length; i++) { const [px, pz] = ring[i], [qx, qz] = ring[(i + 1) % ring.length]; if (cross(px, pz, qx, qz, e[k + 1], e[k + 2], e[k + 3], e[k + 4])) { hit.add(e[k]); break; } }
+          }
+      if (!hit.size) { kept.push(a); continue; }
+      const over = [...hit].map((wi) => walks[wi]);
+      let pieces;
+      try { pieces = polygonClipping.difference(a.polygons.map((rings) => rings.map(close)), ...over.map((w) => w.rings.map(close))); } catch { kept.push(a); continue; }
+      let n = 0;
+      for (const poly of pieces) {
+        const r = poly[0].slice(0, -1).map(([x, z]) => [r2(x), r2(z)]);
+        if (r.length < 3 || Math.abs(areaEN(r)) < 0.02) continue;
+        if (areaEN(r) < 0) r.reverse();
+        kept.push({ kind: a.kind, code: a.code, polygons: [[r]] }); n++;
+      }
+      if (n) cut++; else gone++;
+    }
+    t.areas = kept;
+  }
+  log(`paint under a sidewalk: ${cut} marks cut back to its edge, ${gone} left out`);
+}
 
 // ---------------------------------------------------------------- write
 fs.rmSync(area.outDir, { recursive: true, force: true });

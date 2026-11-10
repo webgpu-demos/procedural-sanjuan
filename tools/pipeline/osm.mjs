@@ -34,12 +34,13 @@ function roadAttrs(t) {
     : (t.highway === 'motorway' || t.highway === 'motorway_link' || t.junction === 'roundabout') && t.oneway !== 'no' ? 1 : 0;
   // Untagged lanes: per direction for major roads; minor two-way streets are one shared lane.
   let lanes = intTag(t.lanes);
-  if (lanes == null) {
+  const guessed = lanes == null; // (lanefit.mjs settles a main street's from the room between its buildings)
+  if (guessed) {
     const perDir = link ? 1 : DEFAULT_LANES[hw] ?? 1;
     lanes = oneway ? perDir : MINOR.has(hw) ? 1 : perDir * 2;
   }
   return {
-    highway: t.highway, oneway, lanes,
+    highway: t.highway, oneway, lanes, guessed,
     lanesForward: intTag(t['lanes:forward']), lanesBackward: intTag(t['lanes:backward']),
     maxspeed: speedTag(t.maxspeed) ?? DEFAULT_SPEED[hw] ?? 40, maxspeedTagged: speedTag(t.maxspeed) != null,
     // lane arrows, left to right in the direction of travel ("left;through|through|right")

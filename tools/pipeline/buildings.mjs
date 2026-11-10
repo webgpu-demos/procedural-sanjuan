@@ -16,6 +16,7 @@
 //   452 utility  454 other  461 unknown
 import fs from 'node:fs';
 import { PolyIndex, inRings, hash } from './landscape.mjs';
+import { PASS_ROAD } from '../../src/shared/tileformat.js';
 
 const num = (v) => {
   if (v == null) return null;
@@ -211,7 +212,12 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     else { height = defaultHeight(t, usage, inHeritage, seed); source = 'fromDefault'; }
     stats[source]++;
     let minHeight = num(t.min_height) ?? (num(t['building:min_level']) != null ? num(t['building:min_level']) * fh : 0);
-    if (!isPart) minHeight = 0;
+    // A skywalk (building=bridge) is raised whatever its tags say: over a street by a lorry's clearance at least, its
+    // walkway a storey tall at least, its top kept where the tags put it if that leaves room (Av. Muñoz Rivera's by
+    // Centro Europa, Calle Feria's: drawn from the ground they stood as blocks across the street)
+    const skywalk = t.building === 'bridge';
+    if (skywalk) { minHeight = Math.max(minHeight, PASS_ROAD); height = Math.max(height, minHeight + 2.8); }
+    else if (!isPart) minHeight = 0;
     if (minHeight >= height) minHeight = 0;
     // An outline drawn with its parts is what stands under the parts raised off the ground (building:min_level):
     // no higher than the lowest of them, or it swallows them (OSM's levels on such an outline often count the
@@ -233,7 +239,7 @@ export function readBuildingSources({ osmFile, femaFile, proj, heritage, colonia
     const masonry = /^(castle|fort|fortress|bunker)$/.test(t.building) || /^(castle|fort|citywalls|fortress)$/.test(t.historic ?? '') || t.castle_type === 'fortress';
     if (masonry) hint = (0x80000000 | STONE[Math.floor(seed * STONE.length)] | (3 << 24)) >>> 0;
     if (g?.gers) stats.withGers++;
-    const rec = { id: b.id, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured: measured && !capped, hint, heritage: inHeritage, masonry,
+    const rec = { id: b.id, skywalk, polygons: b.polygons, usage: masonry ? 454 : usage, storeys: masonry ? 0 : storeys, height: height - minHeight, minHeight, measured: measured && !capped, hint, heritage: inHeritage, masonry,
       roof: t['roof:shape'] ?? null, name: t.name ?? null, gers: g?.gers ?? null };
     out.push(rec);
     return rec;

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import GUI from 'lil-gui';
 import { makeProjection } from './shared/geo.js';
+import { NO_ADS } from './shared/places.js';
 import { createMaterials, shared } from './world/materials.js';
 import { loadTextures } from './world/textures.js';
 import { Streamer, frozen } from './world/streamer.js';
@@ -180,7 +181,7 @@ if (LARGE) {
 loader.set(0.14, 'railways and roads');
 const proj = makeProjection(manifest.origin.lon, manifest.origin.lat);
 { // (no billboards or LED screens in the colonial city: Old San Juan, west of Puerta de Tierra)
-  const [x0, z1] = proj.project(-66.1245, 18.4600), [x1, z0] = proj.project(-66.1040, 18.4725);
+  const [x0, z1] = proj.project(NO_ADS.west, NO_ADS.south), [x1, z0] = proj.project(NO_ADS.east, NO_ADS.north);
   signs.noAds = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
 }
 // A raised sea (?sea=, Garita's sea-level scenario): the sea's surface at that height, over everything lower. It is
@@ -292,6 +293,14 @@ if (params.get('traffic') !== '0') scene.add(traffic.group);
 // The simulated morning (tools/sim): every car a trip SUMO drove. Without a time in the link it opens on it,
 // running in real time from before dawn.
 let sim = WANT_SIM ? await SimTraffic.load(SIM_BASE, streamer.surface, roads, (x, z) => streamer.ground(x, z), drawnDecks) : null;
+// A run made on other roads than these tiles' drives its cars off the painted lanes (tools/deploy.sh refuses to
+// publish one): in development, said in the console. (The run's index has the sha1 of the roads.json it was made on.)
+if (import.meta.env.DEV && sim?.index.roads) {
+  fetch(`tiles/${AREA}/${manifest.roads}`).then((r) => r.arrayBuffer()).then((b) => crypto.subtle.digest('SHA-1', b)).then((d) => {
+    const hex = [...new Uint8Array(d)].map((v) => v.toString(16).padStart(2, '0')).join('');
+    if (hex !== sim.index.roads) console.warn(`the simulated run was made on other roads (${sim.index.roads.slice(0, 8)}) than these tiles' (${hex.slice(0, 8)}): run tools/sim again on this roads.json`);
+  }).catch(() => {});
+}
 // its signals: the heads at the junctions show what the simulation's lights showed (before any tile is built)
 const simSignals = sim && await early.signals.then((j) => j && new SimSignals(j, roads)).catch(() => null);
 if (simSignals) { props.signalSlot = (x, z, rot) => simSignals.slot(x, z, rot); props.mats.lens.uniforms.uSig.value = simSignals.texture; }

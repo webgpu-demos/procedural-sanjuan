@@ -24,6 +24,8 @@ const BAND = 110;                                       // a car hands over from
 const MOVE = 0.4, DRIFT = 2.0;
 const AROUND = [-1, -0.5, 0.5, 1]; // (where else along its track a model's painted lane is looked up, in spans of about 24 m)
 const DETAIL = 250;                                     // within this, the full model; beyond, a lighter one
+const ABREAST = 2.5;                                    // metres between two cars side by side, at least (relane)
+const SUMO_LANE = 3.0, SUMO_NARROW = 2.6;               // SUMO's lanes on a two-way street (tools/sim/network.mjs LANE, NARROW)
 // a 24 m cell's number (the corrected levels by cell, fixAt): the cell east of it is +1, north +CELLS
 const CELLS = 1 << 16;
 const reversed = (pts) => { const out = []; for (let k = pts.length - 3; k >= 0; k -= 3) out.push(pts[k], pts[k + 1], pts[k + 2]); return out; };
@@ -236,13 +238,39 @@ export class SimTraffic {
         along += len;
       }
     }
+    // Two-way streets whose lanes are split unevenly (Calle Notre Dame beside PR-18: one lane north, three south).
+    // SUMO lays each way's lanes out to its right of the OSM line (network.mjs, spreadType right), so its road stood
+    // a lane to one side of the street the tiles pave about that line; roadlevel.js fit pushed the outer lane's cars
+    // back onto the paving, into the next lane's, and 45 of the 96 overlaps drawn at PR-18 in the 7:30 jam were
+    // there. Both ways are moved across together, by half the difference in lanes, so the road is centred on the
+    // paving. (network.mjs's split: the tagged one, else half each way.)
+    roads.edges.forEach((e, i) => {
+      if (e.oneway || e.a === e.b) return;
+      const fwd = e.lanesForward ?? (e.lanes >= 2 ? Math.floor(e.lanes / 2) : 1);
+      const bwd = e.lanesBackward ?? (e.lanes >= 2 ? Math.max(1, e.lanes - fwd) : 1);
+      if (fwd === bwd) return;
+      const sw = e.lanes >= 2 ? SUMO_LANE : SUMO_NARROW;
+      for (const [own, other, p] of [[fwd, bwd, e.pts], [bwd, fwd, reversed(e.pts)]]) {
+        for (let k = 3; k < p.length; k += 3) {
+          const x0 = p[k - 3], z0 = p[k - 1], x1 = p[k], z1 = p[k + 2], len = Math.hypot(x1 - x0, z1 - z0);
+          if (len < 0.1) continue;
+          const seg = { x0, z0, tx: (x1 - x0) / len, tz: (z1 - z0) / len, len, two: true, own, sw, shift: -(own - other) / 2 * sw, highway: e.highway, i };
+          for (let s = 0; s <= len + 12; s += 12) {
+            const f = Math.min(1, s / len), key = cellKey(x0 + (x1 - x0) * f, z0 + (z1 - z0) * f);
+            let cell = this.laneCells.get(key);
+            if (!cell) this.laneCells.set(key, (cell = []));
+            if (cell.at(-1) !== seg) cell.push(seg);
+          }
+        }
+      }
+    });
   }
   // Whether (x, z), facing `heading`, is in the lanes of a one-way expressway (relanes' cells)
   onExpressway(x, z, heading) {
     const c = cellKey(x, z), hx = Math.sin(heading), hz = Math.cos(heading);
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
       for (const g of this.laneCells?.get(c + a * CELLS + b) ?? NONE) {
-        if (g.tx * hx + g.tz * hz < 0.9 || /_link$/.test(g.highway)) continue;
+        if (g.two || g.tx * hx + g.tz * hz < 0.9 || /_link$/.test(g.highway)) continue;
         const u = (x - g.x0) * g.tx + (z - g.z0) * g.tz, d = (x - g.x0) * -g.tz + (z - g.z0) * g.tx;
         if (u >= 0 && u <= g.len && Math.abs(d) <= g.sumo * g.sw / 2 + 1) return true;
       }
@@ -259,18 +287,23 @@ export class SimTraffic {
         const u = (p[0] - g.x0) * g.tx + (p[2] - g.z0) * g.tz;
         if (u < -0.5 || u > g.len + 0.5) continue;
         const d = (p[0] - g.x0) * -g.tz + (p[2] - g.z0) * g.tx; // (to the right of the way)
-        // (out of its lanes: on another road where two meet or part, a ramp alongside; left as SUMO drove it)
-        if (Math.abs(d) > g.sumo * g.sw / 2 + 0.5 || Math.abs(d) >= bd) continue;
-        bd = Math.abs(d); best = g; bu = u; bdd = d;
+        // (out of its lanes: on another road where two meet or part, a ramp alongside; left as SUMO drove it. A two-way
+        // street's lanes one way are all to the right of its line)
+        const off = g.two ? Math.abs(d - g.own * g.sw / 2) : Math.abs(d);
+        if (off > (g.two ? g.own : g.sumo) * g.sw / 2 + 0.5 || off >= bd) continue;
+        bd = off; best = g; bu = u; bdd = d;
       }
     }
     if (!best) return null;
     const g = best, u = bu, d = bdd;
+    if (g.two) { const out = this.relaned ??= [0, 0]; out[0] = -g.tz * g.shift; out[1] = g.tx * g.shift; return out; }
     const fromRight = g.sumo / 2 - 0.5 - d / g.sw;                // SUMO's lane, counted from the right
-    // (more lanes in SUMO than painted, where the paint is narrower than OSM's count: SUMO's lanes share the painted
-    // width evenly, so that two cars side by side in SUMO do not ride in one painted lane, the one through the other)
+    // (more lanes in SUMO than painted, where the paint is narrower than OSM's count or SUMO's network widened a join:
+    // SUMO's lanes share the painted width evenly, so that two cars side by side in SUMO do not ride in one painted
+    // lane; and no closer than ABREAST, spilling evenly onto the shoulders where the paint is too narrow for that: four
+    // in two painted lanes were drawn 1.8 m apart, the one through the other, on PR-18 in the jam)
     const lane = g.sumo > g.painted
-      ? Math.min(g.painted - 0.55, Math.max(-0.45, (fromRight + 0.5) * (g.painted / g.sumo) - 0.5))
+      ? (g.painted - 1) / 2 + (fromRight - (g.sumo - 1) / 2) * Math.max(g.painted / g.sumo, ABREAST / g.lw)
       : Math.min(g.painted - 0.55, Math.max(-0.45, fromRight + g.painted - g.sumo));
     const at = g.s0 + u;
     // (the painted centre's offset from the OSM line, to the right of the way travelled)

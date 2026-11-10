@@ -30,7 +30,13 @@ export const MATERIAL = { NONE: 0, TILE: 1, CONCRETE: 2, PLASTER: 3, BRICK: 4, M
 // NO_SOLID: not drawn and not run into: a building taken out of a road (tools/pipeline/roadclear.mjs) by
 // clearroads.mjs after the area was compiled. The record stays, so the buildings after it keep their index in the
 // tile: their ids (t_x_z.ids), their colours and their rooms' seeds go by it.
-export const BFLAG = { LOD2: 1, NO_SOLID: 2, LATTICE: 4, MASONRY: 8 };
+// RAISED: off the ground, its base at least PASS metres over it (a skywalk, OSM building=bridge; a part of a building
+// raised on min_height): its walls stop at its base (no sink into the ground), its underside is drawn, and what
+// passes beneath does not run into it (src/world/drive.js Walls goes by the walls' height). A road under one stays
+// open where the base clears the road by PASS (tools/pipeline/roadclear.mjs). A skywalk is raised PASS_ROAD at
+// least over the highest ground under it, a lorry's clearance (tools/pipeline/buildings.mjs).
+export const BFLAG = { LOD2: 1, NO_SOLID: 2, LATTICE: 4, MASONRY: 8, RAISED: 16 };
+export const PASS = 2.5, PASS_ROAD = 4.5;
 
 // Ground surface kinds. WATER code 1 is the sea (the rest are lakes, lagoons and rivers).
 export const AREA = { ROAD: 0, CARRIAGEWAY: 1, SIDEWALK: 2, ISLAND: 3, OTHER: 4, PARK: 5, WOOD: 6, WATER: 7, PITCH: 8, MARK_WHITE: 9, MARK_YELLOW: 10,

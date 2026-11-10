@@ -5,6 +5,7 @@
 // the wires to a pole left out go with it), and a parked car may stand along the kerb, not out in the lanes.
 // Used by the tile worker (meshing.js) and by tools/audit/roadway.mjs, which counts what it leaves out.
 import { AREA, PROP } from './tileformat.js';
+import VEHICLES from './vehicles.json' with { type: 'json' };
 
 const KERB = 0.4;     // metres inside the carriageway's edge a thing may still stand (its foot on the kerb line)
 const PARKING = 2.4;  // and a parked car's middle (a parking lane along the kerb)
@@ -66,10 +67,10 @@ export function clearRoadway(tile, out = null) {
 }
 
 // ---------------------------------------------------------------- the lanes cars drive
-// The paved surface is not always as wide as the lanes the traffic keeps to (the simulated morning's, on SUMO's
-// 3.2 m lanes, and the procedural traffic's): what stands within reach of a car in a road's outer lane is in the
-// way however it is paved. The corridor of a road: how far from its centreline that car's body reaches.
-const LANE_W = 3.2, HALF_CAR = 0.95;
+// The paved surface is not always as wide as the lanes the traffic keeps to (the simulated morning's, on the lanes
+// tools/sim/network.mjs gives SUMO, and the procedural traffic's): what stands within reach of a car in a road's outer
+// lane is in the way however it is paved. The corridor of a road: how far from its centreline that car's body reaches.
+const LANE_W = VEHICLES.lane, HALF_CAR = 0.95;
 const DRIVEN = /^(motorway|trunk|primary|secondary|tertiary|unclassified|residential)/;
 export function corridorOf(e) {
   if (e.oneway) return ((Math.max(1, e.lanes || 1) - 1) / 2) * LANE_W + HALF_CAR;

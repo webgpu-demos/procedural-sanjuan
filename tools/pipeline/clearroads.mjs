@@ -68,7 +68,7 @@ for (const t of manifest.tiles) {
     buildings++;
     // (already taken out; a fort or a landmark, which is drawn as a model built on its outline)
     if (b.flags & BFLAG.NO_SOLID) return;
-    const was = pairs(b.polygons), r = b.flags & BFLAG.MASONRY ? null : resolve(index, was, b.height);
+    const was = pairs(b.polygons), r = b.flags & BFLAG.MASONRY ? null : resolve(index, was, b.height, b.flags & BFLAG.RAISED ? b.base : -Infinity);
     for (const rings of r?.action === 'remove' ? [] : r?.action === 'notch' ? r.polygons : was) solid.add(rings);
     if (!r) return;
     if (r.action === 'failed') { failed++; console.log(`  could not cut building ${i} of ${t.file} (left as it is)`); return; }

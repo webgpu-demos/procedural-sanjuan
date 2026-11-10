@@ -5,6 +5,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { encodeTile, decodeTile, AREA, BFLAG, PROP } from '../../src/shared/tileformat.js';
 import { makeProjection } from '../../src/shared/geo.js';
+import { buildingMesh } from '../../src/world/meshing.js';
 import { ROOT, AREAS } from '../pipeline/config.mjs';
 
 let passed = 0;
@@ -30,6 +31,18 @@ test('encode -> decode round trip', () => {
   assert.deepEqual([p.kind, p.variant, p.x, p.z, p.scale], [PROP.POLE, 1, 3.5, -4.25, 1.25]);
   assert.ok(Math.abs(p.rot - Math.PI / 2) < 1e-3);
   assert.deepEqual([...out.wires], [0, 0, 30, -2.5]);
+});
+
+test('a raised building (a skywalk) is meshed with no walls below its base and an underside', () => {
+  const ring = [[0, 0], [12, 0], [12, -3], [0, -3]];
+  const tile = { tx: 0, tz: 0, buildings: [{ usage: 0, storeys: 1, flags: BFLAG.RAISED, base: 15.5, height: 3, measuredHeight: -1, polygons: [[ring]] }], areas: [] };
+  const b = decodeTile(encodeTile(tile).slice().buffer).buildings[0];
+  assert.equal(b.flags & BFLAG.RAISED, BFLAG.RAISED);
+  const { position: pos, normal: nor } = buildingMesh([b], 0, 0);
+  let low = Infinity, down = 0;
+  for (let i = 0; i < pos.length; i += 3) { low = Math.min(low, pos[i + 1]); if (nor[i + 1] < -0.9) down++; }
+  assert.ok(low >= 15.5 - 1e-3, `lowest vertex ${low}`);
+  assert.ok(down >= 6, `${down} vertices facing down`);
 });
 
 test('local projection', () => {

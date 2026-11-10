@@ -301,7 +301,8 @@ function flatRoofColour(r) {
 // Window bay width (m) per category; a whole number of bays is fitted to each wall.
 const BAY = { [CAT.HOUSE]: 3.4, [CAT.APARTMENT]: 3.3, [CAT.MIXED]: 3.2, [CAT.COMMERCIAL]: 3.0, [CAT.PUBLIC]: 3.4, [CAT.GLASS]: 1.5, [CAT.INDUSTRIAL]: 6.0 };
 const HINT_LAYER = { [MATERIAL.TILE]: WALL.TILE, [MATERIAL.CONCRETE]: WALL.CONCRETE, [MATERIAL.PLASTER]: WALL.PLASTER, [MATERIAL.BRICK]: WALL.BRICK, [MATERIAL.METAL]: WALL.SIDING };
-const SINK = 4; // walls run this far below the base so they meet sloping ground
+const SINK = 4; // walls run this far below the base so they meet sloping ground (not a raised one's: BFLAG.RAISED)
+const sinkOf = (b) => (b.flags & BFLAG.RAISED ? 0 : SINK);
 
 const ringArea = (r) => { let s = 0; for (let i = 0, n = r.length / 2; i < n; i++) { const j = (i + 1) % n; s += r[j * 2] * r[i * 2 + 1] - r[i * 2] * r[j * 2 + 1]; } return s / 2; };
 
@@ -385,7 +386,7 @@ export function blockMesh(buildings, tx, tz) {
     // (its roof as near: coated white, bare concrete, now and then red or green; it was its walls' colour, lightened,
     // and from the air the low city was confetti of lilac, mint and pink)
     const { wallCol } = finishOf(b, i, tx, tz), roofCol = b.flags & BFLAG.MASONRY ? wallCol.map((c) => c * 0.82) : lin(flatRoofColour(roofRnd(i, tx, tz)));
-    const top = b.base + b.height, bottom = b.base - SINK;
+    const top = b.base + b.height, bottom = b.base - sinkOf(b), raised = (b.flags & BFLAG.RAISED) !== 0;
     for (const rings of b.polygons) {
       for (const r of rings) {
         const n = r.length / 2;
@@ -402,6 +403,10 @@ export function blockMesh(buildings, tx, tz) {
       }
       for (const [p, q, t] of triangulate(rings)) {
         for (const [x, z] of [p, q, t]) { pos.push(x, top, z); nor.push(0, 1, 0); col.push(...roofCol); }
+        idx.push(v, v + 1, v + 2);
+        v += 3;
+        if (!raised) continue; // (and the underside of one raised over the street: a skywalk)
+        for (const [x, z] of [p, t, q]) { pos.push(x, b.base, z); nor.push(0, -1, 0); col.push(...wallCol.map((c) => c * 0.6)); }
         idx.push(v, v + 1, v + 2);
         v += 3;
       }
@@ -432,7 +437,7 @@ export function buildingMesh(buildings, tx, tz) {
     const { material, cat, seed, wallCol, wallLayer, k: used } = finishOf(b, i, tx, tz);
     let k = used;
     const rnd = () => hash3(i * 31 + k++, tx * 13 + 5, tz * 17 + 3);
-    const top = b.base + b.height, bottom = b.base - SINK;
+    const sink = sinkOf(b), top = b.base + b.height, bottom = b.base - sink;
     const outer = b.polygons[0][0];
     const area = b.polygons.reduce((s, rings) => s + rings.reduce((t, r) => t + ringArea(r), 0), 0);
 
@@ -570,10 +575,10 @@ export function buildingMesh(buildings, tx, tz) {
           const nrm = [-dz, 0, dx]; // outward for CCW outlines and CW holes (see tileformat.js)
           const bays = len < 1.8 || masonry ? 0 : Math.max(1, Math.round(len / BAY[cat])), bay = bays ? len / bays : 0;
           const yT = wallTop + parapet, vT = yT - b.base;
-          vtx(x0, bottom, z0, nrm, wallCol, 0, -SINK, KIND.WALL, bay, wallLayer);
-          vtx(x1, bottom, z1, nrm, wallCol, bays, -SINK, KIND.WALL, bay, wallLayer);
+          vtx(x0, bottom, z0, nrm, wallCol, 0, -sink, KIND.WALL, bay, wallLayer);
+          vtx(x1, bottom, z1, nrm, wallCol, bays, -sink, KIND.WALL, bay, wallLayer);
           vtx(x1, yT, z1, nrm, wallCol, bays, vT, KIND.WALL, bay, wallLayer);
-          vtx(x0, bottom, z0, nrm, wallCol, 0, -SINK, KIND.WALL, bay, wallLayer);
+          vtx(x0, bottom, z0, nrm, wallCol, 0, -sink, KIND.WALL, bay, wallLayer);
           vtx(x1, yT, z1, nrm, wallCol, bays, vT, KIND.WALL, bay, wallLayer);
           vtx(x0, yT, z0, nrm, wallCol, 0, vT, KIND.WALL, bay, wallLayer);
           if (parapet) quad([x0, wallTop, z0], [x1, wallTop, z1], [x1, yT, z1], [x0, yT, z0], [dz, 0, -dx], inner, KIND.SOLID, wallLayer);
@@ -583,6 +588,10 @@ export function buildingMesh(buildings, tx, tz) {
       }
       if (!roof) for (const [p, q, s] of triangulate(rings)) {
         for (const [x, z] of [p, q, s]) vtx(x, wallTop, z, [0, 1, 0], flatRoof, 0, wallH, KIND.FLAT_ROOF, 0, WALL.ROOF);
+      }
+      // the underside of one raised over the street (a skywalk, a raised part): its soffit, in the walls' colour shaded
+      if (!sink) for (const [p, q, s] of triangulate(rings)) {
+        for (const [x, z] of [p, s, q]) vtx(x, b.base, z, [0, -1, 0], inner, 0, 0, KIND.SOLID, 0, wallLayer);
       }
     }
 
