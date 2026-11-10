@@ -37,3 +37,7 @@ jobs:
         run: bash simlab/setup.sh
       - name: run
         run: bash simlab/run.sh
+      - name: keep the results as an artifact too (in case a push fails)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: "simres-${{ matrix.job }}", path: /mnt/res, retention-days: 7, if-no-files-found: ignore }

@@ -5,6 +5,10 @@ export ROOT=$PWD RES=/mnt/res W=/mnt/sim PY=$PWD/.venv-sim/bin/python BIN=$PWD/.
 mkdir -p "$RES" "$W"
 push() {
   ( cd "$RES" || exit 1; rm -rf .git && git init -q -b r && git add -A &&
+    # (no token in what is pushed: a token pushed to a public branch is revoked, and the pushes after it fail;
+    #  scrubbed in the commit only, since the job is still writing these files)
+    git grep -lIz --cached "x-access-token:" | while IFS= read -r -d '' f; do
+      git update-index --cacheinfo 100644,"$(sed 's/x-access-token:[^@]*@/x-access-token:***@/g' "$f" | git hash-object -w --stdin)","$f"; done
     git -c user.name=simlab -c user.email=noreply@anthropic.com commit -qm "$JOB $(date -u +%FT%TZ) $1" || exit 1
     ok=0; for i in 1 2 3; do git push -qf "https://x-access-token:$GH_TOKEN@github.com/$REPO" r:"simres/$JOB" 2> /tmp/push.err && { ok=1; break; }; sleep 10; done
     [ $ok = 1 ] || echo "::error title=push failed::$(tail -c 900 /tmp/push.err | tr '\n' ' ')"

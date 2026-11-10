@@ -37,7 +37,7 @@ morning)
     gzip -c $S/morning/routes.rou.xml > $RES/carry/routes.rou.xml.gz && gzip -c $S/morning/trips.json > $RES/carry/trips.json.gz ;;
 apagon)
   ( set -e
-    git clone -q --depth 1 -b simres/$FROM "https://x-access-token:$GH_TOKEN@github.com/$REPO" $W/from
+    git clone -q --depth 1 -b simres/$FROM "https://github.com/$REPO" $W/from   # (public: no token, which set -x would write into all.txt)
     node tools/sim/network.mjs --area=sanjuan $NETARGS
     mkdir -p $S/morning $T && cp -r $W/from/sim/* $T/
     cp $W/from/carry/state_20700.xml.gz $W/from/carry/taz.add.xml $W/from/carry/busstops.add.xml $S/morning/

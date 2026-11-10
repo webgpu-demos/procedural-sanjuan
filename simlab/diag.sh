@@ -12,7 +12,7 @@ $PY tools/sim/demand.py --area=sanjuan --scale=${SCALE:-1} --scenario=lab "--vty
 $PY tools/sim/gtfs.py --area=sanjuan --demand=lab > $RES/gtfs.txt 2>&1
 if [ -n "$PREROUTES" ]; then
   # (the routes another job settled on, driven again with other options)
-  git clone -q --depth 1 -b simres/$PREROUTES "https://x-access-token:$GH_TOKEN@github.com/$REPO" $W/pre
+  git clone -q --depth 1 -b simres/$PREROUTES "https://github.com/$REPO" $W/pre
   ROUTES=$(ls $W/pre/*.rou.xml.gz | head -1),$S/lab/buses.xml
 elif [ -n "$ASSIGN" ]; then
   A=$W/assign; mkdir -p $A; cd $A
