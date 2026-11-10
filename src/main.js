@@ -1014,8 +1014,6 @@ function cullSmall() {
         if (!o.isInstancedMesh) return;
         const key = String((Array.isArray(o.material) ? o.material[0] : o.material).customProgramCacheKey?.() ?? '');
         if (o.userData.parked) tile.userData.small.push(o.userData.parked === 'near' ? [o, 0, NEAR_PARKED] : [o, NEAR_PARKED, FAR_PARKED]);
-        // (a far tree's crown: its simple one out to FAR_SMALL, the one of a few triangles past it, props.js)
-        else if (o.userData.crown) tile.userData.small.push(o.userData.crown === 'distant' ? [o, FAR_SMALL, Infinity] : [o, 0, FAR_SMALL]);
         else if (!/leaves|lamp-head|lamp-quad/.test(key)) tile.userData.small.push([o, 0, FAR_SMALL]);
       });
       const [x, z] = tile.name.slice(5).split('_').map(Number);
