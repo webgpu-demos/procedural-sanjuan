@@ -1,12 +1,61 @@
 # Audit, November 2026: what was fixed and what is left for you
 
-Two passes. The audit (branch `audit-pass`, PR #48) fixed what the browser code could fix. The pipeline pass
-(branch `pipeline-pass`) fixed the compiler and the simulation tooling, recompiled the three areas, re-ran the
-morning and the apagón on GitHub Actions on the new roads, and published tiles, runs and code together.
+Three passes. The audit (branch `audit-pass`, PR #48) fixed what the browser code could fix. The pipeline pass
+(branch `pipeline-pass`, PR #49) fixed the compiler and the simulation tooling, recompiled the three areas, re-ran
+the morning and the apagón on GitHub Actions on the new roads, and published tiles, runs and code together. The
+ramp pass (branch `ramp-merge`) moved the ramps OSM draws across the expressway's outer lanes alongside them,
+re-ran both (jobs `S1` and `T1`) and published them.
 
-This checkout deploys again. The runs in `public/tiles/sanjuan/sim/` were driven on these tiles' `roads.json` (its
+This checkout deploys. The runs in `public/tiles/sanjuan/sim/` were driven on these tiles' `roads.json` (its
 sha1 is in each run's index), and `tools/deploy.sh` refuses a run made on other roads and a working tree with
-uncommitted changes. The build that was live before is kept as the local branch `gh-pages-before-pipeline`.
+uncommitted changes. The builds that were live before are kept as the local branches `gh-pages-before-pipeline`
+and `gh-pages-before-ramp`.
+
+## Ramp pass
+
+### What it changed
+OSM draws a ramp converging on the expressway's line and joining it at the node, so over its last stretch the
+ramp's line runs inside the outer lanes. SUMO drove the ramp's cars there, beside and through the outer lane's,
+each blind to the other: at PR-18 into Avenida Piñero (way 22221833), 50 cars inside one another at 7:30.
+- `src/shared/roadway.js` accelLanes: where a ramp comes in from the right, its acceleration lane now starts back
+  where the ramp's line is a lane's centre out from the painted lanes (`approach`); the ramp runs alongside from
+  there. 75 of the 84 acceleration lanes in San Juan, 3.1 km in all (Condado 3 of 5, Hato Rey 2 of 3).
+- `tools/sim/network.mjs` gives SUMO that shape. Ramp lane centres within 2.5 m of a main lane's centre: 17 → 0;
+  at PR-18, 0.01 m → 3.68 m. Junction links behind their lane: still 0 of 84,981.
+- The client paves the stretch alongside from the avenue's carriageway edge, and clears what stood under it:
+  2.5 km of sidewalk (with its kerbs, trees and signs) had lain under acceleration lanes before this pass too.
+  People on foot no longer walk the 58 walk links (8 km of 5,230) that lay mostly on that paving; crossings stay.
+- `tools/tests/ramps.test.mjs`: the ramp leaves its own line with no step, and keeps a lane clear of the main lanes.
+- A lost WebGL context (Safari takes it back short of GPU memory, or on waking from sleep) left the page running
+  under its last picture, clock and HUD going, with nothing to say why: it now says so and loads the page again
+  where you were, past the title (`main.js`, `experience.js` `free`).
+
+### Gates
+| Measure | Before (Q1, B2) | Now (S1, T1) | Must be |
+|---|---|---|---|
+| Morning teleports / share of counted traffic | 1,433 / 0.453 | 1,246 / 0.452 | at most 2,000 / at least 0.43 |
+| Cars still on the road at 10:15 | 1,215 | 1,075 | at most 2,000 |
+| Inside-origin cars starting above 5 m/s | 0.2% | 0.3% | under 5% |
+| Drawn overlaps at PR-18, 7:30 (10 checks; SUMO's own) | 52 (52) | 8 (3), 9 (2), 10 (2) on three loads | SUMO's own + 5: passed on one load of three; accepted, see below |
+| At the PR-18 merge itself (x ≈ 5,220, z ≈ 6,420) | 50 | 0 | |
+| Apagón teleports / share / r² (live A1: 782 / 0.41 / 0.40) | 788 / 0.41 / 0.43 | 800 / 0.41 / 0.42 | about as before |
+| Apagón, most cars on the road at once | 30,969 | 31,286 | reported |
+| Apagón, drawn overlaps at PR-18, 7:30 (SUMO's own) | 76 (75) | 3 (4), none at the merge | SUMO's own + 5 |
+| `npm test`, the intro frame by frame | pass | pass; stalls, blinks, GL errors 0; bodies inside one another 3 → 1 | pass |
+| Frame cost, expressway and morning views (`main` and this branch alternating, same run) | 23.5, 24.3 ms (27.4, 31.4 cold) | 24.0 and 24.1, 23.1 and 25.5 ms | within 3% |
+| Site size (as `tools/deploy.sh` measures it) | 908 MB | 910 MB | under 980 MB |
+
+The overlaps left in the PR-18 view are at another merge, 230 m west (x ≈ 4,990, z ≈ 6,403): OSM has a one-lane
+flyover widening into a four-lane ramp (way 387041472) and four lanes of Piñero (way 387041460), each about 40 m
+long, both meeting two lanes of Piñero. SUMO lays the two on the same ground, the ramp 2.6 m higher, so
+`overlap.js` does not count them as SUMO's own (it compares SUMO's heights); `overlap-why.js`, which compares only
+places, puts 10 of 11 down to SUMO and 1 to the drawing. With PR-18 no longer jammed, more traffic reaches that
+merge than in Q1. Accepted as is (your call, 10 November); "Cars still drawn inside one another" below has the fix.
+
+The opening on S1 has more steps in a car's speed from one frame to the next than on Q1: 547 → 835 (over a metre,
+2 → 4: two buses at stops, as before). Both were measured with this client, so it is the run's traffic, not the
+drawing: the busiest place in both is 70 m before the PR-18 merge, on the ramp's unchanged stretch (52 → 66), and
+44 more are on acceleration lanes whose merges now flow where they stood jammed; the rest are spread across the city.
 
 ## Pipeline pass
 
@@ -67,7 +116,7 @@ headings 4,203 → 4,280, bodies inside one another 5 → 3; stalls, blinks and 
 
 The apagón is job B2 (`simres/B2`), from Q1's morning: 788 teleports (live A1: 782), 0.41 of counted traffic (0.41),
 r² 0.43 (0.40), at most 30,969 cars on the road at once. At PR-18 at 7:30 the drawing adds 1 overlap to SUMO's own
-75 (live: 21 to 48); the rest is the ramp merge below. (B1, the same job, ran but brought nothing back: its clone URL
+75 (live: 21 to 48); the rest was the ramp merge, fixed in the ramp pass (above). (B1, the same job, ran but brought nothing back: its clone URL
 held the job's token, `set -x` logged it and the first progress push published it, and every push after that was
 refused. `simlab` now clones without a token, scrubs any from what it pushes and keeps the results as an artifact.)
 
@@ -201,13 +250,12 @@ GPU time to the end of the frame, in ms, from `tools/render/views.mjs` at 1280×
 4. **`sharp`** is still in devDependencies and imported by nothing in the repository.
 
 ### Cars still drawn inside one another in jams
-At PR-18 in the 7:30 jam, 52 cars are drawn inside another (53 on another load), and SUMO has the same so. Of the
-first 16 located, 15 are at one merge (x ≈ 5,220, z ≈ 6,420): the PR-18 ramp (way 22221833) joins Avenida Piñero over its last 75 m, and
-netconvert lays the ramp's lane on Piñero's right lane for that stretch (their centre lines 0.1 m apart), so SUMO
-queues cars on both, each blind to the other. The fix is in the network: cut the junction back where two ways meet
-at a slant (`network.mjs`, or netconvert's junction shape at that node), then a new run. The other 45 drawn on the
-first measure were the drawing's (`roadlevel.js` fit pushing Calle Notre Dame's outer lane into the next) and are
-fixed.
+The PR-18 ramp merge is fixed (Ramp pass, above): 50 cars inside one another there at 7:30, now 0. In the same
+view 8 to 10 are left (2 or 3 of them as SUMO places them in height too), at the merge 230 m west where a
+four-lane ramp (way 387041472) and four lanes of Piñero (way 387041460), each about 40 m, meet two lanes of
+Piñero. Its lane counts look wrong in OSM: the ramp is fed by a one-lane flyover. The fix is in the data: lane tags
+for those two ways that add up to what leaves the node (or a merge rule in `network.mjs` for ways that short),
+then the morning and the apagón run again (about 6.5 hours on Actions).
 
 ### Decisions
 1. **`covered=yes` roads** notch the building over them, though the road really runs under it. The largest case is a 245 m cut through the Mall of San Juan's car park (`?ll=18.412099,-66.024036`). The thresholds are judgment calls too: keep at least 35% of a building (50% for low ones), and count a road from 0.5 m in.
