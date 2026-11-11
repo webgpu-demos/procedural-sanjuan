@@ -19,7 +19,7 @@ import { DrawnDecks, mergeDecks } from './world/roadlevel.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
-import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup } from './shared/roadway.js';
+import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup, accelCarriage } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad, Overhead } from './world/drive.js';
@@ -79,6 +79,26 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.info.autoReset = false; // the composer renders several passes; count the whole frame
+// A WebGL context the browser takes back (Safari does, short of GPU memory): from then on nothing is drawn, and the
+// page went on under its last picture, the clock, the car and the HUD all running, with nothing to say so. Where you
+// were is kept and the page loads again there, past the title; a second loss within two minutes waits for a click.
+const LOST = 'procedural-sanjuan:lost', RESUME = 'procedural-sanjuan:resume';
+let contextGone = false;
+renderer.domElement.addEventListener('webglcontextlost', () => {
+  if (contextGone) return;
+  contextGone = true;
+  console.warn('WebGL context lost: reloading where you were');
+  let last = 0;
+  try { savePlace(); last = Number(sessionStorage.getItem(LOST)) || 0; sessionStorage.setItem(LOST, String(Date.now())); sessionStorage.setItem(RESUME, '1'); } catch { /* storage unavailable, or lost before the place exists */ }
+  const box = document.createElement('div'), again = Date.now() - last < 120000;
+  Object.assign(box.style, { position: 'fixed', inset: '0', display: 'grid', placeItems: 'center', zIndex: 100001, background: 'rgba(6,10,18,0.72)', color: '#fff', font: '15px/1.45 system-ui,sans-serif', textAlign: 'center' });
+  box.innerHTML = `<div style="max-width:420px;padding:24px 28px;border-radius:14px;background:rgba(20,26,38,0.92)"><b>La vista se detuvo</b><br>
+    El navegador retiró el contexto WebGL (casi siempre por falta de memoria gráfica).<br><span style="opacity:.7">The browser took the WebGL context back.</span><br>
+    <button style="margin-top:14px;padding:8px 18px;border:0;border-radius:8px;background:#ff6a3d;color:#fff;font:inherit;cursor:pointer">${again ? 'Recargar aquí' : 'Recargando…'}</button></div>`;
+  box.querySelector('button').addEventListener('click', () => location.reload());
+  document.body.append(box);
+  if (!again) setTimeout(() => location.reload(), 1500);
+});
 // (PCF, filtered: three r18x has no PCFSoftShadowMap, and swaps it for this the first time the map is drawn, after
 // the night's materials were compiled for the old one: their shadow samplers then meet a depth texture of the
 // other kind, and from a night set straight to day nothing lit was drawn at all)
@@ -227,7 +247,7 @@ const [roads, rails, lanes] = await Promise.all([
 roads.lanes = lanes;
 // the acceleration lanes where ramps join the expressway (src/shared/roadway.js, on the roads as compiled: the
 // simulation's network has them in the same places, tools/sim/network.mjs): paved in the tiles, driven by the cars
-const accel = accelQuads(accelLanes(roads, lanes?.edges ?? null));
+const accelList = accelLanes(roads, lanes?.edges ?? null), accel = accelQuads(accelList);
 // (the expressway's height without the humps the elevation model's overpass ridges put in it, and the bridges that
 // cross no road or railway flush with their roads: src/shared/profile.js)
 correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
@@ -237,7 +257,10 @@ streamer.pads(deckPads(roads, (x, z) => streamer.ground(x, z))); // (and the gro
 // the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
 const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
-streamer.carriage(carriageSegs(roads)); // (no median's paving across a road it meets: src/shared/carriage.js)
+{ // (no median's paving across a road it meets: src/shared/carriage.js; nor a sidewalk under an acceleration lane)
+  const a = carriageSegs(roads), b = accelCarriage(accelList), segs = new Float32Array(a.length + b.length);
+  segs.set(a); segs.set(b, a.length); streamer.carriage(segs);
+}
 streamer.accel(accel); drawnDecks.ground.accel = accelLookup(accel.pave); // (and the acceleration lanes paved, and stood on)
 streamer.laneDepth = laneDepth(roads); // (the tiles' props clear of the lanes cars drive: src/shared/roadway.js; the piers too)
 const railways = await buildRailways(rails, (x, z) => streamer.ground(x, z), streamer.cover, streamer.laneDepth);
@@ -717,7 +740,7 @@ drawnDecks.lift = lift; // (the cars on it too)
 const PEOPLE = params.get('people') == null ? 1 : Number(params.get('people'));
 function loadPeople() {
   if (!(PEOPLE > 0)) return;
-  People.load({ base: `tiles/${AREA}`, surface: streamer.surface, lift, renderer })
+  People.load({ base: `tiles/${AREA}`, surface: streamer.surface, lift, renderer, off: drawnDecks.ground.accel })
     .then((p) => { if (!p) return; people = p; p.density = PEOPLE; p.enabled = peopleOn; scene.add(p.group); })
     .catch((e) => console.warn('the people stay at home:', e));
 }
@@ -1101,7 +1124,13 @@ function frame(_, manual) {
     const size = manifest.tileSize, wanted = manifest.tiles.filter((t) => Math.hypot((t.x + 0.5) * size - controls.target.x, (t.z + 0.5) * size - controls.target.z) <= Math.min(streamer.radius, 900)).length || 1;
     const got = Math.min(1, streamer.stats.loaded / wanted);
     loader.set(0.2 + 0.8 * got, `city tiles ${streamer.stats.loaded} / ${manifest.tiles.length}`);
-    if (got >= 1) { loading = false; loader.hide(); loadPeople(); xp?.showTitle(Number(sim?.index.stats?.vehicles?.inserted) || sim?.index.tripinfo?.count); }
+    if (got >= 1) {
+      loading = false; loader.hide(); loadPeople(); xp?.showTitle(Number(sim?.index.stats?.vehicles?.inserted) || sim?.index.tripinfo?.count);
+      // (loaded again after a lost WebGL context: straight back to where you were, as the title's free way in does)
+      let resume = false;
+      try { resume = sessionStorage.getItem(RESUME) === '1'; sessionStorage.removeItem(RESUME); } catch { /* storage unavailable */ }
+      if (resume) { const p = savedPlace(), play = !!p && p.mode !== 'explore'; if (xp) xp.free(play); else if (play) setMode(p.mode, p); }
+    }
   }
   props.update(dt);
   props.mats.wire.uniforms.uPx.value = renderer.domElement.height * 0.5 * camera.projectionMatrix.elements[5];

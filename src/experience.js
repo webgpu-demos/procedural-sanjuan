@@ -218,8 +218,11 @@ export class Experience {
       según el Censo (ACS), con los conteos de la FHWA y las calles de OpenStreetMap.<br>Every car you will see is a simulated trip.</div>
       <div class="row"><button class="go">▶ Comenzar · with sound</button><button class="free">Explorar libremente</button></div>`;
     this.start.querySelector('.go').addEventListener('click', () => { this.sound.start(); this.hideTitle(); this.beginIntro(); });
-    this.start.querySelector('.free').addEventListener('click', () => { this.clouds(); this.hideTitle(); this.endIntro(true); this.app.startFree?.(); });
+    this.start.querySelector('.free').addEventListener('click', () => this.free());
   }
+  // the title's free way in: where you were last time, else in a car at the Milla de Oro (play: false, the free camera
+  // where the page's link left it, for a page loaded again after a lost WebGL context while exploring)
+  free(play = true) { this.clouds(); this.hideTitle(); this.endIntro(true); if (play) this.app.startFree?.(); }
   hideTitle() { this.titleUp = false; this.start?.classList.add('gone'); setTimeout(() => this.start?.remove(), 1100); }
 
   // The opening: dark (5:28), the blue hour over the expressway into the city (6:14), a ride with the headlights on

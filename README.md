@@ -272,8 +272,10 @@ npm run sim:all                      # demand, buses, routes, the morning and th
   a metre, and a car that could not stop on one waited across the junction behind it); driveways and car parks
   (OSM's unnamed service ways) are left out, where a signal had given a car park a phase of its own. Signals
   allow right on red; where two expressway carriageways merge into fewer lanes, a zipper; where a ramp of one lane
-  joins it at grade, an acceleration lane, 140 m alongside and a taper (`src/shared/roadway.js` accelLanes: 82 in San
-  Juan, the client paves them where the simulation drives them), and where any other ramp joins it in fewer lanes,
+  joins it at grade, an acceleration lane, 140 m alongside and a taper (`src/shared/roadway.js` accelLanes: 83 in San
+  Juan, the client paves them where the simulation drives them; where OSM draws the ramp converging across the outer
+  lanes, 75 of them, the ramp runs alongside from where it reaches the lane, 3.1 km in all, and the client paves that
+  too), and where any other ramp joins it in fewer lanes,
   a zipper (netconvert's own guessed acceleration lanes, `--ramps`, widened roads past what the tiles pave);
   an expressway is made at most one lane wider than the lanes leaving its end (a toll plaza's six lanes).
   `checknet.py` runs after netconvert and fails the build on a junction link that starts more than a metre behind
@@ -307,10 +309,11 @@ npm run sim:all                      # demand, buses, routes, the morning and th
 - **Validation** (`validate.py`): the cars SUMO sends along each road FHWA counts (HPMS 2024), 7 to 8 a.m.,
   against the count's peak hour (AADT x 0.08), scored with the GEH statistic; the main carriageway in each
   direction is matched to the counted line (which runs down the median of a divided road). The published run
-  (November 2026, job `Q1`: trips from and to the area start and end at the kerb), at seven tenths of the demand,
-  on the network with the acceleration lanes the client paves (and other ramps zipped in), carried 0.45 of the
-  counted traffic (freeways 0.36, arterials 0.57; r² 0.36) and teleported 1,433 of its 228,000 cars (1,215 still on
-  the road at 10:15); with cars arriving at 3 m/s instead of stopping (`Q2`), 0.45 and 1,535 (1,869). The October
+  (November 2026, job `S1`: trips from and to the area start and end at the kerb, ramps alongside before they
+  merge), at seven tenths of the demand, on the network with the acceleration lanes the client paves (and other
+  ramps zipped in), carried 0.45 of the counted traffic (freeways 0.36, arterials 0.57; r² 0.36) and teleported
+  1,246 of its 229,000 cars (1,075 still on the road at 10:15); with the ramps across the outer lanes as OSM draws
+  them (`Q1`), 0.45 and 1,433 (1,215); with cars arriving at 3 m/s instead of stopping (`Q2`), 0.45 and 1,535 (1,869). The October
   run, setting off and arriving at speed: 0.45, 1,570 of 227,000 (1,388); with the ramps zipped and no acceleration lanes, 0.45 and 1,338
   (1,683); with netconvert's guessed acceleration lanes it had carried 0.48 (freeways 0.40; r² 0.40, 1,286
   teleported), its trips an eighth shorter, but those lanes lay past the paving the tiles draw (73 km of lanes in
