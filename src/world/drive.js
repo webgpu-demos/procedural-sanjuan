@@ -259,9 +259,11 @@ export class Driver {
     // steering: the lock closes as the speed rises; the wheel comes back by itself
     const lock = 0.6 / (1 + Math.abs(v) / 11);
     this.steer += (steerIn * lock - this.steer) * (1 - Math.exp(-dt * (steerIn ? 5 : 7)));
-    // (and no tighter than the tyres hold: 8.5 m/s² across, 12 let go with the handbrake. The wheel alone turned it
-    // at 31 m/s² at 20 m/s and 8 g flat out, a U-turn 23 m wide at 158 km/h.)
-    const most = (hand ? 12 : 8.5) / Math.max(Math.abs(v), 3);
+    // (and no tighter than a game's tyres hold: 20 m/s² across, 28 let go with the handbrake. The wheel alone turned
+    // it at 31 m/s² at 20 m/s and 8 g flat out, a U-turn 23 m wide at 158 km/h. A real car's 8.5 held it to half its
+    // turn at 50 km/h and a fifth at 100, where it is in seconds, and it barely turned: a right angle took 2.6 s at
+    // 50 km/h, 5 s at 100; now 1.4 s, as before that limit, and 2.3 s.)
+    const most = (hand ? 28 : 20) / Math.max(Math.abs(v), 3);
     const yaw = THREE.MathUtils.clamp((v / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.7 : 1), -most, most);
     this.heading += yaw * dt;
     // the course follows the heading with grip (the handbrake lets go of it: a slide)
