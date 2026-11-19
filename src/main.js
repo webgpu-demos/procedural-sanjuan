@@ -970,8 +970,13 @@ function chaseCamera(dt) {
   }
   const cam = player ? cameraId() : 'chase', fast = player && mode !== 'walk';
   // ease the heading, so the camera swings round behind instead of snapping (backing up, it stays as it was)
-  let dh = v.heading - chase.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-  if (!v.reversing) chase.heading += dh * (chase.fresh ? 1 : 1 - Math.exp(-dt * (player ? 3.2 : 2.2)));
+  // (behind where the car is going as much as where it points: in a slide the camera stays with the road and the car
+  // is seen turned across it, not held square from behind while the street swings; and it comes round sooner the
+  // faster the car goes, or at speed the bend was past before the camera had turned into it)
+  let aim = v.heading;
+  if (v.course != null && v.speed > 2) aim += Math.atan2(Math.sin(v.course - v.heading), Math.cos(v.course - v.heading)) * 0.5;
+  let dh = aim - chase.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+  if (!v.reversing) chase.heading += dh * (chase.fresh ? 1 : 1 - Math.exp(-dt * (player ? 3.2 + Math.min(2.8, (v.speed ?? 0) * 0.08) : 2.2)));
   // (let go, the camera drifts back behind; the cinematic one circles on its own)
   if (cam === 'orbit') chase.yaw += dt * 0.16; else if (!chase.drag) chase.yaw *= Math.exp(-dt * (cam === 'pov' ? 2 : 0.35));
   // first person: at the eyes, looking the way it faces (a drag looks round)

@@ -19,6 +19,7 @@ import { PASS } from '../shared/tileformat.js';
 
 const CELL = 1.5;              // wall grid (m)
 const WHEELBASE = 2.8, TOP = 44, BOOST = 58, REVERSE = 9;
+const TYRES = 25; // what the tyres hold across (m/s²): twice a road car's, as a game's do
 // the ways off its course a car that has met something tries, to slide along it (radians, the nearest first)
 const SLIDE = [0.07, 0.14, 0.21, 0.31, 0.44, 0.58, 0.73, 0.9, 1.08, 1.26];
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -229,6 +230,7 @@ export class Driver {
   start(x, z, heading, y = null) {
     this.x = x; this.z = z; this.heading = heading; this.course = heading;
     this.speed = 0; this.steer = 0; this.y = y ?? streetAt(this.surface, x, z, this.surface(x, z, -2)) + this.lift(x, z); this.pitch = 0; this.roll = 0;
+    this.gas = 0; this.brk = 0; this.gripNow = 9; this.lean = 0; this.dive = 0; // (the pedals as the foot has them, the tyres' hold, the body on its springs)
     this.bump = 0; this.on = true; this.mesh.visible = this.beams.visible = true; this.parked = null;
     this.ghost = 2; // (seconds: set down in a queue of traffic, it drives out of it before anything stops it)
   }
@@ -250,34 +252,49 @@ export class Driver {
     const steerIn = (k('KeyA', 'ArrowLeft') ? 1 : 0) - (k('KeyD', 'ArrowRight') ? 1 : 0), boost = k('ShiftLeft', 'ShiftRight');
     const top = boost ? BOOST : TOP;
     let v = this.speed;
+    const v0 = v;
+    // The pedals go down and come up as a foot does, not as a key does: the engine's pull and the brakes' bite came
+    // on whole in one frame, and the car lurched at every touch.
+    this.gas += (gas - this.gas) * (1 - Math.exp(-dt * (gas ? 6 : 10)));
+    this.brk += (brake - this.brk) * (1 - Math.exp(-dt * (brake ? 12 : 14)));
     // engine, brakes, reverse; rolling resistance and air
-    if (gas) v += (v < 0 ? 14 : 5.6 * (1 - (v / top) ** 2) * (boost ? 1.6 : 1)) * dt; // (0-100 km/h in about 6 s)
-    if (brake) v -= (v > 0.5 ? 9.5 : 5 * (1 - Math.min(1, -v / REVERSE))) * dt; // (as hard as tyres hold on dry asphalt: it was 1.6 g)
+    v += this.gas * (v < 0 ? 14 : 5.6 * (1 - (v / top) ** 2) * (boost ? 1.6 : 1)) * dt; // (0-100 km/h in about 6 s)
+    if (v > 0.5) v -= this.brk * 9.5 * (0.3 + 0.7 * smooth(0.3, 2.5, v)) * dt; // (as hard as tyres hold on dry asphalt, eased over the last metre: it stopped with a jolt)
+    else if (brake) v -= this.brk * 5 * (1 - Math.min(1, -v / REVERSE)) * dt; // (stopped, the same pedal backs it up)
     if (!gas && !brake) v -= Math.sign(v) * Math.min(Math.abs(v), (0.5 + 0.06 * Math.abs(v)) * dt);
     if (hand) v -= Math.sign(v) * Math.min(Math.abs(v), 7 * dt);
     // (held to the push's top speed whether Shift is down or not: let go at 58 m/s, the car was at 46 the next frame.
     // Over its top speed the engine's share above is negative: it comes down on its own.)
     v = THREE.MathUtils.clamp(v, -REVERSE, BOOST + 2);
-    // steering: the lock closes as the speed rises; the wheel comes back by itself
-    // (the lock closed too soon and the wheel came over too slowly: it still felt slow to turn. It closes half as
-    // fast with speed now, and the wheel answers in a tenth of a second)
+    // Steering: the lock closes as the speed rises; the wheel comes over in a tenth of a second and back by itself.
     const lock = 0.62 / (1 + Math.abs(v) / 20);
-    this.steer += (steerIn * lock - this.steer) * (1 - Math.exp(-dt * (steerIn ? 10 : 9)));
-    // (and no tighter than a game's tyres hold: 20 m/s² across, 28 let go with the handbrake. The wheel alone turned
-    // it at 31 m/s² at 20 m/s and 8 g flat out, a U-turn 23 m wide at 158 km/h. A real car's 8.5 held it to half its
-    // turn at 50 km/h and a fifth at 100, where it is in seconds, and it barely turned: a right angle took 2.6 s at
-    // 50 km/h, 5 s at 100; now 1.4 s, as before that limit, and 2.3 s.)
-    // Since: 30 across (40 with the handbrake), a right angle in 0.9 s at 50 km/h and 1.2 s at 100 (1.3 and 1.7); and at a crawl
-    // the car turns as if it rolled a little faster than it does (up to 2.5 m/s more, gone by 12 m/s), or pulling
-    // out of a parking space or round a corner at walking pace took four seconds a right angle (1.7 now at 7 km/h).
-    const av = Math.abs(v), most = (hand ? 40 : 30) / Math.max(av, 3);
+    this.steer += (steerIn * lock - this.steer) * (1 - Math.exp(-dt * (steerIn ? 8 : 9)));
+    // The car points where the wheel turns it and goes where its tyres can take it, and the two are not the same
+    // thing. (They were: the nose was held to what the tyres could do, 30 m/s² across, and the course followed it
+    // at once, so the car cornered on rails at 3 g and then simply would not turn any more.)
+    //   - the nose comes round with the wheel, up to half again faster than the tyres can bend the car's path
+    //     (more with the handbrake), and at a crawl as if it rolled a little faster than it does;
+    //   - the path bends towards the nose no faster than the tyres hold: TYRES across, half with the rear wheels
+    //     locked; the hold comes back over half a second when the handbrake is let go, not in one frame;
+    //   - the angle between the two, the slide, pulls the nose back into line (the tyres' own righting), so held
+    //     hard into a bend the car settles a few degrees sideways and no further, and let go it straightens by
+    //     itself; and what slides sideways loses speed.
+    const av = Math.abs(v);
+    const hold = hand ? 2 : 9;
+    this.gripNow += (hold - this.gripNow) * (1 - Math.exp(-dt * (hold < this.gripNow ? 10 : 2.5)));
+    const tyres = TYRES * (0.5 + 0.5 * (this.gripNow - 2) / 7);
     const vy = Math.sign(v) * (av + 2.5 * smooth(0.3, 2, av) * (1 - smooth(5, 12, av)));
-    const yaw = THREE.MathUtils.clamp((vy / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.7 : 1), -most, most);
+    const most = (hand ? 2.6 : 1.5) * TYRES / Math.max(av, 3);
+    let slip = this.heading - this.course; slip = Math.atan2(Math.sin(slip), Math.cos(slip));
+    const yaw = THREE.MathUtils.clamp((vy / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.5 : 1), -most, most) - slip * (hand ? 1.8 : 3.2) * smooth(2, 8, av);
     this.heading += yaw * dt;
-    // the course follows the heading with grip (the handbrake lets go of it: a slide)
-    const grip = hand ? 1.6 : 9;
     let dc = this.heading - this.course; dc = Math.atan2(Math.sin(dc), Math.cos(dc));
-    this.course += dc * (1 - Math.exp(-dt * grip));
+    // (at a walk the path is the nose's: nothing slides at 10 km/h)
+    const bend = THREE.MathUtils.clamp(dc * (1 - Math.exp(-dt * this.gripNow * (1 + 2 * (1 - smooth(3, 12, av))))), -(tyres / Math.max(av, 1)) * dt, (tyres / Math.max(av, 1)) * dt);
+    this.course += bend;
+    v -= Math.sign(v) * Math.min(av, av * (1 - Math.cos(dc)) * 3 * dt);
+    // (what the body feels, for its springs below: across, and along)
+    const idt = dt > 1e-5 ? 1 / dt : 0, across = bend * idt * v, along = (v - v0) * idt;
     const nx = this.x + Math.sin(this.course) * v * dt, nz = this.z + Math.cos(this.course) * v * dt;
     // walls: the nose (or the tail, backing up) and its corners
     const half = this.spec.L * 0.5, side = this.spec.spec.W * 0.5, s = Math.sin(this.heading), c = Math.cos(this.heading), dir = v >= 0 ? 1 : -1;
@@ -358,7 +375,11 @@ export class Driver {
       this.roll += (Math.atan(THREE.MathUtils.clamp(r, -0.4, 0.4) / 1.8) - this.roll) * (1 - Math.exp(-dt * 8));
     }
     // the body leans out of a turn and dips under the brakes
-    const lean = THREE.MathUtils.clamp(yaw * v * 0.012, -0.06, 0.06), dive = brake && v > 1 ? 0.025 : gas ? -0.012 : 0;
+    // (on its springs: it rolls with what pushes it sideways and pitches with the brakes and the engine, and takes a
+    // moment to do it. It was set from the keys: a step of the nose at every touch of the brake.)
+    this.lean += (THREE.MathUtils.clamp(across * 0.0035, -0.075, 0.075) - this.lean) * (1 - Math.exp(-dt * 6));
+    this.dive += (THREE.MathUtils.clamp(-along * 0.004, -0.022, 0.04) - this.dive) * (1 - Math.exp(-dt * 7));
+    const lean = this.lean, dive = this.dive;
     this.bump *= Math.exp(-dt * 6);
     const m = this.m;
     m.makeRotationY(this.heading).multiply(new THREE.Matrix4().makeRotationX(-this.pitch + dive)).multiply(new THREE.Matrix4().makeRotationZ(this.roll + lean));
@@ -369,9 +390,9 @@ export class Driver {
     this.turned += (v * dt) / this.wheelR;
     this.wheel.array[0] = this.turned; this.wheel.array[1] = wheelBlur(Math.abs(v), this.wheelR); this.wheel.needsUpdate = true;
     this.mesh.material.userData.reverse.value = v < -0.3 ? 1 : 0;
-    this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: Math.abs(v), kmh: Math.abs(v) * 3.6, bump: this.bump, reversing: v < -0.3,
+    this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, course: this.course, speed: Math.abs(v), kmh: Math.abs(v) * 3.6, bump: this.bump, reversing: v < -0.3,
       // (for the ear, sound.js: the throttle; how far the tyres slide, the angle between where it points and where it goes by its speed; a knock)
-      throttle: gas, slip: Math.abs(Math.atan2(Math.sin(this.heading - this.course), Math.cos(this.heading - this.course))) * Math.abs(v), hit: this.hit };
+      throttle: this.gas, slip: Math.abs(Math.atan2(Math.sin(this.heading - this.course), Math.cos(this.heading - this.course))) * Math.abs(v), hit: this.hit };
   }
 }
 
