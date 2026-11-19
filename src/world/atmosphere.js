@@ -317,9 +317,16 @@ export class Atmosphere {
     this.cloudsOn = false; // volumetric clouds are heavy: off until asked for
   }
 
-  // edges smoothed, or not (the governor: main.js)
+  // edges smoothed, or not (the governor: main.js). The composer draws on the canvas only from the pass added last
+  // (smoothPass), and skips a pass that is off without handing that on: with the smoothing off, finalPass is the last
+  // pass that runs and draws on the canvas itself. (It did not, from 9 to 18 November: at the governor's lean steps,
+  // 4 to 9, and from the start with ?quality=low, the canvas kept its last picture under a running HUD. Safari,
+  // slower, reached them within a minute or two: the aerial view while driving.)
   get aa() { return this.smoothPass.enabled; }
-  set aa(v) { this.finalPass.enabled = !v; this.gradedPass.enabled = this.smoothPass.enabled = !!v; }
+  set aa(v) {
+    this.finalPass.enabled = this.finalPass.renderToScreen = !v;
+    this.gradedPass.enabled = this.smoothPass.enabled = this.smoothPass.renderToScreen = !!v;
+  }
   get cloudsOn() { return this.want.clouds; }
   set cloudsOn(v) { this.want.clouds = v; this.limit(); }
   get reflect() { return this.want.reflect; }

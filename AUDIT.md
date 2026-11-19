@@ -11,6 +11,18 @@ sha1 is in each run's index), and `tools/deploy.sh` refuses a run made on other 
 uncommitted changes. The builds that were live before are kept as the local branches `gh-pages-before-pipeline`
 and `gh-pages-before-ramp`.
 
+## After the ramp pass: the picture that stopped (18 November)
+In Safari the live page stopped drawing soon after the title: the aerial view stayed on screen through the intro's
+ride and while driving, with the clock, the HUD and the frame rate going on. It was not a lost WebGL context, as
+the ramp pass took it to be (the context was intact, no GL errors). Since the audit pass split the last pass in two
+for the edge smoothing (6af993a5), the composer drew on the canvas only from `smoothPass`, the pass it added last,
+and the frame-rate governor's lean steps (4 to 9) turn the smoothing off: `finalPass` then drew the finished
+picture into a buffer nobody showed. Safari, slower here, was at step 4 within seconds of the title; Chrome on a fast
+machine mostly stays above it; `?quality=low` (step 5 from the start) showed it in any browser. Live from the
+deploy of 9 November (4d0f6aba) on. `atmosphere.js` `aa` now gives the canvas to whichever of the two runs.
+Checked in Safari 26.6 (safaridriver) and Chromium: one pass drawing on the canvas at every step from 0 to 9, the
+intro's ride and a drive drawn at step 9. The lost-context reload below stays, for a context that is lost.
+
 ## Ramp pass
 
 ### What it changed
@@ -28,7 +40,8 @@ each blind to the other: at PR-18 into Avenida Piñero (way 22221833), 50 cars i
 - `tools/tests/ramps.test.mjs`: the ramp leaves its own line with no step, and keeps a lane clear of the main lanes.
 - A lost WebGL context (Safari takes it back short of GPU memory, or on waking from sleep) left the page running
   under its last picture, clock and HUD going, with nothing to say why: it now says so and loads the page again
-  where you were, past the title (`main.js`, `experience.js` `free`).
+  where you were, past the title (`main.js`, `experience.js` `free`). (The stuck picture seen in Safari then was
+  something else: see "After the ramp pass" above.)
 
 ### Gates
 | Measure | Before (Q1, B2) | Now (S1, T1) | Must be |
