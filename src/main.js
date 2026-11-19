@@ -78,8 +78,11 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // (the frame-rate gove
 // which graphics card the browser gave the page (a Windows browser may hand a laptop's or a workstation's page to the
 // integrated one, or draw in software over a remote desktop: the city is then slow whatever the machine): shown in
 // the readout (G) and the ?perf box, so a screenshot of a slow page says what drew it
-const GPU = (() => { try { const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); return String(gl.getParameter(x ? x.UNMASKED_RENDERER_WEBGL : gl.RENDERER)).replace(/^ANGLE \((.*)\)$/, '$1'); } catch { return 'unknown'; } })();
+// (?gpu=<name>: the page behaves as if that card had drawn it, to see the lean start and the notice on any machine)
+const GPU = params.get('gpu') ?? (() => { try { const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); return String(gl.getParameter(x ? x.UNMASKED_RENDERER_WEBGL : gl.RENDERER)).replace(/^ANGLE \((.*)\)$/, '$1'); } catch { return 'unknown'; } })();
 const SOFTWARE = /swiftshader|basic render|llvmpipe|software/i.test(GPU);
+// (the graphics built into the processor, a tenth of a laptop's own card: the city starts lean on it, and says so)
+const INTEGRATED = SOFTWARE || /Intel\(R\) (U?HD|Iris|Arc\(TM\) Graphics|Graphics)|Radeon\(TM\) (Vega|\d+M? )?Graphics|AMD Radeon Graphics/i.test(GPU);
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
@@ -383,7 +386,8 @@ controls.update();
 // When the frames come slower than 45 a second, the costliest things give way first, a step at a time: pixel
 // density, the clouds' detail, ambient occlusion, the window reflections and depth of field, the clouds, the
 // shadows' sharpness; when there is room again (57 or more for a while) they come back the same way, and a step
-// back up that does not hold is tried again only after longer. ?quality=high keeps everything, low starts lean.
+// back up that does not hold is tried again only after longer. ?quality=high keeps everything, low starts lean,
+// lean starts near the bottom (as it does by itself on a processor's built-in graphics) and earns its way up.
 const governor = (() => {
   const top = Math.min(devicePixelRatio, 1.5), lean = { ao: false, reflect: false, dof: false, aa: false }; // (2x costs a quarter more for little)
   // (detail: how far off the small things are drawn, and the full trees, as a share of the full distance; reach: how
@@ -396,15 +400,18 @@ const governor = (() => {
     { ratio: Math.min(top, 1.25), clouds: 'low', ...lean, detail: 0.8, reach: 1.15 },
     { ratio: 1, clouds: 'off', ...lean, detail: 0.6 },
     { ratio: 1, clouds: 'off', ...lean, shadow: 2048, detail: 0.5 },
-    { ratio: 0.8, clouds: 'off', ...lean, shadow: 1024, detail: 0.4 },
+    { ratio: 0.8, clouds: 'off', ...lean, shadow: 1024, detail: 0.4, reach: 0.85 },
     // (and for a GPU that is slower still, or slowed: on an M3 hot or busy the view over PR-22 held at 30 a second at
     // the step above with its main thread at a third of the frame, and only fewer pixels and triangles helped)
-    { ratio: 0.65, clouds: 'off', ...lean, shadow: 1024, detail: 0.33 },
-    { ratio: 0.5, clouds: 'off', ...lean, shadow: 1024, detail: 0.25 },
+    // (and nearer, without the sun's shadows: measured at the last step as it was, the frame still drew 1.64 of
+    // the top step's 2.06 million triangles, and a processor's built-in graphics stayed at 15 a second on a quarter
+    // of the pixels. The city in full reaches less far, plain blocks beyond; no second pass over it for the shadows.)
+    { ratio: 0.65, clouds: 'off', ...lean, shadow: 1024, detail: 0.33, reach: 0.7, shadows: false },
+    { ratio: 0.5, clouds: 'off', ...lean, shadow: 1024, detail: 0.25, reach: 0.55, shadows: false },
   ];
   const q = params.get('quality');
   // (it starts a little lean and earns the rest: a slow first minute is worse than a plain one)
-  const g = { auto: q !== 'high', level: q === 'low' ? 5 : q === 'high' ? 0 : 2, times: [], settle: 2, slow: 0, fast: 0, upWait: 5, raisedAt: -1e9, ao: true, aoWanted: true };
+  const g = { auto: q !== 'high', level: q === 'lean' ? 7 : q === 'low' ? 5 : q === 'high' ? 0 : INTEGRATED ? 6 : 2, times: [], settle: 2, slow: 0, fast: 0, upWait: 5, raisedAt: -1e9, ao: true, aoWanted: true };
   g.apply = () => {
     const L = LEVELS[g.level];
     g.detail = L.detail ?? 1; streamer.detail = g.detail;
@@ -412,6 +419,8 @@ const governor = (() => {
     if (renderer.getPixelRatio() !== L.ratio) { renderer.setPixelRatio(L.ratio); renderer.setSize(innerWidth, innerHeight); atmosphere.setSize(innerWidth, innerHeight); }
     atmosphere.limit({ clouds: L.clouds ?? 'ultra', reflect: L.reflect !== false, dof: L.dof !== false, aa: L.aa !== false });
     g.ao = L.ao !== false; ao.enabled = g.ao && g.aoWanted;
+    g.shadows = L.shadows !== false;
+    g.farCull = (L.reach ?? 1) < 1 ? baseRadius * L.reach + 600 : Infinity; // (cullFar, below)
     const size = L.shadow ?? 4096;
     if (env.sun.shadow.mapSize.x !== size) { env.sun.shadow.mapSize.set(size, size); env.sun.shadow.map?.dispose(); env.sun.shadow.map = null; }
   };
@@ -447,6 +456,44 @@ const governor = (() => {
   };
   g.apply();
   return g;
+})();
+
+// A browser on Windows may draw the page on the processor's built-in graphics though the machine has a card of its
+// own (it does not heed powerPreference there), or in software: the city is then slow and soft and nothing says why.
+// Said once the frames have shown it (a median over 28 ms after the first quarter minute; at once in software),
+// with where Windows keeps the setting; dismissed for good with its button.
+const gpuNotice = (() => {
+  const KEY = 'sj-gpu-notice';
+  let seen = false; try { seen = localStorage.getItem(KEY) === GPU; } catch { /* (private window) */ }
+  if (!INTEGRATED || seen || params.has('nonotice')) return { update() {} };
+  let t = 0, shown = false; const gaps = [];
+  const show = () => {
+    shown = true;
+    const el = document.createElement('div');
+    Object.assign(el.style, { position: 'fixed', left: '50%', top: '14px', transform: 'translateX(-50%)', zIndex: 99999, maxWidth: 'min(640px, calc(100vw - 32px))',
+      background: 'rgba(12,18,30,0.94)', color: '#f4efe6', font: '13px/1.45 system-ui, sans-serif', padding: '12px 40px 12px 14px', borderRadius: '10px',
+      border: '1px solid rgba(255,190,90,0.55)', boxShadow: '0 6px 24px rgba(0,0,0,0.45)' });
+    const name = GPU.split(',')[1]?.trim().replace(/ \(0x[0-9A-Fa-f]+\).*/, '') ?? GPU;
+    el.innerHTML = SOFTWARE
+      ? `<b>El navegador está dibujando sin tarjeta gráfica</b> (${name}). Active la aceleración por hardware en la configuración del navegador; por escritorio remoto no la hay.
+         <div style="opacity:.75;margin-top:4px">The browser is drawing in software. Turn on hardware acceleration in the browser's settings; a remote desktop has none.</div>`
+      : `<b>El navegador usa la gráfica integrada</b> (${name}) y la ciudad va lenta. Si el equipo tiene una tarjeta dedicada (NVIDIA / AMD):
+         Configuración de Windows → Sistema → Pantalla → Gráficos → añada este navegador → <b>Alto rendimiento</b>, y reábralo. Mientras tanto se dibuja en modo ligero.
+         <div style="opacity:.75;margin-top:4px">The browser is on the integrated graphics, so the city runs slowly. If the machine has its own card: Windows Settings → System → Display → Graphics →
+         add this browser → High performance, then reopen it. Until then the city is drawn in a lighter mode.</div>`;
+    const x = document.createElement('button'); x.textContent = '✕'; x.title = 'cerrar · close';
+    Object.assign(x.style, { position: 'absolute', right: '8px', top: '8px', background: 'none', border: 0, color: 'inherit', font: 'inherit', cursor: 'pointer', padding: '4px 6px' });
+    x.onclick = () => { el.remove(); try { localStorage.setItem(KEY, GPU); } catch { /* */ } };
+    el.append(x); document.body.append(el);
+  };
+  if (SOFTWARE) show();
+  return { update(dt, busy) {
+    if (shown || busy || document.hidden || !(dt > 0)) return;
+    if ((t += dt) < 15) return;
+    gaps.push(dt); if (gaps.length < 120) return;
+    gaps.sort((a, b) => a - b);
+    if (gaps[60] > 0.028) show(); else shown = true; // (it keeps up: nothing to say)
+  } };
 })();
 
 // ---------------------------------------------------------------- control panel
@@ -1067,6 +1114,32 @@ function cullSmall() {
     for (const o of g.userData.small) o.visible = d / governor.detail < FAR_SMALL;
   }
 }
+// The city's elevated roads, viaducts and structures are whole-city meshes cut into pieces (world/chunks.js), drawn
+// wherever they are in view: from the air, half a million triangles at every step of the governor. At its last steps
+// (a reach under 1) the pieces beyond where the streets themselves are drawn are left out: out there the city is
+// plain blocks with no streets under them, and a deck alone over them is not missed.
+const farPieces = { list: [], scanned: -1e9, n: 0 };
+function cullFar(focus) {
+  const limit = governor.farCull;
+  if (!(limit < Infinity) && !farPieces.hiding) return;
+  if (++farPieces.n - farPieces.scanned > 240) { // (they are built as the page loads: looked for again now and then)
+    farPieces.scanned = farPieces.n; farPieces.list.length = 0;
+    for (const root of scene.children) {
+      if (!/^(flyovers|railways|structures|bridge decks|bridge deck paint)$/.test(root.name)) continue;
+      root.traverse((o) => {
+        if (!o.isMesh || o.isInstancedMesh || o.parent?.name === 'trains' || !o.geometry?.attributes.position) return;
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        if (o.geometry.boundingSphere.radius < 1500) farPieces.list.push(o); // (a piece, not a whole-city mesh)
+      });
+    }
+  }
+  farPieces.hiding = limit < Infinity;
+  for (const o of farPieces.list) {
+    const b = o.geometry.boundingSphere, far = Math.hypot(b.center.x - focus.x, b.center.z - focus.z) - b.radius > limit;
+    if (far && o.visible) { o.visible = false; o.userData.farHidden = true; }
+    else if (!far && o.userData.farHidden) { o.visible = true; o.userData.farHidden = false; }
+  }
+}
 // ?perf: a graph of the last four seconds of frames (the time from one to the next, with the 60 and 30 fps lines) and
 // what the main thread spent on each part of one (smoothed), for when the picture stutters
 const perf = params.has('perf') ? (() => {
@@ -1093,6 +1166,52 @@ const perf = params.has('perf') ? (() => {
     },
   };
 })() : null;
+
+// ?bench: what each part of the picture costs on the card this page is drawn with. Once the city is in, the frame
+// is drawn with one thing at a time taken away (a kind of geometry hidden, a step of the governor, fewer pixels) and
+// timed to the end of the card's work (gl.finish), 24 frames each; the table stays on the page to be copied. For a
+// machine that is slow and not at hand: its owner opens the link and sends back what it says.
+async function bench() {
+  const gl = renderer.getContext(), box = document.createElement('pre'), sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  Object.assign(box.style, { position: 'fixed', left: '8px', top: '8px', zIndex: 100001, background: 'rgba(0,0,0,0.88)', color: '#fff', font: '12px/1.4 ui-monospace,monospace',
+    padding: '10px 12px', borderRadius: '6px', margin: 0, userSelect: 'text', maxHeight: '92vh', overflow: 'auto' });
+  document.body.append(box);
+  const lines = [`bench · ${GPU.slice(0, 90)}`, `window ${innerWidth}×${innerHeight} · dpr ${devicePixelRatio}`, ''];
+  const say = (l) => { if (l != null) lines.push(l); box.textContent = lines.join('\n'); };
+  say('loading the city…');
+  governor.auto = false; benching = true;
+  const settle = async (n = 30) => { for (let k = 0; k < 900 && (streamer.pending || k < n); k++) { frame(0, 1 / 30); await sleep(30); } };
+  const time = async () => {
+    for (let i = 0; i < 6; i++) frame(0, 1 / 60);
+    gl.finish(); const ms = [];
+    for (let i = 0; i < 24; i++) { const t = performance.now(); renderer.info.reset(); frame(0, 1 / 60); gl.finish(); ms.push(performance.now() - t); if (i % 8 === 7) await sleep(0); }
+    ms.sort((a, b) => a - b);
+    return { ms: ms[12], worst: ms[22], tris: renderer.info.render.triangles, calls: renderer.info.render.calls };
+  };
+  const row = (name, r, base) => say(`${name.padEnd(26)} ${r.ms.toFixed(1).padStart(6)} ms  worst ${r.worst.toFixed(0).padStart(4)}  ${(r.tris / 1e6).toFixed(2)}M tris ${String(r.calls).padStart(4)} draws${base ? `  ${(r.ms - base.ms >= 0 ? '+' : '') + (r.ms - base.ms).toFixed(1)}` : ''}`);
+  governor.level = 0; governor.apply(); await settle(60);
+  lines.pop();
+  const full = await time(); row('full quality (step 0)', full);
+  // a kind of geometry hidden
+  const kinds = { 'tiles (streets, buildings)': /^tile /, 'distant blocks': /^blocks /, 'flyovers and decks': /^(flyovers|bridge deck)/, railways: /^railways$/, structures: /^structures$/,
+    surroundings: /^surroundings$/, people: /^people/, 'simulated traffic': /^simulated traffic$/, 'deck lights': /^deck lights$/ };
+  for (const [name, re] of Object.entries(kinds)) {
+    const os = scene.children.filter((o) => re.test(o.name) && o.visible); if (!os.length) continue;
+    os.forEach((o) => { o.visible = false; }); const r = await time(); os.forEach((o) => { o.visible = true; });
+    row(`without ${name}`.slice(0, 26), r, full);
+  }
+  { const os = scene.children.filter((o) => o.visible && (o.isMesh || o.isGroup || o.isPoints)); os.forEach((o) => { o.visible = false; }); const r = await time(); os.forEach((o) => { o.visible = true; }); row('nothing but the sky', r, full); }
+  // the sun's shadows; fewer pixels; the governor's steps
+  { const was = governor.shadows; governor.shadows = false; row('without shadows', await time(), full); governor.shadows = was; }
+  for (const ratio of [1, 0.5]) if (ratio < renderer.getPixelRatio()) {
+    const was = renderer.getPixelRatio(); renderer.setPixelRatio(ratio); renderer.setSize(innerWidth, innerHeight); atmosphere.setSize(innerWidth, innerHeight);
+    row(`pixel ratio ${ratio}`, await time(), full);
+    renderer.setPixelRatio(was); renderer.setSize(innerWidth, innerHeight); atmosphere.setSize(innerWidth, innerHeight);
+  }
+  for (const L of [1, 3, 4, 5, 7, 9]) { governor.level = L; governor.apply(); await settle(20); row(`governor step ${L}`, await time(), full); }
+  say(''); say('done: copy this box or send a screenshot of it');
+}
+let benching = false;
 
 function frame(_, manual) {
   if (manual == null) timer.update(_);
@@ -1197,7 +1316,7 @@ function frame(_, manual) {
   // where they fell, the map a frame or two behind the view.) (The light keeps casting: switching that recompiles
   // every material.)
   env.sun.castShadow = guiState.shadowsWanted;
-  env.sun.shadow.intensity = Math.min(1, env.daylight / 0.15);
+  env.sun.shadow.intensity = governor.shadows ? Math.min(1, env.daylight / 0.15) : 0; // (0: the map is not drawn again, below)
   {
     const p = env.sun.target.position, ext = env.shadowExtent, at = shadowAt;
     const moved = !at || at.ext !== ext || Math.hypot(p.x - at.x, p.z - at.z) > ext / 6;
@@ -1214,16 +1333,17 @@ function frame(_, manual) {
   perf?.lap('rest');
   lampLight.update(scene, controls.target, camera.position, env.night);
   perf?.lap('lamps');
+  cullFar(controls.target);
   atmosphere.bloom.intensity = guiState.bloom ? env.bloom * 3 : 0;
   const shadowed = renderer.shadowMap.needsUpdate && env.sun.castShadow;
   atmosphere.render(dt);
   perf?.draw(shadowed);
-  if (manual == null) governor.update(dt, loading, xp?.directing && !xp.fading);
+  if (manual == null) { governor.update(dt, loading, xp?.directing && !xp.fading); gpuNotice.update(dt, loading); }
   if (!loading) updateViewLink(performance.now());
 
   frames++; fpsTime += dt;
   if (fpsTime >= 0.5) { fps = frames / fpsTime; frames = 0; fpsTime = 0; }
-  if (manual == null) requestAnimationFrame(frame);
+  if (manual == null && !benching) requestAnimationFrame(frame);
   if (readout.style.display === 'none') return; // (the readout, G: written only while it shows)
   const s = streamer.stats, info = renderer.info.render;
   const [lon, lat] = proj.unproject(controls.target.x, controls.target.z);
@@ -1241,8 +1361,9 @@ function frame(_, manual) {
     `\ndrag pan · right-drag rotate · wheel zoom\nWASD move (shift fast) · N sound · G this panel · click building`;
 }
 requestAnimationFrame(frame);
+if (params.has('bench')) setTimeout(bench, 3000);
 
-window.__app = { THREE, scene, camera, controls, streamer, accel, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, get people() { return people; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
+window.__app = { THREE, scene, gpuNotice, GPU, camera, controls, streamer, accel, env, renderer, materials, ao, atmosphere, traffic, shared, viewLink, get sim() { return sim; }, get people() { return people; }, clockTime, ride, stopRiding, chase, driver, players, setMode, get mode() { return mode; }, cycleCamera, teleport, hud, drive, stopDriving, keys, xp, governor, frame: (dt) => frame(0, dt),
   proj, manifest,
   // synthetic drone images with labels (src/synth/synth.js; tools/synth/export.mjs), made on first use
   get synth() { return (synthApi ??= import('./synth/synth.js').then(({ Synth }) => new Synth(window.__app))); } };
