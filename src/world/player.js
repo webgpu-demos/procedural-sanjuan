@@ -411,12 +411,23 @@ export class Cyclist {
     r.turn.position.add(m.worldToLocal(want).sub(m.worldToLocal(at)));
     r.turn.updateMatrixWorld(true);
     const fwd = V().set(0, 0, 1).transformDirection(m.matrixWorld), up = V().set(0, 1, 0).transformDirection(m.matrixWorld), left = V().set(1, 0, 0).transformDirection(m.matrixWorld);
-    turnWorld(B('Bip01_Spine'), _q.setFromAxisAngle(left, 0.18));
+    // (over the bars far enough for the hands to get there: upright but for a nod of the spine, his shoulders were
+    // 74 cm from the grips and his arms are 56, and the hands hung in the air a hand's length short. The lean is
+    // shared along the back, and the head comes back up to look where he goes.)
+    for (const [name, a] of [['Bip01_Spine', 0.34], ['Bip01_Spine1', 0.22], ['Bip01_Spine2', 0.16], ['Bip01_Neck', -0.2], ['Bip01_Head', -0.3]]) {
+      const bone = B(name); if (bone) { turnWorld(bone, _q.setFromAxisAngle(left, a)); bone.updateMatrixWorld(true); }
+    }
     for (const [s, side, pedal] of [['L', 1, u.pedals[0]], ['R', -1, u.pedals[1]]]) {
       const foot = pedal.getWorldPosition(V()).addScaledVector(up, 0.07).addScaledVector(fwd, -0.04), hip = B(`Bip01_${s}_Thigh`).getWorldPosition(V());
       reach(B(`Bip01_${s}_Thigh`), B(`Bip01_${s}_Calf`), B(`Bip01_${s}_Foot`), foot, hip.addScaledVector(fwd, 1).addScaledVector(up, 0.4));
-      const grip = m.localToWorld(V().set(side * 0.24, 1.0, 0.3)), shoulder = B(`Bip01_${s}_UpperArm`).getWorldPosition(V());
+      // (the wrist over the bar and a little behind it: the palm is on the grip, the fingers go round it)
+      const grip = m.localToWorld(V().set(side * 0.24, 1.035, 0.25)), shoulder = B(`Bip01_${s}_UpperArm`).getWorldPosition(V());
       reach(B(`Bip01_${s}_UpperArm`), B(`Bip01_${s}_Forearm`), B(`Bip01_${s}_Hand`), grip, shoulder.addScaledVector(fwd, -0.4).addScaledVector(left, side * 0.6).addScaledVector(up, -0.4));
+      // the fingers round the grip (they lay flat in the air over it): each joint bent down about the bar's own line
+      for (const f of [1, 2, 3, 4]) for (const [j, bend] of [['', 0.75], ['1', 1.0], ['2', 0.6]]) {
+        const bone = B(`Bip01_${s}_Finger${f}${j}`); if (bone) turnWorld(bone, _q.setFromAxisAngle(left, bend));
+      }
+      { const thumb = B(`Bip01_${s}_Finger0`); if (thumb) turnWorld(thumb, _q.setFromAxisAngle(left, 0.5)); }
     }
   }
   start(x, z, heading, y = null) {
