@@ -4,7 +4,7 @@
 // Arcade physics on a bicycle model: the engine pulls less as the speed rises, the steering lock closes with
 // speed, the car's course follows where it points with grip (little under the handbrake: a slide). It rides
 // the ground, or a deck it drove onto (a flyover, a ramp: it stays up there; driving under one, it stays under).
-// It stops against the walls of the buildings (their wall faces, rasterized into a grid as the tiles come near), at
+// It slides along the walls of the buildings, met at a slant, and stops against them met square on (their wall faces, rasterized into a grid as the tiles come near), at
 // the water's edge (no driving out to sea), and against the simulated cars, which cannot swerve (they keep to their recorded way): one that would drive
 // through it fades out instead (simtraffic.js, probe).
 import * as THREE from 'three';
@@ -19,6 +19,8 @@ import { PASS } from '../shared/tileformat.js';
 
 const CELL = 1.5;              // wall grid (m)
 const WHEELBASE = 2.8, TOP = 44, BOOST = 58, REVERSE = 9;
+// the ways off its course a car that has met something tries, to slide along it (radians, the nearest first)
+const SLIDE = [0.07, 0.14, 0.21, 0.31, 0.44, 0.58, 0.73, 0.9, 1.08, 1.26];
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 // The walls of the buildings near a point: their faces that stand up, each laid down as the cells of a grid
@@ -283,25 +285,50 @@ export class Driver {
     // the car itself stands on what it may: somewhere the decks do not cover as drawn, it can still drive out.)
     const paved = (x, z) => this.decks.cornerOn(x, z, this.y) || (this.decks.ground.on(x, z) && Math.abs(streetAt(this.surface, x, z, this.y) + this.lift(x, z) - this.y) < 0.4);
     const parapet = this.onDeck && paved(this.x, this.z) ? (x, z) => !paved(x, z) : () => false;
-    let hitWall = Math.abs(v) > 0.05 && probes.some(([a, b]) => { const x = nx + c * a + s * b, z = nz - s * a + c * b; return this.walls.blocked(x, z) || water(x, z) || parapet(x, z); });
     // the street's things and the vehicles round about (collide.js: the simulated cars, the traffic, the car
     // parked): one met from outside stops it; one it is already inside of it drives out of (set down in a queue,
     // the first seconds it may drive through the cars at all: ghost)
-    let hitCar = null;
     this.ghost = Math.max(0, this.ghost - dt);
     const sim = this.sim();
     if (sim) sim.probe = [this.x, this.z];
-    if (this.collider && Math.abs(v) > 0.05) {
-      const W = this.spec.spec.W, from = vehicleCapsule(this.x, this.z, this.heading, this.spec.L, W).slice(0, 4), to = vehicleCapsule(nx, nz, this.heading, this.spec.L, W).slice(0, 4);
-      const hit = this.collider.blocked(from, to, W / 2, this.y);
-      if (hit && !hit.vehicle) hitWall = true;
-      else if (hit && !this.ghost) hitCar = hit.vehicle;
+    const W = this.spec.spec.W, from = this.collider ? vehicleCapsule(this.x, this.z, this.heading, this.spec.L, W).slice(0, 4) : null;
+    // what the car, moved to (x, z) and pointing h, would run into: 'wall' (a wall, the water, a parapet, a thing of
+    // the street), a vehicle, or null
+    const meets = (x, z, h = this.heading) => {
+      const hs = Math.sin(h), hc = Math.cos(h);
+      if (probes.some(([a, b]) => { const px = x + hc * a + hs * b, pz = z - hs * a + hc * b; return this.walls.blocked(px, pz) || water(px, pz) || parapet(px, pz); })) return 'wall';
+      const hit = from && this.collider.blocked(from, vehicleCapsule(x, z, h, this.spec.L, W).slice(0, 4), W / 2, this.y);
+      return !hit ? null : !hit.vehicle ? 'wall' : this.ghost ? null : hit.vehicle;
+    };
+    const hit = Math.abs(v) > 0.05 ? meets(nx, nz) : null;
+    if (!hit) { this.x = nx; this.z = nz; }
+    else {
+      // It slides along what it met: the way nearest its own that is clear (the side it steers to first), keeping
+      // the share of its speed that goes that way, its nose coming round to it. (Any touch stopped it dead and threw
+      // it back: against a pole or a wall met at a slant it stood at 0 km/h with the throttle down, and only
+      // backing out freed it.) Met square on, nothing is clear: it stops and is thrown back, as before.
+      const first = this.steer < 0 ? -1 : 1;
+      let slid = false;
+      for (let i = 0; i < SLIDE.length * 2 && !slid; i++) {
+        const a = SLIDE[i >> 1], co = this.course + a * (i & 1 ? -first : first), k = Math.cos(a);
+        const x = this.x + Math.sin(co) * v * k * dt, z = this.z + Math.cos(co) * v * k * dt;
+        if (meets(x, z)) continue;
+        slid = true;
+        this.bump = Math.max(this.bump, Math.min(1, Math.abs(v) * Math.sin(a) / 15)); // (the camera feels what it lost)
+        this.x = x; this.z = z; this.course = co;
+        // (no slower than a crawl: nose on to a trunk the only clear way is far round, a third of its speed a frame,
+        // and it wore down to a stand against the tree with the throttle down)
+        v = Math.sign(v) * Math.max(Math.abs(v) * k, Math.min(Math.abs(v), 2));
+        // (the nose round to the way it goes, if it has the room to swing there)
+        const dh = Math.atan2(Math.sin(co - this.heading), Math.cos(co - this.heading)) * (1 - Math.exp(-dt * 8));
+        if (!meets(x, z, this.heading + dh)) this.heading += dh;
+      }
+      if (!slid) {
+        this.bump = Math.min(1, Math.abs(v) / 15); // (the camera feels it)
+        v = -v * (hit === 'wall' ? 0.25 : 0.15);
+        if (hit !== 'wall') v += hit.speed * Math.cos(hit.heading - this.course) * 0.4; // (pushed along by it)
+      }
     }
-    if (hitWall || hitCar) {
-      this.bump = Math.min(1, Math.abs(v) / 15); // (the camera feels it)
-      v = -v * (hitWall ? 0.25 : 0.15);
-      if (hitCar) v += hitCar.speed * Math.cos(hitCar.heading - this.course) * 0.4; // (pushed along by it)
-    } else { this.x = nx; this.z = nz; }
     this.speed = v;
     // the ground, or the deck it is on: a deck near its height (a ramp grows out of the road a step at a time,
     // so the car climbs onto it; driving under a flyover, the deck is far above and the ground is the way)
