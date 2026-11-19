@@ -1,0 +1,24 @@
+516 counted roads in the cut-out
+== ctl: inserted 110781 of 123526, running at 8:30 16977, teleports 1067 (jam 374, yield 483), time loss 383.49 s, speed 11.00
+  all              n  516  simulated/counted 0.36  GEH<5   8%  GEH<10  20%
+  freeways         n  190  simulated/counted 0.33  GEH<5   5%  GEH<10   9%
+  PR-22 mainline   n   23  simulated/counted 0.38  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.30  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.43  GEH<5  11%  GEH<10  26%
+  collectors       n   21  simulated/counted 0.41  GEH<5   5%  GEH<10  19%
+516 counted roads in the cut-out
+== link: inserted 110998 of 123526, running at 8:30 14773, teleports 924 (jam 340, yield 396), time loss 341.44 s, speed 11.10
+  all              n  516  simulated/counted 0.38  GEH<5  11%  GEH<10  20%
+  freeways         n  190  simulated/counted 0.35  GEH<5   6%  GEH<10   9%
+  PR-22 mainline   n   23  simulated/counted 0.40  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.34  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.44  GEH<5  14%  GEH<10  27%
+  collectors       n   21  simulated/counted 0.41  GEH<5   5%  GEH<10  19%
+516 counted roads in the cut-out
+== linkfoot: inserted 111544 of 123526, running at 8:30 15056, teleports 837 (jam 276, yield 392), time loss 342.18 s, speed 11.05
+  all              n  516  simulated/counted 0.37  GEH<5  12%  GEH<10  21%
+  freeways         n  190  simulated/counted 0.35  GEH<5   6%  GEH<10   9%
+  PR-22 mainline   n   23  simulated/counted 0.39  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.33  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.44  GEH<5  17%  GEH<10  28%
+  collectors       n   21  simulated/counted 0.46  GEH<5  10%  GEH<10  19%

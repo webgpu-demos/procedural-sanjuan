@@ -1,0 +1,83 @@
++ C=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut
++ gunzip -c /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/trips.xml.gz
++ route /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz /mnt/sim/ctl.rou.xml
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/duarouter -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz -r /mnt/sim/trips.xml --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-base.add.xml -o /mnt/sim/ctl.rou.xml --routing-algorithm CH --ignore-errors --no-warnings --no-step-log --repair --write-trips.junctions false
+Success.
++ sed -i '/<vType /d' /mnt/sim/ctl.rou.xml
++ grep -c '<vehicle' /mnt/sim/ctl.rou.xml
+159680
++ route /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/link.net.xml.gz /mnt/sim/link.rou.xml
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/duarouter -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/link.net.xml.gz -r /mnt/sim/trips.xml --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-base.add.xml -o /mnt/sim/link.rou.xml --routing-algorithm CH --ignore-errors --no-warnings --no-step-log --repair --write-trips.junctions false
+Success.
++ sed -i '/<vType /d' /mnt/sim/link.rou.xml
++ grep -c '<vehicle' /mnt/sim/link.rou.xml
+159680
++ run ctl /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz /mnt/sim/ctl.rou.xml
++ local D=/mnt/sim/ctl net=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz rou=/mnt/sim/ctl.rou.xml
++ mkdir -p /mnt/sim/ctl
++ run link /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/link.net.xml.gz /mnt/sim/link.rou.xml
++ local D=/mnt/sim/link net=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/link.net.xml.gz rou=/mnt/sim/link.rou.xml
++ mkdir -p /mnt/sim/link
++ wait
++ run linkfoot /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/linkfoot.net.xml.gz /mnt/sim/link.rou.xml
++ local D=/mnt/sim/linkfoot net=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/linkfoot.net.xml.gz rou=/mnt/sim/link.rou.xml
++ mkdir -p /mnt/sim/linkfoot
++ cd /mnt/sim/linkfoot
++ echo '<additional><edgeData id="h" freq="900" begin="18000" file="edgedata.xml" excludeEmpty="true" writeAttributes="speed sampledSeconds entered traveltime"/></additional>'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/linkfoot.net.xml.gz -r /mnt/sim/link.rou.xml --begin 16200 --end 30600 --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-base.add.xml,out.add.xml --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --device.rerouting.probability 1 --device.rerouting.period 300 --device.rerouting.threads 1 --statistic-output stats.xml --duration-log.statistics --no-warnings --step-log.period 1800
++ cd /mnt/sim/ctl
++ echo '<additional><edgeData id="h" freq="900" begin="18000" file="edgedata.xml" excludeEmpty="true" writeAttributes="speed sampledSeconds entered traveltime"/></additional>'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz -r /mnt/sim/ctl.rou.xml --begin 16200 --end 30600 --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-base.add.xml,out.add.xml --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --device.rerouting.probability 1 --device.rerouting.period 300 --device.rerouting.threads 1 --statistic-output stats.xml --duration-log.statistics --no-warnings --step-log.period 1800
++ cd /mnt/sim/link
++ echo '<additional><edgeData id="h" freq="900" begin="18000" file="edgedata.xml" excludeEmpty="true" writeAttributes="speed sampledSeconds entered traveltime"/></additional>'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/link.net.xml.gz -r /mnt/sim/link.rou.xml --begin 16200 --end 30600 --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-base.add.xml,out.add.xml --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --device.rerouting.probability 1 --device.rerouting.period 300 --device.rerouting.threads 1 --statistic-output stats.xml --duration-log.statistics --no-warnings --step-log.period 1800
++ echo 'exit 0'
++ echo 'exit 0'
++ echo 'exit 0'
++ for n in ctl link linkfoot
++ mkdir -p /mnt/res/ctl
++ gzip -c /mnt/sim/ctl/edgedata.xml
++ cp /mnt/sim/ctl/stats.xml /mnt/res/ctl/
++ tr '\r' '\n'
++ grep -v '^Step #'
++ for n in ctl link linkfoot
++ mkdir -p /mnt/res/link
++ gzip -c /mnt/sim/link/edgedata.xml
++ cp /mnt/sim/link/stats.xml /mnt/res/link/
++ tr '\r' '\n'
++ grep -v '^Step #'
++ for n in ctl link linkfoot
++ mkdir -p /mnt/res/linkfoot
++ gzip -c /mnt/sim/linkfoot/edgedata.xml
++ cp /mnt/sim/linkfoot/stats.xml /mnt/res/linkfoot/
++ tr '\r' '\n'
++ grep -v '^Step #'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python simlab/cut/evalcut.py /home/runner/work/procedural-sanjuan/procedural-sanjuan /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz ctl=/mnt/res/ctl
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python simlab/cut/evalcut.py /home/runner/work/procedural-sanjuan/procedural-sanjuan /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/link.net.xml.gz link=/mnt/res/link
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python simlab/cut/evalcut.py /home/runner/work/procedural-sanjuan/procedural-sanjuan /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/linkfoot.net.xml.gz linkfoot=/mnt/res/linkfoot
++ cat /mnt/res/eval.txt
+516 counted roads in the cut-out
+== ctl: inserted 110781 of 123526, running at 8:30 16977, teleports 1067 (jam 374, yield 483), time loss 383.49 s, speed 11.00
+  all              n  516  simulated/counted 0.36  GEH<5   8%  GEH<10  20%
+  freeways         n  190  simulated/counted 0.33  GEH<5   5%  GEH<10   9%
+  PR-22 mainline   n   23  simulated/counted 0.38  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.30  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.43  GEH<5  11%  GEH<10  26%
+  collectors       n   21  simulated/counted 0.41  GEH<5   5%  GEH<10  19%
+516 counted roads in the cut-out
+== link: inserted 110998 of 123526, running at 8:30 14773, teleports 924 (jam 340, yield 396), time loss 341.44 s, speed 11.10
+  all              n  516  simulated/counted 0.38  GEH<5  11%  GEH<10  20%
+  freeways         n  190  simulated/counted 0.35  GEH<5   6%  GEH<10   9%
+  PR-22 mainline   n   23  simulated/counted 0.40  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.34  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.44  GEH<5  14%  GEH<10  27%
+  collectors       n   21  simulated/counted 0.41  GEH<5   5%  GEH<10  19%
+516 counted roads in the cut-out
+== linkfoot: inserted 111544 of 123526, running at 8:30 15056, teleports 837 (jam 276, yield 392), time loss 342.18 s, speed 11.05
+  all              n  516  simulated/counted 0.37  GEH<5  12%  GEH<10  21%
+  freeways         n  190  simulated/counted 0.35  GEH<5   6%  GEH<10   9%
+  PR-22 mainline   n   23  simulated/counted 0.39  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.33  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.44  GEH<5  17%  GEH<10  28%
+  collectors       n   21  simulated/counted 0.46  GEH<5  10%  GEH<10  19%
+exit 0 after 93 min
