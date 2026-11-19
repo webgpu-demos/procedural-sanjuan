@@ -571,6 +571,9 @@ function viewLink() {
   url.searchParams.set('cam', [controls.target.x, controls.target.z, viewSpherical.radius, az, el].map((v) => Math.round(v)).join(','));
   if (clockTime.live) url.searchParams.delete('time'); else url.searchParams.set('time', clockTime.hour.toFixed(2));
   url.searchParams.delete('night'); // (the hour says it)
+  // (and the run on screen: a link copied in the apagón opened the normal morning)
+  const run = sim?.base.split('/').pop();
+  if (run && run !== 'morning') url.searchParams.set('scenario', run); else url.searchParams.delete('scenario');
   url.searchParams.delete('ll'); // (the camera says where; ?sea and ?from stay)
   return url.href.replace(/%2C/g, ','); // (commas are fine in a query: keep the link readable)
 }
