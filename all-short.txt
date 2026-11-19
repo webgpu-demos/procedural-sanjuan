@@ -1,0 +1,162 @@
+++ set -e
+++ node tools/sim/network.mjs --area=sanjuan
+   0.2s 0 pinches at joins widened
+   0.2s 16 expressway stretches narrowed to the lanes beyond them
+   0.2s lanes, SUMO's against the paint, one-way roads: 16 differ (2.6 km); SUMO has more on 0 (0.0 km; expressway 0, 0.0 km)
+   0.3s 7077 joins: 42902 edges
+   0.4s 83 acceleration lanes (of 84 the client paves); 75 ramps alongside before them (3.1 km)
+   0.5s 1030 junctions joined from 2382 nodes
+   0.7s plain network: 17520 nodes (427 with lights, 112 zippers), 40569 directed edges from 36830 roads
+Success.
+   9.9s netconvert -> data/sim/sanjuan/sanjuan.net.xml.gz (13.0 MB)
+data/sim/sanjuan/sanjuan.net.xml.gz: 84981 junction links; 0 start more than 1 m behind the lane they leave
+++ .venv-sim/bin/python tools/sim/demand.py --area=sanjuan --scale=0.7 --spread=15 --gates=counts '--vtype=lcMaxSpeedLatStanding=0.3;lcMaxSpeedLatFactor=0.5'
+floor by municipio inside the area (home / job / school / shop, km²):
+  San Juan        30.11  19.32   2.54   9.85
+  Guaynabo         7.61   3.77   0.20   1.25
+  Carolina         3.92   0.94   0.01   0.48
+  Trujillo Alto    3.79   1.54   0.09   0.37
+  Bayamón          0.42   0.27   0.02   0.06
+  Caguas           0.23   0.31   0.00   0.04
+  Cataño           0.20   0.35   0.05   0.18
+  Gurabo           0.03   0.01   0.00   0.00
+  Aguas Buenas     0.01   0.00   0.00   0.00
+  Loíza            0.00   0.01   0.00   0.01
+network core: 39096 of 39763 edges
+136 gates in, 141 out; 1447 zones with streets
+share inside the area (homes, jobs): {'Carolina': (np.float64(0.28), np.float64(0.22)), 'San Juan': (1.0, 1.0), 'Bayamón': (np.float64(0.03), np.float64(0.05)), 'Guaynabo': (np.float64(0.88), np.float64(0.81)), 'Caguas': (np.float64(0.02), np.float64(0.08)), 'Trujillo Alto': (np.float64(0.58), 1), 'Gurabo': (np.float64(0.01), np.float64(0.01)), 'Loíza': (np.float64(0.0), np.float64(0.04)), 'Cataño': (np.float64(0.1), np.float64(0.34)), 'Aguas Buenas': (np.float64(0.0), np.float64(0.01))}
+gates in, by the counts: 84592 trips over 24 counted gates
+  E: 23008 trips; counted on its gates 131202 a day one way
+    e19223   PR-26                      4 lanes  counts' share 0.452  trips' share 0.452
+    e26792   PR-3                       2 lanes  counts' share 0.245  trips' share 0.247
+    e30343   M16001 [Carolina]          2 lanes  counts' share 0.090  trips' share 0.089
+    r20407   M16010 [Carolina]          1 lanes  counts' share 0.086  trips' share 0.082
+    e17531   PR-8860                    1 lanes  counts' share 0.082  trips' share 0.084
+    e27678   PR-848                     1 lanes  counts' share 0.040  trips' share 0.040
+    r17685   PR-851                     1 lanes  counts' share 0.005  trips' share 0.005
+  S: 21593 trips; counted on its gates 82315 a day one way
+    e19852   PR-52                      3 lanes  counts' share 0.627  trips' share 0.623
+    e23764   PR-1                       2 lanes  counts' share 0.256  trips' share 0.260
+    r595     PR-175                     1 lanes  counts' share 0.054  trips' share 0.052
+    e26      PR-173                     1 lanes  counts' share 0.030  trips' share 0.031
+    r33      PR-797                     2 lanes  counts' share 0.019  trips' share 0.018
+    e21960   PR-834                     1 lanes  counts' share 0.011  trips' share 0.010
+    r5050    PR-941                     1 lanes  counts' share 0.004  trips' share 0.004
+  W: 39991 trips; counted on its gates 143086 a day one way
+    e29452   PR-22                      3 lanes  counts' share 0.372  trips' share 0.376
+    r26160   PR-2                       2 lanes  counts' share 0.149  trips' share 0.148
+    e28801   PR-177                     3 lanes  counts' share 0.139  trips' share 0.136
+    e20591   PR-165                     2 lanes  counts' share 0.095  trips' share 0.095
+    e21756   M31012 [Guaynabo]          1 lanes  counts' share 0.076  trips' share 0.076
+    e917     PR-5                       2 lanes  counts' share 0.067  trips' share 0.067
+    r186     PR-28                      2 lanes  counts' share 0.048  trips' share 0.050
+    r22305   PR-837                     1 lanes  counts' share 0.031  trips' share 0.030
+gates out, by the counts: 26752 trips over 26 counted gates
+  E: 9950 trips; counted on its gates 131202 a day one way
+    e32588   PR-26                      2 lanes  counts' share 0.301  trips' share 0.298
+    e26801   PR-3                       2 lanes  counts' share 0.245  trips' share 0.253
+    e20423   PR-26                      1 lanes  counts' share 0.151  trips' share 0.155
+    e31079   M16001 [Carolina]          1 lanes  counts' share 0.090  trips' share 0.089
+    e19485   M16010 [Carolina]          1 lanes  counts' share 0.086  trips' share 0.082
+    r17531   PR-8860                    1 lanes  counts' share 0.082  trips' share 0.078
+    r27678   PR-848                     1 lanes  counts' share 0.040  trips' share 0.039
+    e5053    PR-851                     1 lanes  counts' share 0.005  trips' share 0.006
+  S: 4994 trips; counted on its gates 82315 a day one way
+    e19108   PR-52                      3 lanes  counts' share 0.376  trips' share 0.368
+    e28545   PR-1                       2 lanes  counts' share 0.256  trips' share 0.256
+    e29172   PR-52                      2 lanes  counts' share 0.251  trips' share 0.262
+    e595     PR-175                     1 lanes  counts' share 0.054  trips' share 0.049
+    r26      PR-173                     1 lanes  counts' share 0.030  trips' share 0.029
+    e33      PR-797                     2 lanes  counts' share 0.019  trips' share 0.020
+    e28303   PR-834                     1 lanes  counts' share 0.011  trips' share 0.013
+    e5050    PR-941                     1 lanes  counts' share 0.004  trips' share 0.003
+  W: 11808 trips; counted on its gates 132236 a day one way
+    e26303   PR-22                      5 lanes  counts' share 0.402  trips' share 0.402
+    e26161   PR-2                       2 lanes  counts' share 0.161  trips' share 0.163
+    e35037   PR-177                     3 lanes  counts' share 0.113  trips' share 0.110
+    e19252   PR-165                     2 lanes  counts' share 0.103  trips' share 0.107
+    r917     PR-5                       2 lanes  counts' share 0.073  trips' share 0.075
+    e186     PR-28                      2 lanes  counts' share 0.052  trips' share 0.051
+    e96      PR-177                     1 lanes  counts' share 0.038  trips' share 0.037
+    e22305   PR-837                     1 lanes  counts' share 0.033  trips' share 0.032
+235132 trips: {'work': 152097, 'through': 9893, 'school': 29988, 'errand': 28151, 'airport': 7223, 'delivery': 10322} (scale 0.7)
+departures by half hour: 4.5h 2664 5.0h 7806 5.5h 10496 6.0h 20207 6.5h 26236 7.0h 51719 7.5h 36873 8.0h 26315 8.5h 19037 9.0h 16247 9.5h 17532
+-> data/sim/sanjuan/morning
+++ .venv-sim/bin/python tools/sim/gtfs.py --area=sanjuan
+500 bus trips on 27 routes, 937 stops in the area (of 938 placed)
+10 ferry crossings in the morning: ['Cataño-Viejo San Juan']
+++ rm -f /home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/assigned.rou.alt.xml.gz
+++ .venv-sim/bin/python tools/sim/route.py --area=sanjuan --duaargs=
+Success.
+routes in 44s -> data/sim/sanjuan/morning/routes.rou.xml
+++ '[' -n '' ']'
+++ timeout 335m .venv-sim/bin/python tools/sim/run.py --area=sanjuan --scenario=morning --demand=morning --end=10.25 --share=0.7 --reroute=1 --reroute-period=300
+    1.6s sumo morning: 4.50 h to 10.25 h ...
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/sanjuan.net.xml.gz' ... done (4577ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/outputs.add.xml' ... done (43ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/busstops.add.xml' ... done (9ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/taz.add.xml' ... done (0ms).
+Loading route-files incrementally from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/data/sim/sanjuan/morning/routes.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+
+Simulation ended at time: 36900.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 12095.80s
+ Real time factor: 1.71134
+ UPS: 28170.789062
+Vehicles:
+ Inserted: 233895 (Loaded: 235592)
+ Running: 6856
+ Waiting: 0
+ Teleports: 3240 (Collisions: 200, Jam: 762, Yield: 1818, Wrong Lane: 460)
+ Emergency Stops: 7
+ Emergency Braking: 946
+Statistics (avg of 233895):
+ RouteLength: 9800.11
+ Speed: 9.69
+ Duration: 1456.84
+ WaitingTime: 509.03
+ TimeLoss: 871.95
+ DepartDelay: 16.69
+ DepartDelayWaiting: 0.00
+AStarRouter answered 365803 queries and explored 8709.88 edges on average.
+AStarRouter spent 4737.76s answering queries (12.95ms on average).
+AStarRouter answered 351043 queries and explored 8788.18 edges on average.
+AStarRouter spent 4602.92s answering queries (13.11ms on average).
+AStarRouter answered 339901 queries and explored 8823.33 edges on average.
+AStarRouter spent 4503.85s answering queries (13.25ms on average).
+AStarRouter answered 330429 queries and explored 8850.63 edges on average.
+AStarRouter spent 4393.22s answering queries (13.30ms on average).
+12104.1s sumo done
+12137.8s tracks: 21 M samples read, up to 6.39 h, 27578 tracks, 8491 on the road
+12161.9s tracks: 41 M samples read, up to 6.92 h, 50030 tracks, 11987 on the road
+12183.5s tracks: 60 M samples read, up to 7.25 h, 68922 tracks, 22185 on the road
+12204.2s tracks: 81 M samples read, up to 7.47 h, 85015 tracks, 30829 on the road
+12221.9s tracks: 101 M samples read, up to 7.63 h, 96506 tracks, 34540 on the road
+12240.3s tracks: 122 M samples read, up to 7.80 h, 107501 tracks, 35722 on the road
+12257.2s tracks: 141 M samples read, up to 7.94 h, 116754 tracks, 35545 on the road
+12275.7s tracks: 161 M samples read, up to 8.11 h, 126465 tracks, 34796 on the road
+12292.5s tracks: 181 M samples read, up to 8.26 h, 134914 tracks, 34346 on the road
+12310.9s tracks: 201 M samples read, up to 8.43 h, 144786 tracks, 33671 on the road
+12327.8s tracks: 220 M samples read, up to 8.59 h, 153847 tracks, 32308 on the road
+12346.4s tracks: 241 M samples read, up to 8.78 h, 163877 tracks, 29622 on the road
+12363.9s tracks: 260 M samples read, up to 8.97 h, 173883 tracks, 26610 on the road
+12383.8s tracks: 281 M samples read, up to 9.20 h, 185988 tracks, 22673 on the road
+12403.1s tracks: 300 M samples read, up to 9.46 h, 198468 tracks, 18816 on the road
+12424.7s tracks: 322 M samples read, up to 9.81 h, 214158 tracks, 15494 on the road
+12443.7s tracks: 341 M samples read, up to 10.25 h, 230033 tracks, 6847 on the road
+12444.0s 236880 tracks from 341 M samples; peak 35984 cars on the road at once
+12790.3s 138 windows, 353.3 MB (gzipped)
+12795.4s speeds: 69 intervals x 46546 edges
+12799.4s done: {"total": "3240", "jam": "762", "yield": "1818", "wrongLane": "460"}
+++ .venv-sim/bin/python tools/sim/validate.py --area=sanjuan --scenario=morning
+1219 counted roads matched; simulated/counted 0.48; GEH<5 11%, GEH<10 23%, r² 0.43
+  other                  n    4  ratio 2.99  GEH<5    0%  GEH<10    0%
+  interstate / freeway   n  322  ratio 0.43  GEH<5    7%  GEH<10   16%
+  arterials              n  790  ratio 0.54  GEH<5   11%  GEH<10   24%
+  collectors             n   81  ratio 0.64  GEH<5   19%  GEH<10   41%
+  local                  n   22  ratio 0.37  GEH<5   14%  GEH<10   18%
+worst: [('PR-18', 19472, 1394), ('PR-22', 15976, 183), ('PR-18', 19472, 1747), ('PR-22', 19072, 1956), ('PR-22', 19072, 2095), ('PR-22', 15976, 1068)]
+++ '[' -n '' ']'
