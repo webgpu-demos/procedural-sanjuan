@@ -7,7 +7,8 @@ A cordon model over the simulated area (the compiled city's bounding box):
                 municipio partly inside the area live in its buildings here in proportion to their floor
                 area, the rest drive in through the gates on the area's edge
   gates         the roads that cross the edge of the area; a municipio's commuters use the gates towards it,
-                big roads first
+                big roads first (--gates=counts: on each side of the area, in proportion to what FHWA counts
+                on each road where it crosses the edge)
   departures    the time leaving home, by municipio of residence (ACS 2018-2022, B08302); trips from beyond
                 the edge reach their gate later by the drive to it
   school, errands, the airport, deliveries: on top, with their own hours
@@ -142,7 +143,15 @@ def gate_set(name, inbound):
     big = np.array([g.getPriority() >= 9 or g.getLaneNumber() >= 2 for g in gates])
     keep = (d <= d.min() + GATE_REACH) & big; keep[d.argmin()] = True
     return [gates[i].getID() for i in np.flatnonzero(keep)], d.min()
+# --gates=counts: which gate a trip from beyond the edge uses is left open here and settled for all of them together
+# once the trips are drawn (settle_gates): the municipio's gates had been those within GATE_REACH of the nearest, each
+# gate standing where its road's first junction inside the area is, and the router took the quickest of them on empty
+# roads. PR-52 runs 6.5 km in from the south edge before its first junction: it was no municipio's gate and nobody
+# drove in on it (4,300 an hour counted), Baldorioty was not among Carolina's (4,700 counted, 960 routed), and the
+# avenues beside them took the cars: 65 de Infantería 4,400 an hour on two lanes (2,600 counted), PR-1 3,000 (1,700).
+GATES = args.get('gates', 'taz')
 def pick_gate(name, inbound):
+    if GATES == 'counts': return f'gate:{"in" if inbound else "out"}:{name}', 0.0
     k = (name, inbound)
     if TAZ:
         if k not in GATE_CACHE: GATE_CACHE[k] = gate_set(name, inbound)
@@ -298,6 +307,113 @@ for _ in range(poisson(len(trips) * 0.045)):
     sz = sample_zone('San Juan', 3)
     if sz: add(t, o, pick_edge(sz), 'delivery', ['', 'San Juan'], 'truck'); stats['delivery'] += 1
 
+# ---------------------------------------------------------------- the gates, by the counts (--gates=counts)
+GATE_USED = set()
+def settle_gates(trips):
+    """Each trip from (to) beyond the edge is given its gate: on the side of the area it would come in by (the side of
+    the gate quickest for it: the drive from its municipio to the gate, then on empty roads to where it is going),
+    the gates share the trips as FHWA's counts on their roads do (AADT, half each way; a count's road crossing as
+    several edges, by their lanes), and each trip takes a gate that is quick for it (a logit on its time through each,
+    --gatetau seconds, balanced until the gates' totals are the counts' shares). The total through each side stays
+    what the commuting flows make it."""
+    import heapq
+    HPMS = json.load(open(os.path.join(SIM, 'hpms.json')))
+    FSYS = {1: (12, 13), 2: (11, 13), 3: (9, 12), 4: (8, 11), 5: (7, 10), 6: (5, 9), 7: (4, 8)}  # (validate.py)
+    TAU = float(args.get('gatetau', 300))
+    def crossing(e):  # where the edge crosses the area's edge, and its heading there
+        sh = [p[:2] for p in e.getShape()]
+        for (x0, y0), (x1, y1) in zip(sh, sh[1:]):
+            if inside(x0, y0) != inside(x1, y1):
+                lo, hi = (x0, y0), (x1, y1)
+                for _ in range(24):
+                    m = ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2)
+                    if inside(*m) == inside(*lo): lo = m
+                    else: hi = m
+                d = math.hypot(x1 - x0, y1 - y0) or 1
+                return lo, ((x1 - x0) / d, (y1 - y0) / d)
+        (x0, y0), (x1, y1) = sh[0], sh[-1]; d = math.hypot(x1 - x0, y1 - y0) or 1
+        return ((x0 + x1) / 2, (y0 + y1) / 2), ((x1 - x0) / d, (y1 - y0) / d)
+    def counted(e, x, y, ux, uy):  # the count on the road the gate is: the biggest along it within 45 m, of its class
+        best = None
+        for i, s in enumerate(HPMS):
+            if not s['aadt'] or not s.get('fsys'): continue
+            lo, hi = FSYS.get(s['fsys'], (4, 13))
+            if not lo <= e.getPriority() <= hi: continue
+            p = s['pts']
+            if min(abs(q[0] - x) + abs(q[1] - y) for q in p) > 4000: continue
+            for a, b in zip(p, p[1:]):
+                vx, vy = b[0] - a[0], b[1] - a[1]; vl = math.hypot(vx, vy) or 1
+                k = max(0, min(1, ((x - a[0]) * vx + (y - a[1]) * vy) / vl ** 2))
+                if math.hypot(a[0] + vx * k - x, a[1] + vy * k - y) <= 45 and abs(vx * ux + vy * uy) / vl >= 0.85:
+                    if best is None or s['aadt'] > best[1]: best = (i, s['aadt'], s['name'])
+                    break
+        return best
+    def side_of(x, y):
+        d = {'W': x - X0, 'E': X1 - x, 'S': y - Y0, 'N': Y1 - y}; return min(d, key=d.get)
+    eidx = {e.getID(): i for i, e in enumerate(net.getEdges())}
+    cost = lambda e: e.getLength() / e.getSpeed() + (0 if e.getPriority() >= 12 else 4)  # (a junction on a street: a few seconds)
+    def times(g, forward):
+        """forward: from the gate to the end of every edge; back: from the start of every edge to the gate"""
+        T = np.full(len(eidx), 1e9, np.float32); dist = {g: 0.0}; pq = [(0.0, g.getID(), g)]; done = set()
+        while pq:
+            d, _, e = heapq.heappop(pq)
+            if e in done: continue
+            done.add(e); T[eidx[e.getID()]] = d
+            for n in (e.getOutgoing() if forward else e.getIncoming()):
+                if n.getFunction() == 'internal' or not n.allows('passenger'): continue
+                nd = d + cost(n)
+                if nd < dist.get(n, 1e18): dist[n] = nd; heapq.heappush(pq, (nd, n.getID(), n))
+        return T
+    out = list(trips)
+    for inbound in (True, False):
+        tag = 'gate:in:' if inbound else 'gate:out:'
+        which = [i for i, r in enumerate(out) if r[1 if inbound else 2].startswith(tag)]
+        if not which: continue
+        G = []
+        for e in (gates_in if inbound else gates_out):
+            (x, y), (ux, uy) = crossing(e); c = counted(e, x, y, ux, uy)
+            if c: G.append({'e': e, 'xy': (x, y), 'side': side_of(x, y), 'seg': c[0], 'aadt': c[1], 'road': c[2]})
+        lanes = collections.Counter()
+        for g in G: lanes[g['seg']] += g['e'].getLaneNumber()
+        for g in G: g['w'] = g['aadt'] / 2 * g['e'].getLaneNumber() / lanes[g['seg']]
+        T = np.stack([times(g['e'], inbound) for g in G])            # gates x edges
+        GX = np.array([g['xy'] for g in G])
+        munis = sorted({out[i][1 if inbound else 2][len(tag):] for i in which})
+        ACC = {m: np.hypot(GX[:, 0] - CENTRE[m][0], GX[:, 1] - CENTRE[m][1]) / 15.0 for m in munis}  # (~55 km/h to the edge)
+        C = np.empty((len(which), len(G)))
+        for k, i in enumerate(which):
+            r = out[i]; m = r[1 if inbound else 2][len(tag):]; other = r[2 if inbound else 1]
+            C[k] = ACC[m] + (T[:, eidx[other]] if other in eidx else 0)   # (the other end a gate not yet settled: the drive to the edge alone)
+        C[C > 5e8] = 1e9
+        sides = np.array([g['side'] for g in G]); mine = sides[C.argmin(axis=1)]
+        w = np.array([g['w'] for g in G]); P = np.zeros_like(C)
+        for s in sorted(set(sides)):
+            rws, cols = np.flatnonzero(mine == s), np.flatnonzero(sides == s)
+            if not len(rws): continue
+            c = C[np.ix_(rws, cols)]; K = np.exp(-(c - c.min(axis=1, keepdims=True)) / TAU); K[c > 5e8] = 0
+            target = w[cols] / w[cols].sum() * len(rws); a = np.ones(len(cols))
+            for _ in range(60):
+                p = K * a; p /= np.maximum(1e-12, p.sum(axis=1, keepdims=True))
+                f = p.sum(axis=0); a *= np.where(f > 1e-9, target / np.maximum(f, 1e-9), 1)
+                a /= a.max()
+            p = K * a; p /= np.maximum(1e-12, p.sum(axis=1, keepdims=True))
+            P[np.ix_(rws, cols)] = p
+        got = collections.Counter()
+        for k, i in enumerate(which):
+            j = int(np.searchsorted(np.cumsum(P[k]), rng.random() * P[k].sum())); j = min(j, len(G) - 1)
+            g = G[j]; got[j] += 1; GATE_USED.add(g['e'].getID())
+            t, a, b, typ, kind, story = out[i]
+            if inbound: out[i] = (t + ACC[a[len(tag):]][j], g['e'].getID(), b, typ, kind, story)
+            else: out[i] = (t, a, g['e'].getID(), typ, kind, story)
+        print(f'gates {"in" if inbound else "out"}, by the counts: {len(which)} trips over {len(G)} counted gates')
+        for s in sorted(set(sides)):
+            tot = sum(got[j] for j in range(len(G)) if sides[j] == s); ws = sum(w[j] for j in range(len(G)) if sides[j] == s)
+            print(f'  {s}: {tot} trips; counted on its gates {ws:.0f} a day one way')
+            for j in sorted((j for j in range(len(G)) if sides[j] == s), key=lambda j: -w[j])[:8]:
+                g = G[j]; print(f'    {g["e"].getID():8s} {str(g["road"])[:26]:26s} {g["e"].getLaneNumber()} lanes  counts\' share {w[j] / ws:.3f}  trips\' share {got[j] / max(1, tot):.3f}')
+    return [r for r in out if BEGIN <= r[0] < END and r[1] != r[2]]
+if GATES == 'counts': trips = settle_gates(trips)
+
 trips.sort(key=lambda r: r[0])
 print(f'{len(trips)} trips:', dict(stats), f'(scale {SCALE})')
 hours = collections.Counter(int(t // 1800) / 2 for t, *_ in trips)
@@ -337,8 +453,8 @@ with open(os.path.join(OUT, 'trips.xml'), 'w') as fx:
     # trip through a gate (a municipio beyond the edge: taz) comes in and leaves at the road's speed, as it would.
     ARRIVE = args.get('arrive', '0')
     for i, (t, a, b, typ, kind, story) in enumerate(trips):
-        depart = 'departLane="best" departSpeed="max" departPos="random_free"' if a.startswith('taz:') else 'departLane="first" departSpeed="0" departPos="random_free"'
-        arrive = '' if b.startswith('taz:') else f' arrivalLane="first" arrivalSpeed="{ARRIVE}" arrivalPos="random"'
+        depart = 'departLane="best" departSpeed="max" departPos="random_free"' if a.startswith('taz:') or a in GATE_USED else 'departLane="first" departSpeed="0" departPos="random_free"'
+        arrive = '' if b.startswith('taz:') or b in GATE_USED else f' arrivalLane="first" arrivalSpeed="{ARRIVE}" arrivalPos="random"'
         fx.write(f'  <trip id="{i}" type="{typ}" depart="{t:.0f}" {end("from", a)} {end("to", b)} {depart}{arrive}/>\n')
     fx.write('</routes>\n')
 # the municipios' gates (route.py and the assignment route with --with-taz)
