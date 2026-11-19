@@ -18,7 +18,7 @@ export function decalMesh(props, drape) {
     ];
     const emit = (...vertices) => {
       for (const v of vertices) {
-        position.push(v[0], drape.height(v[0], v[1]) + 0.17, v[1]);
+        position.push(v[0], (v.y ?? drape.height(v[0], v[1])) + 0.17, v[1]);
         normal.push(0, 1, 0);
         uv.push(v[2], v[3]);
       }

@@ -14,11 +14,12 @@ import { chunked } from './world/chunks.js';
 import { Props } from './world/props.js';
 import { Signs } from './world/signs.js';
 import { buildRailways } from './world/rails.js';
-import { buildFlyovers, overDecks, landDecks, deckPads } from './world/flyovers.js';
+import { buildFlyovers, overDecks, landDecks, deckPads, structureEdges } from './world/flyovers.js';
 import { DrawnDecks, mergeDecks } from './world/roadlevel.js';
 import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
+import { findCuttings } from './shared/cuttings.js';
 import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup, accelCarriage } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
@@ -262,6 +263,8 @@ correctProfiles(roads, (x, z) => streamer.ground(x, z), rails);
 landDecks(roads, (x, z) => streamer.ground(x, z)); // (decks flush with the streets they meet: world/flyovers.js)
 mergeDecks(roads, (x, z) => streamer.ground(x, z)); // (a ramp at the expressway's level where their decks overlap: world/roadlevel.js)
 streamer.pads(deckPads(roads, (x, z) => streamer.ground(x, z))); // (and the ground level with a deck where it lands on it)
+// (the expressway in its cuttings: a floor at the road's level between walls, where the 10 m ground has a bowl: src/shared/cuttings.js)
+streamer.cuttings(params.has('nocut') ? [] : findCuttings(roads, (x, z) => streamer.ground(x, z), structureEdges(roads.edges, (x, z) => streamer.ground(x, z)), manifest.decks ?? []));
 // the decks as the flyovers draw them, for what drives on them (world/roadlevel.js)
 const drawnDecks = new DrawnDecks(roads, (x, z) => streamer.ground(x, z));
 streamer.merges(mergeApproaches(roads)); // (no turn arrows on the expressway where it merges or forks)
@@ -801,6 +804,7 @@ function loadPeople() {
 }
 const wet = (x, z) => streamer.wet(x, z); // (the water's edge, and the city's: no driving out to sea)
 const driver = new Driver({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet });
+driver.cut = streamer.cut; // (the cuttings' walls stop it: src/shared/cuttings.js)
 const players = { car: driver, walk: new Walker({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet, seats: (x, z) => people?.seatNear(x, z) ?? null }), bike: new Cyclist({ scene, surface: streamer.surface, sim: () => sim, tiles, lift, decks: drawnDecks, wet }), fly: new Flyer({ scene, surface: streamer.surface, tiles }) };
 let mode = 'explore', cameraIndex = 0;
 // What you run into (collide.js): the street's things come with the tiles; the vehicles round you are gathered

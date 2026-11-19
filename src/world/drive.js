@@ -308,6 +308,9 @@ export class Driver {
     // the car itself stands on what it may: somewhere the decks do not cover as drawn, it can still drive out.)
     const paved = (x, z) => this.decks.cornerOn(x, z, this.y) || (this.decks.ground.on(x, z) && Math.abs(streetAt(this.surface, x, z, this.y) + this.lift(x, z) - this.y) < 0.4);
     const parapet = this.onDeck && paved(this.x, this.z) ? (x, z) => !paved(x, z) : () => false;
+    // (and a cutting's wall: across its outline with the ground a metre up or down on the other side, cuttings.js)
+    const here = this.cut ? this.cut.inside(this.x, this.z) : false, level = this.surface(this.x, this.z, -2);
+    const cutting = this.cut ? (x, z) => this.cut.inside(x, z) !== here && Math.abs(this.surface(x, z, -2) - level) > 1 && Math.abs(this.y - level) < 1.5 : () => false;
     // the street's things and the vehicles round about (collide.js: the simulated cars, the traffic, the car
     // parked): one met from outside stops it; one it is already inside of it drives out of (set down in a queue,
     // the first seconds it may drive through the cars at all: ghost)
@@ -319,7 +322,7 @@ export class Driver {
     // the street), a vehicle, or null
     const meets = (x, z, h = this.heading) => {
       const hs = Math.sin(h), hc = Math.cos(h);
-      if (probes.some(([a, b]) => { const px = x + hc * a + hs * b, pz = z - hs * a + hc * b; return this.walls.blocked(px, pz) || water(px, pz) || parapet(px, pz); })) return 'wall';
+      if (probes.some(([a, b]) => { const px = x + hc * a + hs * b, pz = z - hs * a + hc * b; return this.walls.blocked(px, pz) || water(px, pz) || parapet(px, pz) || cutting(px, pz); })) return 'wall';
       const hit = from && this.collider.blocked(from, vehicleCapsule(x, z, h, this.spec.L, W).slice(0, 4), W / 2, this.y);
       return !hit ? null : !hit.vehicle ? 'wall' : this.ghost ? null : hit.vehicle;
     };
