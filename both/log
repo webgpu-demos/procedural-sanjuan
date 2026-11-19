@@ -1,0 +1,29 @@
+Loading net-file from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/decel.net.xml.gz' ... done (824ms).
+Loading additional-files from '/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-strat.add.xml' ... done (0ms).
+Loading additional-files from 'out.add.xml' ... done (1ms).
+Loading route-files incrementally from '/mnt/sim/base.rou.xml'
+Loading done.
+Simulation version 1.28.0 started with time: 16200.00.
+
+Simulation ended at time: 30600.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 4627.86s
+ Real time factor: 3.11159
+ UPS: 20171.730488
+Vehicles:
+ Inserted: 110429 (Loaded: 123526)
+ Running: 16018
+ Waiting: 2477
+ Teleports: 842 (Collisions: 38, Jam: 319, Yield: 404, Wrong Lane: 81)
+ Emergency Braking: 294
+Statistics (avg of 94411):
+ RouteLength: 5614.91
+ Speed: 10.79
+ Duration: 697.76
+ WaitingTime: 211.72
+ TimeLoss: 385.31
+ DepartDelay: 61.93
+AStarRouter answered 681456 queries and explored 3991.40 edges on average.
+AStarRouter spent 3378.07s answering queries (4.96ms on average).
+exit 0

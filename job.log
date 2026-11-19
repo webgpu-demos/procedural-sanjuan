@@ -1,0 +1,72 @@
++ C=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut
++ gunzip -c /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base.rou.xml.gz
++ run decel /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/decel.net.xml.gz types-base.add.xml
++ local D=/mnt/sim/decel net=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/decel.net.xml.gz ty=types-base.add.xml
++ shift 3
++ mkdir -p /mnt/sim/decel
++ run strat /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz types-strat.add.xml
++ local D=/mnt/sim/strat net=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz ty=types-strat.add.xml
++ wait
++ shift 3
++ mkdir -p /mnt/sim/strat
++ run both /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/decel.net.xml.gz types-strat.add.xml
++ local D=/mnt/sim/both net=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/decel.net.xml.gz ty=types-strat.add.xml
++ shift 3
++ mkdir -p /mnt/sim/both
++ cd /mnt/sim/strat
++ echo '<additional><edgeData id="h" freq="900" begin="18000" file="edgedata.xml" excludeEmpty="true" writeAttributes="speed sampledSeconds entered traveltime"/></additional>'
++ cd /mnt/sim/both
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz -r /mnt/sim/base.rou.xml --begin 16200 --end 30600 --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-strat.add.xml,out.add.xml --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --device.rerouting.probability 1 --device.rerouting.period 300 --device.rerouting.threads 1 --statistic-output stats.xml --duration-log.statistics --no-warnings --step-log.period 1800
++ echo '<additional><edgeData id="h" freq="900" begin="18000" file="edgedata.xml" excludeEmpty="true" writeAttributes="speed sampledSeconds entered traveltime"/></additional>'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/decel.net.xml.gz -r /mnt/sim/base.rou.xml --begin 16200 --end 30600 --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-strat.add.xml,out.add.xml --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --device.rerouting.probability 1 --device.rerouting.period 300 --device.rerouting.threads 1 --statistic-output stats.xml --duration-log.statistics --no-warnings --step-log.period 1800
++ cd /mnt/sim/decel
++ echo '<additional><edgeData id="h" freq="900" begin="18000" file="edgedata.xml" excludeEmpty="true" writeAttributes="speed sampledSeconds entered traveltime"/></additional>'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/decel.net.xml.gz -r /mnt/sim/base.rou.xml --begin 16200 --end 30600 --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-base.add.xml,out.add.xml --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --device.rerouting.probability 1 --device.rerouting.period 300 --device.rerouting.threads 1 --statistic-output stats.xml --duration-log.statistics --no-warnings --step-log.period 1800
++ echo 'exit 0'
++ echo 'exit 0'
++ echo 'exit 0'
++ for n in decel strat both
++ mkdir -p /mnt/res/decel
++ gzip -c /mnt/sim/decel/edgedata.xml
++ cp /mnt/sim/decel/stats.xml /mnt/res/decel/
++ tr '\r' '\n'
++ grep -v '^Step #'
++ for n in decel strat both
++ mkdir -p /mnt/res/strat
++ gzip -c /mnt/sim/strat/edgedata.xml
++ cp /mnt/sim/strat/stats.xml /mnt/res/strat/
++ tr '\r' '\n'
++ grep -v '^Step #'
++ for n in decel strat both
++ mkdir -p /mnt/res/both
++ gzip -c /mnt/sim/both/edgedata.xml
++ cp /mnt/sim/both/stats.xml /mnt/res/both/
++ tr '\r' '\n'
++ grep -v '^Step #'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python simlab/cut/evalcut.py /home/runner/work/procedural-sanjuan/procedural-sanjuan /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz strat=/mnt/res/strat
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python simlab/cut/evalcut.py /home/runner/work/procedural-sanjuan/procedural-sanjuan /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/decel.net.xml.gz decel=/mnt/res/decel both=/mnt/res/both
++ cat /mnt/res/eval.txt
+516 counted roads in the cut-out
+== strat: inserted 110560 of 123526, running at 8:30 15031, teleports 775 (jam 306, yield 367), time loss 368.56 s, speed 10.77
+  all              n  516  simulated/counted 0.36  GEH<5  11%  GEH<10  19%
+  freeways         n  190  simulated/counted 0.33  GEH<5   5%  GEH<10   9%
+  PR-22 mainline   n   23  simulated/counted 0.36  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.31  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.44  GEH<5  15%  GEH<10  25%
+  collectors       n   21  simulated/counted 0.44  GEH<5  14%  GEH<10  19%
+518 counted roads in the cut-out
+== decel: inserted 110871 of 123526, running at 8:30 17399, teleports 1039 (jam 349, yield 481), time loss 377.63 s, speed 11.08
+  all              n  518  simulated/counted 0.37  GEH<5  10%  GEH<10  20%
+  freeways         n  192  simulated/counted 0.35  GEH<5   6%  GEH<10   9%
+  PR-22 mainline   n   22  simulated/counted 0.40  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.32  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.42  GEH<5  13%  GEH<10  26%
+  collectors       n   21  simulated/counted 0.39  GEH<5  10%  GEH<10  19%
+== both: inserted 110429 of 123526, running at 8:30 16018, teleports 842 (jam 319, yield 404), time loss 385.31 s, speed 10.79
+  all              n  518  simulated/counted 0.36  GEH<5   8%  GEH<10  19%
+  freeways         n  192  simulated/counted 0.33  GEH<5   5%  GEH<10   9%
+  PR-22 mainline   n   22  simulated/counted 0.37  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.29  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.44  GEH<5  10%  GEH<10  25%
+  collectors       n   21  simulated/counted 0.41  GEH<5   5%  GEH<10  19%
+exit 0 after 77 min
