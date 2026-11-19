@@ -363,9 +363,14 @@ with open(os.path.join(OUT, 'tripinfo.bin'), 'wb') as f:
     cars = [k for k in ti if k < 10_000_000]  # (buses are numbered from ten million: gtfs.py)
     n = max(cars) + 1 if cars else 0
     arr = np.zeros((n, 2), np.uint16)
-    if begin != BEGIN:  # (the apagón: the cars that arrived before the failure keep the morning's figures)
+    if begin != BEGIN:  # (the apagón: the cars that left before the failure keep the morning's figures)
+        # (only those: every car's were carried over, and one that had not arrived when the blackout's run ended kept
+        # the morning's delay. Of the cars leaving after the run's end, all of them: the blackout read as no worse
+        # than the morning. tools/sim/fix_apagon_tripinfo.py repairs a run packed before this.)
         before = np.fromfile(os.path.join(os.path.join(ROOT, 'public/tiles', AREA, 'sim', 'morning'), 'tripinfo.bin'), np.uint16).reshape(-1, 2)
-        n = max(n, len(before)); arr = np.zeros((n, 2), np.uint16); arr[:len(before)] = before
+        n = max(n, len(before)); arr = np.zeros((n, 2), np.uint16)
+        left = np.array([t for t, *_ in D['trips']][:len(before)]) < begin
+        arr[:len(left)][left] = before[:len(left)][left]
     for k in cars: dur, loss, length = ti[k]; arr[k] = (min(65535, int(loss)), min(65535, int(length / 10)))
     f.write(arr.tobytes())
 log(f'done: {json.dumps(stats.get("teleports", {}))}')
