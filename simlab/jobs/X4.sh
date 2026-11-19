@@ -7,7 +7,7 @@
 #   linkfoot  the same with X3's lanes at the foot of three PR-18 exits
 set -x
 C=$ROOT/simlab/cut; gunzip -c $C/trips.xml.gz > $W/trips.xml
-route() { $BIN/duarouter -n $1 -r $W/trips.xml --additional-files $C/types-base.add.xml -o $2 --routing-algorithm CH --ignore-errors --no-warnings --no-step-log --repair --write-trips.junctions false; grep -c "<vehicle" $2; }
+route() { $BIN/duarouter -n $1 -r $W/trips.xml --additional-files $C/types-base.add.xml -o $2 --routing-algorithm CH --ignore-errors --no-warnings --no-step-log --repair --write-trips.junctions false; sed -i "/<vType /d" $2; grep -c "<vehicle" $2; }   # (the types come from types-base.add.xml)
 route $C/base2.net.xml.gz $W/ctl.rou.xml; route $C/link.net.xml.gz $W/link.rou.xml
 run() { # name net routes
   local D=$W/$1 net=$2 rou=$3; mkdir -p $D; ( cd $D
