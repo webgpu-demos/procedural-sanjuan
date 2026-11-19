@@ -20,7 +20,7 @@ import { PROP } from './shared/tileformat.js';
 import { Traffic, MAX_CARS } from './world/traffic.js';
 import { correctProfiles } from './shared/profile.js';
 import { findCuttings } from './shared/cuttings.js';
-import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup, accelCarriage } from './shared/roadway.js';
+import { laneDepth, mergeApproaches, accelLanes, accelQuads, accelLookup, accelCarriage, highwayLookup } from './shared/roadway.js';
 import { Collider, vehicleCapsule } from './world/collide.js';
 import { SimTraffic } from './world/simtraffic.js';
 import { Driver, placeOnRoad, Overhead } from './world/drive.js';
@@ -798,7 +798,7 @@ drawnDecks.lift = lift; // (the cars on it too)
 const PEOPLE = params.get('people') == null ? 1 : Number(params.get('people'));
 function loadPeople() {
   if (!(PEOPLE > 0)) return;
-  People.load({ base: `tiles/${AREA}`, surface: streamer.surface, lift, renderer, off: drawnDecks.ground.accel })
+  People.load({ base: `tiles/${AREA}`, surface: streamer.surface, lift, renderer, off: drawnDecks.ground.accel, never: highwayLookup(roads) })
     .then((p) => { if (!p) return; people = p; p.density = PEOPLE; p.enabled = peopleOn; scene.add(p.group); })
     .catch((e) => console.warn('the people stay at home:', e));
 }
