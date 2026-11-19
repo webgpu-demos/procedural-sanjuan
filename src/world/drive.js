@@ -301,6 +301,7 @@ export class Driver {
       return !hit ? null : !hit.vehicle ? 'wall' : this.ghost ? null : hit.vehicle;
     };
     const hit = Math.abs(v) > 0.05 ? meets(nx, nz) : null;
+    this.hit = 0; // (how hard it met something this frame, 0..1: heard, sound.js)
     if (!hit) { this.x = nx; this.z = nz; }
     else {
       // It slides along what it met: the way nearest its own that is clear (the side it steers to first), keeping
@@ -314,7 +315,8 @@ export class Driver {
         const x = this.x + Math.sin(co) * v * k * dt, z = this.z + Math.cos(co) * v * k * dt;
         if (meets(x, z)) continue;
         slid = true;
-        this.bump = Math.max(this.bump, Math.min(1, Math.abs(v) * Math.sin(a) / 15)); // (the camera feels what it lost)
+        this.hit = Math.min(1, Math.abs(v) * Math.sin(a) / 15);
+        this.bump = Math.max(this.bump, this.hit); // (the camera feels what it lost)
         this.x = x; this.z = z; this.course = co;
         // (no slower than a crawl: nose on to a trunk the only clear way is far round, a third of its speed a frame,
         // and it wore down to a stand against the tree with the throttle down)
@@ -324,7 +326,7 @@ export class Driver {
         if (!meets(x, z, this.heading + dh)) this.heading += dh;
       }
       if (!slid) {
-        this.bump = Math.min(1, Math.abs(v) / 15); // (the camera feels it)
+        this.bump = this.hit = Math.min(1, Math.abs(v) / 15); // (the camera feels it)
         v = -v * (hit === 'wall' ? 0.25 : 0.15);
         if (hit !== 'wall') v += hit.speed * Math.cos(hit.heading - this.course) * 0.4; // (pushed along by it)
       }
@@ -361,7 +363,9 @@ export class Driver {
     this.turned += (v * dt) / this.wheelR;
     this.wheel.array[0] = this.turned; this.wheel.array[1] = wheelBlur(Math.abs(v), this.wheelR); this.wheel.needsUpdate = true;
     this.mesh.material.userData.reverse.value = v < -0.3 ? 1 : 0;
-    this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: Math.abs(v), kmh: Math.abs(v) * 3.6, bump: this.bump, reversing: v < -0.3 };
+    this.view = { x: this.x, y: this.y, z: this.z, heading: this.heading, speed: Math.abs(v), kmh: Math.abs(v) * 3.6, bump: this.bump, reversing: v < -0.3,
+      // (for the ear, sound.js: the throttle; how far the tyres slide, the angle between where it points and where it goes by its speed; a knock)
+      throttle: gas, slip: Math.abs(Math.atan2(Math.sin(this.heading - this.course), Math.cos(this.heading - this.course))) * Math.abs(v), hit: this.hit };
   }
 }
 
