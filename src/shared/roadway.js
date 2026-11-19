@@ -224,6 +224,56 @@ export function paintOf(e, lanes, width = pavedHalf(e, lanes)) {
   return Object.assign(lines, { lanes: n, lw, median });
 }
 
+// ---------------------------------------------------------------- where nobody walks
+// The expressway's paving, for the people on foot (src/world/people.js): (x, z) => whether a point is on it. The
+// walks are laid along the streets' sidewalks, their corners and their medians (tools/pipeline/walkways.mjs), and
+// where a street meets the expressway or runs beside its ramps some 500 of their 178,000 stretches came out across
+// the lanes: people strolling over six lanes of PR-26. Not on it: a point under or over a bridge (the expressway's
+// own, which stands over the street; a street's, which carries its sidewalks over the expressway), in a tunnel, or
+// within END metres of where a ramp ends on a street, where its mouth is crossed as any side street's is.
+export function highwayLookup(roads, END = 28) {
+  const CELL = 48, cells = new Map(), over = new Map(), lanesOf = roadLanes(roads.edges), key = (i, j) => i * 65536 + j;
+  const file = (map, s, r) => {
+    for (let i = Math.floor((Math.min(s[0], s[2]) - r) / CELL); i <= Math.floor((Math.max(s[0], s[2]) + r) / CELL); i++)
+      for (let j = Math.floor((Math.min(s[1], s[3]) - r) / CELL); j <= Math.floor((Math.max(s[1], s[3]) + r) / CELL); j++) { const k = key(i, j); let l = map.get(k); if (!l) map.set(k, (l = [])); l.push(s); }
+  };
+  // the nodes where a street is, and how many stretches of expressway meet at each: a ramp that ends on a street, no
+  // other going on from there, has a mouth (not one a driveway joins on its way)
+  const street = new Set(), fastAt = new Map();
+  for (const e of roads.edges) {
+    if (e.highway.startsWith('motorway')) for (const n of [e.a, e.b]) fastAt.set(n, (fastAt.get(n) ?? 0) + 1);
+    else if (/^(trunk|primary|secondary|tertiary|unclassified|residential|living_street)/.test(e.highway)) { street.add(e.a); street.add(e.b); }
+  }
+  for (const e of roads.edges) {
+    if (e.tunnel) continue;
+    const fast = e.highway.startsWith('motorway'), p = e.pts;
+    if (!fast && !e.bridge) continue;
+    const half = pavedHalf(e, lanesOf(e)).half, ramp = e.highway.endsWith('_link');
+    const ends = fast && ramp ? [[e.a, p[0], p[2]], [e.b, p.at(-3), p.at(-1)]].filter(([n]) => street.has(n) && fastAt.get(n) === 1) : [];
+    for (let k = 3; k < p.length; k += 3) {
+      // [x0, z0, x1, z1, reach, ...the ramp's ends on a street]
+      if (!fast) file(over, [p[k - 3], p[k - 1], p[k], p[k + 2], half + 1.5], half + 1.5);
+      else if (e.bridge || e.flyover) file(over, [p[k - 3], p[k - 1], p[k], p[k + 2], half + 0.5], half + 0.5);
+      else file(cells, [p[k - 3], p[k - 1], p[k], p[k + 2], half - 0.3, ...ends.flatMap(([, x, z]) => [x, z])], half);
+    }
+  }
+  const near = (s, x, z) => { const dx = s[2] - s[0], dz = s[3] - s[1], t = Math.max(0, Math.min(1, ((x - s[0]) * dx + (z - s[1]) * dz) / (dx * dx + dz * dz || 1))); return (x - s[0] - dx * t) ** 2 + (z - s[1] - dz * t) ** 2 <= s[4] * s[4]; };
+  return (x, z) => {
+    const k = key(Math.floor(x / CELL), Math.floor(z / CELL)), list = cells.get(k);
+    if (!list) return false;
+    let on = false;
+    for (const s of list) {
+      if (!near(s, x, z)) continue;
+      let mouth = false;
+      for (let q = 5; q < s.length; q += 2) if ((s[q] - x) ** 2 + (s[q + 1] - z) ** 2 <= END * END) mouth = true;
+      if (!mouth) { on = true; break; }
+    }
+    if (!on) return false;
+    for (const s of over.get(k) ?? []) if (near(s, x, z)) return false;
+    return true;
+  };
+}
+
 // ---------------------------------------------------------------- acceleration lanes
 // Where a ramp joins the expressway in fewer lanes than they bring (OSM draws most so: the expressway goes on in
 // its own lanes), the ramp's lane carries on alongside for ACCEL metres before it ends, as it does on the road: the

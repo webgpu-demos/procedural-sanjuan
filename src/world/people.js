@@ -366,8 +366,10 @@ function avatarGeometries(gltf) {
 // off(x, z): whether a point is where no one walks now (an acceleration lane paved over the sidewalk: main.js, src/shared/
 // roadway.js accelLanes): a link mostly so, but for a crossing, is left out (kept in its block's list, which crossings
 // and spots index).
+// never(x, z): whether a point is on the expressway's paving (roadway.js highwayLookup): a link 0.8 m or more on it is
+// left out, whatever its kind.
 class Walks {
-  constructor(base, off = null) { this.base = base; this.off = off; this.nodes = new Map(); this.blocks = new Map(); this.links = []; this.spots = []; this.cells = new Map(); this.meta = null; }
+  constructor(base, off = null, never = null) { this.base = base; this.off = off; this.never = never; this.nodes = new Map(); this.blocks = new Map(); this.links = []; this.spots = []; this.cells = new Map(); this.meta = null; }
   async init() {
     this.meta = await fetch(`${this.base}/walks.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     if (!this.meta) return false;
@@ -420,6 +422,15 @@ class Walks {
           for (let j = 0; j < k; j++) { const f = (j + 0.5) / k; if (this.off(line[q - 2] + (line[q] - line[q - 2]) * f, line[q - 1] + (line[q + 1] - line[q - 1]) * f)) on += d / k; }
         }
         l.off = on * 2 > l.len || on > 10; // (most of it, or 10 m: who walks it walks in the lane)
+      }
+      // (and never over the expressway's lanes, a crossing no more than a sidewalk: roadway.js highwayLookup)
+      if (this.never && !l.off && l.len > 0) {
+        let on = 0;
+        for (let q = 2; q < line.length && on < 0.8; q += 2) {
+          const d = cum[q / 2] - cum[q / 2 - 1], k = Math.max(1, Math.ceil(d / 0.75));
+          for (let j = 0; j < k; j++) { const f = (j + 0.5) / k; if (this.never(line[q - 2] + (line[q] - line[q - 2]) * f, line[q - 1] + (line[q + 1] - line[q - 1]) * f)) on += d / k; }
+        }
+        if (on >= 0.8) l.off = true;
       }
       if (!l.off) { a.links.push(l); b.links.push(l); }
       block.links.push(l);
@@ -493,8 +504,8 @@ function nearestOn(l, x, z) {
 // ---------------------------------------------------------------- the crowd
 export class People {
   // base: the area's tiles; surface, lift: the streets' heights (streamer); models: the avatars' folder
-  static async load({ base, models = 'models/people/crowd', surface, lift, renderer, off = null }) {
-    const walks = new Walks(base, off);
+  static async load({ base, models = 'models/people/crowd', surface, lift, renderer, off = null, never = null }) {
+    const walks = new Walks(base, off, never);
     const [ok, manifest] = await Promise.all([walks.init(), fetch(`${models}/people.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
     if (!ok || !manifest) return null;
     const p = new People(walks, manifest, models, surface, lift, renderer);
