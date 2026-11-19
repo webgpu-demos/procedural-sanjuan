@@ -16,7 +16,18 @@ const roads = { edges: [road('motorway', 150, 4), street] };
 const strips = findCuttings(roads, ground, new Map());
 assert.equal(strips.length, 1, 'the trench is one cutting');
 assert.ok(strips[0].lines.length >= 4, 'with its lane lines');
-assert.equal(findCuttings({ edges: [roads.edges[0]] }, ground, new Map()).length, 0, 'no street over it: a cut through a hill, left as it is');
+// no street over it: a cut through a hill, its road flat and a bank up to the ground as it is, no wall
+{
+  const hill = findCuttings({ edges: [roads.edges[0]] }, ground, new Map());
+  assert.ok(hill.length === 1 && hill[0].graded && !strips[0].graded, 'without the street, a graded cut');
+  const g2 = { ...grid }, f = cutField(hill, g2); g2.cuts = f.level;
+  let flat = 0, top = 0;
+  for (let x = 120; x <= 480; x += 7) { for (let l = -8; l <= 8; l += 1) flat = Math.max(flat, Math.abs(meshHeight(g2, x, 150 + l) - meshHeight(g2, x, 150))); for (const l of [-1, 1]) { const run = hill[0].pts[l > 0 ? 7 : 8]; top = Math.max(top, Math.abs(meshHeight(g2, x, 150 + l * (8.2 + run + 0.3)) - latticeHeight(grid, x, 150 + l * (8.2 + run + 0.3)))); } }
+  assert.ok(flat < 0.01 && top < 0.01, `its paving flat (${flat.toFixed(3)} m) and the ground at the bank's top as it was (${top.toFixed(3)} m)`);
+  const t2 = f.forTile(1, 0); let high = 0;
+  for (let k = 0; k < t2.walls.length; k += 5) high = Math.max(high, Math.abs(f.floor(t2.walls[k], t2.walls[k + 1]) - latticeHeight(grid, t2.walls[k], t2.walls[k + 1])));
+  assert.ok(high < 1, `and no wall along it (${high.toFixed(2)} m at most)`);
+}
 assert.equal(findCuttings(roads, ground, new Map([[roads.edges[0], [0, Infinity]]])).length, 0, 'a road drawn as a structure is not cut');
 
 const field = cutField(strips, grid);
@@ -34,8 +45,8 @@ const tri = [[300, 130], [340, 130], [300, 175]], s = t.split(tri);
 assert.ok(s && s.ins.length && s.out.length, 'a triangle across the outline is split');
 assert.ok(Math.abs(s.ins.reduce((a, p) => a + area(p), 0) + s.out.reduce((a, p) => a + area(p), 0) - area(tri)) < 1e-6, 'into pieces of the same area');
 assert.equal(t.split([[300, 180], [320, 180], [300, 200]]), null, 'one clear of it is left whole');
-const sides = new Set(); for (let k = 0; k < t.walls.length; k += 4) sides.add(t.walls[k + 1] < 150 ? 'north' : 'south');
+const sides = new Set(); for (let k = 0; k < t.walls.length; k += 5) sides.add(t.walls[k + 1] < 150 ? 'north' : 'south');
 assert.equal(sides.size, 2, 'walls on both sides');
 const paint = t.paint(() => false);
 assert.ok(paint.white.length > 20 && paint.yellow.length > 0 && t.paint(() => true).white.length === 0, 'lane lines where the tile has none of its own');
-console.log(`cuttings: ok (1 stretch, ${(strips[0].pts.length / 7 - 1) * 4} m; the paving ${before.toFixed(2)} m up its sides before, ${worst.toFixed(3)} m after)`);
+console.log(`cuttings: ok (1 stretch, ${(strips[0].pts.length / 9 - 1) * 4} m; the paving ${before.toFixed(2)} m up its sides before, ${worst.toFixed(3)} m after)`);
