@@ -18,7 +18,29 @@ function clip(poly, distance) {
   return out;
 }
 
-export function createDraper(grid, surface, tileSize = TILE) {
+// cuts: a tile's cuttings (src/shared/cuttings.js cutField().forTile, with the field's `fine`, `corner` and `inside`):
+// what lies inside their outline is split along the floor's own lattice and takes the floor's height. Every point
+// emitted then carries its height as `y` (a point on the outline belongs to the floor in one piece and to the ground
+// in the next: its place alone does not say which).
+export function createDraper(grid, surface, tileSize = TILE, cuts = null) {
+  const base = plainDraper(grid, surface, tileSize);
+  if (!cuts) return base;
+  const floor = plainDraper({ step: cuts.fine }, cuts.corner, tileSize);
+  const on = (d, emit) => (p, q, r) => { for (const v of [p, q, r]) if (v.y === undefined) v.y = d.height(v[0], v[1]); emit(p, q, r); };
+  const fan = (piece, d, emit) => { for (let k = 1; k + 1 < piece.length; k++) d.triangle(piece[0], piece[k], piece[k + 1], on(d, emit)); };
+  return {
+    height: (x, z) => (cuts.inside(x, z) ? floor.height(x, z) : base.height(x, z)),
+    triangle: (a, b, c, emit) => {
+      const s = cuts.split([a, b, c]);
+      if (!s) { base.triangle(a, b, c, on(base, emit)); return; }
+      // (a corner of the polygon itself is used again by the triangles round it: copies, each with its own height)
+      for (const piece of s.out) fan(piece.map((v) => v.slice()), base, emit);
+      for (const piece of s.ins) fan(piece.map((v) => v.slice()), floor, emit);
+    },
+    segment: base.segment,
+  };
+}
+function plainDraper(grid, surface, tileSize) {
   const step = tileSize / Math.ceil(tileSize / grid.step);
   const heights = new Map();
   const node = (i, j) => {

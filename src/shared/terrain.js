@@ -100,6 +100,15 @@ export function padField(pads) {
 // drives on the ground takes this, or it sinks into the drawn ground or floats over it.
 // `at(x, z)`: the height at the lattice's corners (the bilinear grid by default; the decks' surface for roads).
 export function meshHeight(g, x, z, tileSize = 256, at = null) {
+  // (in a cutting, src/shared/cuttings.js: its floor, unless a deck's corridor holds the surface up over it)
+  if (g.cuts) {
+    const c = g.cuts(x, z);
+    if (c !== undefined) return at && latticeHeight(g, x, z, tileSize, at) > latticeHeight(g, x, z, tileSize) + 0.5 ? latticeHeight(g, x, z, tileSize, at) : c;
+  }
+  return latticeHeight(g, x, z, tileSize, at);
+}
+// The lattice alone: the terrain as its triangles are, whatever is cut into it.
+export function latticeHeight(g, x, z, tileSize = 256, at = null) {
   const step = tileSize / Math.ceil(tileSize / g.step);
   const i = Math.floor(x / step), j = Math.floor(z / step), u = x / step - i, v = z / step - j;
   const x0 = i * step, z0 = j * step, x1 = x0 + step, z1 = z0 + step;

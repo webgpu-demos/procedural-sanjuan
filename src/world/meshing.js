@@ -3,7 +3,7 @@
 import earcut from 'earcut';
 import { clearRoadway } from '../shared/roadway.js';
 import { AREA, SPORT, BARRIER, MATERIAL, BFLAG } from '../shared/tileformat.js';
-import { sampleGrid } from '../shared/terrain.js';
+import { sampleGrid, latticeHeight } from '../shared/terrain.js';
 import { KIND, CAT, WALL, GROUND, WET } from './constants.js';
 import { buildTower } from './tower.js';
 import { createDraper } from './drape.js';
@@ -171,7 +171,7 @@ export function roadMesh(areas, grid, surface, walls = [], drape = createDraper(
   const pos = new Buf(), nor = new Buf(), col = new Buf(), lay = new Buf();
   let deck = -1; // deck of the parapet being meshed
   const emit = (p, style, on = drape) => {
-    const y = on.height(p[0], p[1]) + style.lift;
+    const y = (p.y ?? on.height(p[0], p[1])) + style.lift; // (y: the draper's own, in a tile with a cutting: drape.js)
     pos.push(p[0], y, p[1]); nor.push(...groundNormal(grid, p[0], p[1])); col.push(...style.color); lay.push(style.layer);
   };
   // Vertical walls are independent of the ground-layer triangulation.
@@ -789,16 +789,71 @@ function joinMeshes(a, b) {
   return out;
 }
 
+// A tile's cuttings (src/shared/cuttings.js): their floor, the terrain's own triangles laid on it inside the outline
+// (under the paving, and showing between two carriageways or beside a ramp), and the walls along the outline from the
+// floor up to the ground beside it, with a parapet on the high ones. Arrays like roadMesh()'s.
+const CUT_FLOOR = { color: lin([0.36, 0.36, 0.38]), layer: GROUND.ASPHALT }, CUT_WALL = { color: lin([0.62, 0.61, 0.58]), layer: GROUND.CONCRETE };
+const CUT_PARAPET = 0.9, CUT_HIGH = 1.2;
+function cuttingMesh(cu, field, grid, tx, tz, tileSize) {
+  const pos = new Buf(), nor = new Buf(), col = new Buf(), lay = new Buf();
+  const put = (x, y, z, n, style) => { pos.push(x, y, z); nor.push(...n); col.push(...style.color); lay.push(style.layer); };
+  const floor = createDraper({ step: field.fine }, field.corner, tileSize), UP = [0, 1, 0];
+  const seg = Math.ceil(tileSize / grid.step), d = tileSize / seg;
+  for (let j = 0; j < seg; j++)
+    for (let i = 0; i < seg; i++) {
+      const x0 = tx * tileSize + i * d, z0 = tz * tileSize + j * d, a = [x0, z0], b = [x0 + d, z0], c = [x0, z0 + d], e = [x0 + d, z0 + d];
+      for (const tri of [[a, c, b], [b, c, e]]) {
+        const s = cu.split(tri);
+        if (!s) continue;
+        for (const piece of s.ins) for (let k = 1; k + 1 < piece.length; k++)
+          floor.triangle(piece[0], piece[k], piece[k + 1], (p, q, r) => { for (const v of [p, q, r]) put(v[0], floor.height(v[0], v[1]), v[1], UP, CUT_FLOOR); });
+      }
+    }
+  const w = cu.walls;
+  for (let k = 0; k < w.length; k += 4) {
+    const x0 = w[k], z0 = w[k + 1], x1 = w[k + 2], z1 = w[k + 3], len = Math.hypot(x1 - x0, z1 - z0) || 1;
+    // (the cutting on the left hand: the wall's face looks into it)
+    const n = [-(z1 - z0) / len, 0, (x1 - x0) / len];
+    const fa = floor.height(x0, z0), fb = floor.height(x1, z1), ga = latticeHeight(grid, x0, z0, tileSize), gb = latticeHeight(grid, x1, z1, tileSize);
+    if (Math.abs(ga - fa) < 0.03 && Math.abs(gb - fb) < 0.03) continue;
+    const up = Math.max(ga - fa, gb - fb) > CUT_HIGH ? CUT_PARAPET : 0.02;
+    const A = [x0, Math.min(fa, ga) - 0.05, z0], B = [x1, Math.min(fb, gb) - 0.05, z1], C = [x1, Math.max(fb, gb) + up, z1], D = [x0, Math.max(fa, ga) + up, z0];
+    for (const [quad, sign] of [[[A, B, C, A, C, D], 1], [[B, A, D, B, D, C], -1]])
+      for (const p of quad) put(p[0], p[1], p[2], [n[0] * sign, 0, n[2] * sign], CUT_WALL);
+  }
+  return { position: pos.done(), normal: nor.done(), color: col.done(), aLayer: lay.done() };
+}
+
 // channels: prepareChannels() (src/world/channels.js), or null; carriage: carriageLookup() (src/shared/carriage.js), the
 // carriageways no paving stands on, or null
-export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z), channels = null, carriage = null) {
+// cuttings: cutField() (src/shared/cuttings.js), or null: the expressway's cuttings, their floor and walls
+export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(grid, x, z), channels = null, carriage = null, cuttings = null) {
   // (the default surface ignores decks: fine for tests, the worker passes makeSurface())
-  const drape = createDraper(grid, surface, tileSize), ground = createDraper(grid, (x, z) => sampleGrid(grid, x, z), tileSize);
+  const cu = cuttings?.forTile(tile.tx, tile.tz) ?? null, cuts = cu && { ...cu, fine: cuttings.fine, corner: cuttings.corner, inside: cuttings.inside };
+  const drape = createDraper(grid, surface, tileSize, cuts), ground = createDraper(grid, (x, z) => sampleGrid(grid, x, z), tileSize);
   tile = { ...tile, ...clearRoadway(tile) }; // (nothing standing out in the lanes: src/shared/roadway.js)
+  if (cu) { // (the lane lines of a cutting the tiles left bare: src/shared/cuttings.js)
+    const C = 4, have = new Set(), key = (i, j) => i * 65536 + j;
+    for (const a of tile.areas) if (isPaint(a)) for (const rings of a.polygons) { const r = rings[0]; for (let k = 0; k < r.length; k += 2) have.add(key(Math.floor(r[k] / C), Math.floor(r[k + 1] / C))); }
+    const has = (x, z) => { const i = Math.floor(x / C), j = Math.floor(z / C); for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) if (have.has(key(i + u, j + v))) return true; return false; };
+    const { white, yellow } = cu.paint(has), more = [];
+    if (white.length) more.push({ kind: AREA.MARK_WHITE, code: 0, polygons: white.map((r) => [r]) });
+    if (yellow.length) more.push({ kind: AREA.MARK_YELLOW, code: 0, polygons: yellow.map((r) => [r]) });
+    if (more.length) tile = { ...tile, areas: [...tile.areas, ...more] };
+  }
   const ch = channels?.forTile(tile.tx, tile.tz), cut = ch?.cut ?? null;
+  // the terrain's triangles: what the channels leave of what the cuttings leave
+  const left = !cu ? cut : (P) => {
+    const s = cu.split(P);
+    if (!s) return cut ? cut(P) : null;
+    if (!cut) return s.out;
+    const out = [];
+    for (const piece of s.out) out.push(...(cut(piece) ?? [piece]));
+    return out;
+  };
   return {
-    terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize, cut),
-    roads: joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut, ground, carriage), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null),
+    terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize, left),
+    roads: joinMeshes(joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut, ground, carriage), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null), cu ? cuttingMesh(cu, cuttings, grid, tile.tx, tile.tz, tileSize) : null),
     paint: roadMesh(tile.areas.filter(isPaint), grid, surface, [], drape),
     decals: decalMesh(tile.props, drape),
     buildings: buildingMesh(tile.buildings, tile.tx, tile.tz),

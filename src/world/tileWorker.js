@@ -6,7 +6,9 @@ import { padField } from '../shared/terrain.js';
 import { mergeArrows, accelTile, accelLookup } from '../shared/roadway.js';
 import { prepareChannels } from './channels.js';
 import { carriageLookup } from '../shared/carriage.js';
+import { cutField } from '../shared/cuttings.js';
 
+let cuttings = null; // (the expressway's cuttings: src/shared/cuttings.js)
 let grid = null, surface = null, merging = null, channels = null; // merging: the turn arrows painted where nothing turns (roadway.js)
 let accel = null; // the acceleration lanes' quads (roadway.js accelLanes): paved in the tiles they cross
 let carriage = null; // the carriageways no paving stands on (src/shared/carriage.js)
@@ -139,6 +141,7 @@ self.onmessage = async ({ data: m }) => {
   if (m.type === 'merges') { merging = mergeArrows(new Float32Array(m.segs)); return; }
   if (m.type === 'carriage') { carriage = carriageLookup(new Float32Array(m.segs)); return; }
   if (m.type === 'pads') { grid.pads = padField(m.pads); return; }
+  if (m.type === 'cuttings') { cuttings = m.strips.length ? cutField(m.strips, grid, m.tileSize) : null; grid.cuts = cuttings?.level ?? null; return; }
   if (m.type === 'accel') { const pave = new Float32Array(m.pave); accel = { pave, line: new Float32Array(m.line), on: accelLookup(pave) }; return; }
   if (m.type === 'tile' || m.type === 'blocks') {
     try {
@@ -148,7 +151,7 @@ self.onmessage = async ({ data: m }) => {
       const tile = decodeTile(await res.arrayBuffer());
       if (merging) tile.props = tile.props.filter((p) => !merging(p));
       const paved = accel ? accelTile(tile, accel, m.tileSize, accel.on) : tile;
-      const mesh = buildTile(paved, grid, m.tileSize, surface, channels, carriage);
+      const mesh = buildTile(paved, grid, m.tileSize, surface, channels, carriage, cuttings);
       if (m.meshUrl) mesh.models = await models(m.meshUrl);
       for (const k of ['roads', 'paint', 'decals']) mesh[k] = weld(mesh[k]);
       if (mesh.buildings.details) mesh.buildings.details = weld(mesh.buildings.details);

@@ -8,6 +8,7 @@ import { clearLanes } from '../shared/roadway.js';
 import { solidsOf } from './collide.js';
 import { tileKey } from '../shared/geo.js';
 import { meshHeight, settlePads } from '../shared/terrain.js';
+import { cutField } from '../shared/cuttings.js';
 import { makeSurface, makeCover } from '../shared/decks.js';
 import { SIGN_LOD_DISTANCE } from './signs.js';
 import { WET } from './constants.js';
@@ -121,6 +122,14 @@ export class Streamer {
   // pads: where the decks land on the ground, the ground held level with them (src/shared/terrain.js padField); before
   // the first tile, and before anything stands on the ground
   pads(pads) { const keep = settlePads(this.grid, pads); for (const w of this.workers) w.postMessage({ type: 'pads', pads: keep }); return keep; }
+
+  // strips: the expressway's cuttings (src/shared/cuttings.js findCuttings): their floor is the ground inside them, here
+  // and in the tiles; after the pads, before the first tile
+  cuttings(strips) {
+    this.cut = strips.length ? cutField(strips, this.grid, this.manifest.tileSize) : null;
+    this.grid.cuts = this.cut?.level ?? null;
+    for (const w of this.workers) w.postMessage({ type: 'cuttings', strips, tileSize: this.manifest.tileSize });
+  }
 
   // Terrain height, and the height of whatever one stands on (the terrain, or a bridge deck).
   ground(x, z) { return meshHeight(this.grid, x, z); } // (the terrain as its mesh draws it: src/shared/terrain.js)
