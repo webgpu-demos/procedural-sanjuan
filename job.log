@@ -1,0 +1,51 @@
++ C=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut
++ gunzip -c /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base.rou.xml.gz
++ run base2 /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz types-base.add.xml
++ local D=/mnt/sim/base2 net=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz ty=types-base.add.xml
++ wait
++ shift 3
++ mkdir -p /mnt/sim/base2
++ run foot /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/foot.net.xml.gz types-base.add.xml
++ local D=/mnt/sim/foot net=/home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/foot.net.xml.gz ty=types-base.add.xml
++ shift 3
++ mkdir -p /mnt/sim/foot
++ cd /mnt/sim/base2
++ cd /mnt/sim/foot
++ echo '<additional><edgeData id="h" freq="900" begin="18000" file="edgedata.xml" excludeEmpty="true" writeAttributes="speed sampledSeconds entered traveltime"/></additional>'
++ echo '<additional><edgeData id="h" freq="900" begin="18000" file="edgedata.xml" excludeEmpty="true" writeAttributes="speed sampledSeconds entered traveltime"/></additional>'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz -r /mnt/sim/base.rou.xml --begin 16200 --end 30600 --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-base.add.xml,out.add.xml --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --device.rerouting.probability 1 --device.rerouting.period 300 --device.rerouting.threads 1 --statistic-output stats.xml --duration-log.statistics --no-warnings --step-log.period 1800
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/sumo -n /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/foot.net.xml.gz -r /mnt/sim/base.rou.xml --begin 16200 --end 30600 --additional-files /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/types-base.add.xml,out.add.xml --time-to-teleport 240 --ignore-route-errors --max-depart-delay 900 --lanechange.duration 2.5 --time-to-impatience 90 --ignore-junction-blocker 15 --routing-algorithm astar --device.rerouting.probability 1 --device.rerouting.period 300 --device.rerouting.threads 1 --statistic-output stats.xml --duration-log.statistics --no-warnings --step-log.period 1800
++ echo 'exit 0'
++ echo 'exit 0'
++ for n in base2 foot
++ mkdir -p /mnt/res/base2
++ gzip -c /mnt/sim/base2/edgedata.xml
++ cp /mnt/sim/base2/stats.xml /mnt/res/base2/
++ tr '\r' '\n'
++ grep -v '^Step #'
++ for n in base2 foot
++ mkdir -p /mnt/res/foot
++ gzip -c /mnt/sim/foot/edgedata.xml
++ cp /mnt/sim/foot/stats.xml /mnt/res/foot/
++ tr '\r' '\n'
++ grep -v '^Step #'
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python simlab/cut/evalcut.py /home/runner/work/procedural-sanjuan/procedural-sanjuan /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/base2.net.xml.gz base2=/mnt/res/base2
++ /home/runner/work/procedural-sanjuan/procedural-sanjuan/.venv-sim/bin/python simlab/cut/evalcut.py /home/runner/work/procedural-sanjuan/procedural-sanjuan /home/runner/work/procedural-sanjuan/procedural-sanjuan/simlab/cut/foot.net.xml.gz foot=/mnt/res/foot
++ cat /mnt/res/eval.txt
+516 counted roads in the cut-out
+== base2: inserted 110626 of 123526, running at 8:30 16871, teleports 985 (jam 304, yield 478), time loss 386.69 s, speed 10.98
+  all              n  516  simulated/counted 0.37  GEH<5   9%  GEH<10  19%
+  freeways         n  190  simulated/counted 0.34  GEH<5   5%  GEH<10   9%
+  PR-22 mainline   n   23  simulated/counted 0.39  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.32  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.43  GEH<5  11%  GEH<10  25%
+  collectors       n   21  simulated/counted 0.37  GEH<5   5%  GEH<10  19%
+516 counted roads in the cut-out
+== foot: inserted 110527 of 123526, running at 8:30 16347, teleports 921 (jam 318, yield 396), time loss 368.11 s, speed 11.03
+  all              n  516  simulated/counted 0.37  GEH<5  10%  GEH<10  19%
+  freeways         n  190  simulated/counted 0.34  GEH<5   6%  GEH<10   8%
+  PR-22 mainline   n   23  simulated/counted 0.40  GEH<5   0%  GEH<10   0%
+  PR-18 mainline   n   29  simulated/counted 0.32  GEH<5   0%  GEH<10   0%
+  arterials        n  299  simulated/counted 0.43  GEH<5  13%  GEH<10  25%
+  collectors       n   21  simulated/counted 0.45  GEH<5   5%  GEH<10  19%
+exit 0 after 66 min
