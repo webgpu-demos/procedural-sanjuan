@@ -108,12 +108,14 @@ export class CitySound {
       const v = car.speed;
       if (this.gear < GEARS.length - 1 && v > GEARS[this.gear] * 0.92) this.gear++;
       else if (this.gear > 0 && v < GEARS[this.gear - 1] * 0.62) this.gear--;
-      const rev = Math.min(1, v / GEARS[this.gear]), fire = (900 + 5600 * rev) / 30;
+      const rev = Math.min(1, v / GEARS[this.gear]), fire = (850 + 2900 * rev) / 30; // (kept low: at 6,500 a minute it whined over everything)
       this.saws[0].frequency.setTargetAtTime(fire / 2, now, 0.07); this.saws[1].frequency.setTargetAtTime(fire * 1.006, now, 0.07);
-      this.engTone.frequency.setTargetAtTime(260 + 900 * rev + 700 * car.throttle, now, 0.08);
-      this.engine.gain.setTargetAtTime(0.07 + 0.055 * rev + 0.095 * car.throttle, now, 0.08);
+      // (a hum under the city, not over it: a third of the level it had, and darker; the saws' upper harmonics
+      // at full throttle were the loudest thing in the mix)
+      this.engTone.frequency.setTargetAtTime(150 + 260 * rev + 170 * car.throttle, now, 0.15);
+      this.engine.gain.setTargetAtTime(0.022 + 0.014 * rev + 0.024 * car.throttle, now, 0.15);
       this.wind.gain.setTargetAtTime(0.09 * Math.min(1, v / 50) ** 2, now, 0.3);
-      this.squeal.gain.setTargetAtTime(0.11 * Math.min(1, Math.max(0, (car.slip - 3) / 6)), now, 0.05);
+      this.squeal.gain.setTargetAtTime(0.06 * Math.min(1, Math.max(0, (car.slip - 3) / 6)), now, 0.05);
       if (car.hit > 0.12 && now - this.knocked > 0.25) this.knock(car.hit);
     } else for (const g of [this.engine, this.wind, this.squeal]) g.gain.setTargetAtTime(0, now, 0.15);
     // The power at the camera: gone, at once (the grid's first stumble); back (the clock taken back before the

@@ -259,14 +259,20 @@ export class Driver {
     // Over its top speed the engine's share above is negative: it comes down on its own.)
     v = THREE.MathUtils.clamp(v, -REVERSE, BOOST + 2);
     // steering: the lock closes as the speed rises; the wheel comes back by itself
-    const lock = 0.6 / (1 + Math.abs(v) / 11);
-    this.steer += (steerIn * lock - this.steer) * (1 - Math.exp(-dt * (steerIn ? 5 : 7)));
+    // (the lock closed too soon and the wheel came over too slowly: it still felt slow to turn. It closes half as
+    // fast with speed now, and the wheel answers in a tenth of a second)
+    const lock = 0.62 / (1 + Math.abs(v) / 20);
+    this.steer += (steerIn * lock - this.steer) * (1 - Math.exp(-dt * (steerIn ? 10 : 9)));
     // (and no tighter than a game's tyres hold: 20 m/s² across, 28 let go with the handbrake. The wheel alone turned
     // it at 31 m/s² at 20 m/s and 8 g flat out, a U-turn 23 m wide at 158 km/h. A real car's 8.5 held it to half its
     // turn at 50 km/h and a fifth at 100, where it is in seconds, and it barely turned: a right angle took 2.6 s at
     // 50 km/h, 5 s at 100; now 1.4 s, as before that limit, and 2.3 s.)
-    const most = (hand ? 28 : 20) / Math.max(Math.abs(v), 3);
-    const yaw = THREE.MathUtils.clamp((v / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.7 : 1), -most, most);
+    // Since: 30 across (40 with the handbrake), a right angle in 0.9 s at 50 km/h and 1.2 s at 100 (1.3 and 1.7); and at a crawl
+    // the car turns as if it rolled a little faster than it does (up to 2.5 m/s more, gone by 12 m/s), or pulling
+    // out of a parking space or round a corner at walking pace took four seconds a right angle (1.7 now at 7 km/h).
+    const av = Math.abs(v), most = (hand ? 40 : 30) / Math.max(av, 3);
+    const vy = Math.sign(v) * (av + 2.5 * smooth(0.3, 2, av) * (1 - smooth(5, 12, av)));
+    const yaw = THREE.MathUtils.clamp((vy / WHEELBASE) * Math.tan(this.steer) * (hand ? 1.7 : 1), -most, most);
     this.heading += yaw * dt;
     // the course follows the heading with grip (the handbrake lets go of it: a slide)
     const grip = hand ? 1.6 : 9;
