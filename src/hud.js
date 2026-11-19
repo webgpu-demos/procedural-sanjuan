@@ -82,6 +82,10 @@ const CSS = `
 #hud-map .hover { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font-size: 12.5px; color: var(--hud-text-2); background: rgba(0,0,0,0.5); padding: 7px 12px; border-radius: 10px; pointer-events: none; }
 #hud-br .cluster, #hud-bl .radar { box-sizing: border-box; }
 .touch #hud-bc .hints { display: none; }
+/* (a window narrower than the bar and what stands beside it: at 800 px the keys' hints ran over the map and under the
+   speed, and the ways round the city were cut off at "Manejar", "Volar" off the screen) */
+@media (max-width: 1240px) { #hud-bc .hints { display: none; } }
+@media (max-width: 1060px) { #hud-bc .mode span.l, #hud-bc .mode kbd { display: none; } }
 #hud-bl { pointer-events: none; } #hud-bl .radar { pointer-events: auto; } /* (the signs are not buttons: a touch goes through them) */
 .touch.roam #xp-dock { display: none; } /* (roaming by touch: the clock's dock gives the screen to the thumbs; back in Explorar) */
 @media (max-width: 760px) { .touch.roam #hud-bl { top: 76px; bottom: auto; flex-direction: column-reverse; } }

@@ -78,6 +78,16 @@ body:not(.hud-off) #xp-cap { bottom: 140px; } /* (free roaming: above the HUD's 
   border-radius: 14px; background: rgba(8,12,20,0.86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 40px rgba(0,0,0,0.45);
   font-size: 13px; line-height: 1.5; color: rgba(246,241,231,0.85); }
 #xp-truth[hidden] { display: none; }
+#xp-legend { position: fixed; left: 20px; top: 108px; z-index: 930; width: 250px; padding: 11px 13px; border-radius: 12px; background: rgba(8,12,20,0.72);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-size: 12px; color: rgba(246,241,231,0.8); opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+#xp-legend.on { opacity: 1; }
+.hud-off #xp-legend, .hud-hidden #xp-legend { opacity: 0 !important; }
+#xp-legend .h { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #5fe0d0; margin-bottom: 7px; }
+#xp-legend .r { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+#xp-legend .r i { width: 22px; height: 6px; border-radius: 3px; flex: none; }
+#xp-legend .r b { width: 58px; color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+#xp-legend .n { margin-top: 8px; font-size: 11px; line-height: 1.45; color: rgba(246,241,231,0.58); }
+@media (max-width: 760px) { #xp-legend { top: auto; bottom: 240px; left: 12px; width: 210px; } #xp-legend .n { display: none; } }
 #xp-truth { max-height: calc(100vh - 190px); overflow-y: auto; box-sizing: border-box; }
 #xp-truth .x { position: absolute; top: 10px; right: 12px; padding: 4px 8px; border-radius: 8px; color: rgba(246,241,231,0.7); font-size: 14px; }
 #xp-truth .x:hover { background: rgba(255,255,255,0.12); }
@@ -153,6 +163,13 @@ export class Experience {
       <button class="act truth">📊 ¿Qué tan real?</button>
     </div>`);
     this.truth = el(`<div id="xp-truth" class="xp" hidden></div>`);
+    // what the jam map's colours mean (speedmap.js colour): shown with the map
+    this.legend = el(`<div id="xp-legend" class="xp"><div class="h">Tapón · velocidad simulada / velocidad libre</div>
+      ${[['#26d973', '75–100%', 'fluye · flowing'], ['#fad133', '50–75%', 'lento · slowing'], ['#ff731f', '30–50%', 'pesado · heavy'], ['#f21a0d', '15–30%', 'tapón · jammed'], ['#9e0505', '&lt; 15%', 'parado · stopped']]
+    .map(([c, r, l]) => `<div class="r"><i style="background:${c}"></i><b>${r}</b>${l}</div>`).join('')}
+      <div class="n">Promedio de cada 5 minutos; sin color, ningún carro pasó. Modelo sin calibrar: mueve menos tránsito que el contado, así que
+      los expresos se ven más libres de lo que están. · 5-minute means; uncoloured, no car passed. Uncalibrated model: it carries less traffic than
+      is counted, so the expressways look freer than they are.</div></div>`);
     this.dock.querySelectorAll('.speed button').forEach((b) => b.addEventListener('click', () => { this.app.clockTime.rate = Number(b.dataset.r); }));
     // the morning as a line: drag to any moment of it
     this.timeInput = this.dock.querySelector('#xp-time input');
@@ -161,6 +178,9 @@ export class Experience {
     // key moves it; a drag back to where it began fires no 'change')
     const letGo = () => { this.scrubbing = false; this.timeInput.blur(); };
     this.timeInput.addEventListener('change', letGo); this.timeInput.addEventListener('pointerup', letGo); this.timeInput.addEventListener('pointercancel', letGo);
+    // (opened on the apagón, ?scenario=apagon, as a shared link has it: the dock said "Mañana normal", and its button
+    // for the morning did nothing)
+    if (this.app.sim?.index.apagon != null) { this.scenario = 'apagon'; this.dock.querySelectorAll('.scen button').forEach((b) => b.classList.toggle('on', b.dataset.s === 'apagon')); }
     this.marks();
     this.dock.querySelectorAll('.scen button').forEach((b) => b.addEventListener('click', () => this.setScenario(b.dataset.s)));
     this.dock.querySelector('.ride').addEventListener('click', () => this.rideNear());
@@ -508,6 +528,7 @@ export class Experience {
   mapButton() {
     const b = this.dock.querySelector('.map'), on = !!this.app.speedMap?.on;
     b.classList.toggle('on', on); b.style.background = on ? 'rgba(255,122,69,0.45)' : '';
+    this.legend.classList.toggle('on', on);
   }
   toggleSound() { if (this.sound.on) this.sound.stop(); else this.sound.start(); } // (the HUD's button follows the sound itself: hud.js)
 
