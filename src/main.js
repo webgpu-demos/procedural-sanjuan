@@ -75,6 +75,11 @@ const USAGE = {
 // finished picture on it. The edges are smoothed in the last pass: atmosphere.js.)
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); // (the frame-rate governor sets it from here on)
+// which graphics card the browser gave the page (a Windows browser may hand a laptop's or a workstation's page to the
+// integrated one, or draw in software over a remote desktop: the city is then slow whatever the machine): shown in
+// the readout (G) and the ?perf box, so a screenshot of a slow page says what drew it
+const GPU = (() => { try { const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); return String(gl.getParameter(x ? x.UNMASKED_RENDERER_WEBGL : gl.RENDERER)).replace(/^ANGLE \((.*)\)$/, '$1'); } catch { return 'unknown'; } })();
+const SOFTWARE = /swiftshader|basic render|llvmpipe|software/i.test(GPU);
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
@@ -1083,7 +1088,8 @@ const perf = params.has('perf') ? (() => {
       for (let i = 0; i < W; i++) { const v = gaps[(n + i) % W]; g.fillStyle = v > 34 ? '#f55' : v > 17.5 ? '#fc4' : '#5d5'; g.fillRect(i, y(v), 1, H - y(v)); }
       const s = [...gaps].filter((v) => v > 0).sort((a, b) => a - b), q = (f) => (s[Math.floor(s.length * f)] ?? 0).toFixed(1);
       txt.textContent = `frame ${q(0.5)} ms · 95% ${q(0.95)} · worst ${(s.at(-1) ?? 0).toFixed(0)}\n` +
-        Object.entries(parts).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ') + `\ndraw ${plainDraw.toFixed(1)} · with shadows ${shadowDraw.toFixed(1)} · level ${governor.level}`;
+        Object.entries(parts).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ') + `\ndraw ${plainDraw.toFixed(1)} · with shadows ${shadowDraw.toFixed(1)} · level ${governor.level}` +
+        `\n${renderer.domElement.width}×${renderer.domElement.height} · dpr ${devicePixelRatio} · ${renderer.info.render.calls} draws · ${(renderer.info.render.triangles / 1e6).toFixed(2)}M tris\n${GPU.slice(0, 70)}`;
     },
   };
 })() : null;
@@ -1226,6 +1232,7 @@ function frame(_, manual) {
     `San Juan ${clockTime.label()}${clockTime.live ? ' (live)' : ''} · sun ${env.elevation.toFixed(0)}°\n` +
     `${fps.toFixed(0)} fps${governor.level ? ` (quality step ${governor.level})` : ''} · ${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)}M tris\n` +
     `tiles ${s.loaded}/${manifest.tiles.length}${streamer.pending ? ` (+${streamer.pending})` : ''} · ${s.buildings} buildings\n` +
+    `${SOFTWARE ? 'SOFTWARE RENDERING: ' : ''}${GPU.slice(0, 80)}\n` +
     (sim && simOn() ? `simulated: ${sim.stats.active.toLocaleString()} cars on the road · ${sim.stats.near} near · ${clockTime.rate}×\n` : '') +
     (people ? `people on foot: ${people.stats.people} (${people.stats.target} wanted) · ${people.stats.drawn} drawn\n` : '') +
     (picked ? `\n▸ ${USAGE[picked.usage] ?? 'usage ' + picked.usage}, ${picked.height.toFixed(1)} m` +
