@@ -78,6 +78,18 @@ body:not(.hud-off) #xp-cap { bottom: 140px; } /* (free roaming: above the HUD's 
   border-radius: 14px; background: rgba(8,12,20,0.86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 40px rgba(0,0,0,0.45);
   font-size: 13px; line-height: 1.5; color: rgba(246,241,231,0.85); }
 #xp-truth[hidden] { display: none; }
+#xp-truth { max-height: calc(100vh - 190px); overflow-y: auto; box-sizing: border-box; }
+#xp-truth .x { position: absolute; top: 10px; right: 12px; padding: 4px 8px; border-radius: 8px; color: rgba(246,241,231,0.7); font-size: 14px; }
+#xp-truth .x:hover { background: rgba(255,255,255,0.12); }
+#xp-truth .verdict { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; border-left: 3px solid #ff7a45; background: rgba(255,122,69,0.12); color: #f6f1e7; }
+#xp-truth .verdict.ok { border-left-color: #5fe0d0; background: rgba(95,224,208,0.1); }
+#xp-truth .verdict span { display: block; margin-top: 6px; font-size: 12px; color: rgba(246,241,231,0.68); }
+#xp-truth table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+#xp-truth th { text-align: right; font-weight: 500; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(246,241,231,0.5); padding: 4px 6px; }
+#xp-truth td { text-align: right; padding: 5px 6px; border-top: 1px solid rgba(255,255,255,0.08); color: #fff; }
+#xp-truth th:first-child, #xp-truth td:first-child { text-align: left; }
+#xp-truth td i { font-style: normal; color: rgba(246,241,231,0.5); margin-left: 4px; }
+#xp-truth .dark { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.12); }
 #xp-truth h3 { margin: 0 0 2px; font-size: 16px; color: #fff; }
 #xp-truth .sub { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #5fe0d0; margin-bottom: 10px; }
 #xp-truth .nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
@@ -176,7 +188,8 @@ export class Experience {
     if (!this.trips || vid * 5 + 5 > this.trips.byteLength) return null;
     const d = this.trips, o = vid * 5;
     return { kind: idx.kinds[d.getUint8(o)], from: idx.municipios[d.getUint8(o + 1) - 1] ?? '', to: idx.municipios[d.getUint8(o + 2) - 1] ?? '', depart: d.getUint16(o + 3, true) / 60,
-      loss: this.tripinfo && vid * 2 + 1 < this.tripinfo.length ? this.tripinfo[vid * 2] : null, km: this.tripinfo && vid * 2 + 1 < this.tripinfo.length ? this.tripinfo[vid * 2 + 1] / 100 : null };
+      loss: this.tripinfo && vid * 2 + 1 < this.tripinfo.length && this.tripinfo[vid * 2 + 1] > 0 ? this.tripinfo[vid * 2] : null, // (no distance: it had not arrived when the run ended)
+      km: this.tripinfo && vid * 2 + 1 < this.tripinfo.length ? this.tripinfo[vid * 2 + 1] / 100 : null };
   }
   // road names by 60 m cell, for "on Avenida Ponce de León"
   indexNames(roads) {
@@ -412,23 +425,47 @@ export class Experience {
       this.captionFor(['Apagón · 5:45 a.m.', 'La red eléctrica falla y todos los semáforos se apagan · the grid fails; every signal goes dark'], 6500);
     }
   }
-  // How real is it: the run against the counts (validation.json, tools/sim/validate.py)
+  // How real is it: the run against the counts (validation.json, tools/sim/validate.py), said plainly: whether it
+  // meets the standard a calibrated model is held to, by class of road, and what it may and may not be used for.
+  // In the apagón: the counts are a normal morning's, so the normal morning's fit is shown (the blackout's run was set
+  // against them as if they were its own), and under it what the blackout changes in the model, car by car.
   async toggleTruth() {
     if (!this.truth.hidden) { this.truth.hidden = true; return; }
-    const sim = this.app.sim, v = await fetch(`${sim.base}/validation.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    const n = (sim.index.tripinfo?.count ?? 0).toLocaleString('es-PR'), a = v?.all, end = clockLabel(sim.end / 3600).t;
-    this.truth.innerHTML = `<h3>¿Qué tan real es esto?</h3><div class="sub">How real is this</div>
+    const sim = this.app.sim, json = (u) => fetch(u).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const dark = sim.index.apagon != null, morning = dark ? `${sim.base}/../morning` : sim.base;
+    const [v, mi] = await Promise.all([json(`${morning}/validation.json`), dark ? json(`${morning}/index.json`) : sim.index]);
+    const n = (mi?.tripinfo?.count ?? 0).toLocaleString('es-PR'), a = v?.all, end = clockLabel((mi?.end ?? sim.end) / 3600).t, share = mi?.share;
+    const pct = (x) => `${Math.round(x * 100)}%`;
+    const CLASS = [['interstate / freeway', 'Expresos', 'expressways'], ['arterials', 'Avenidas', 'arterials'], ['collectors', 'Colectoras', 'collectors'], ['local', 'Calles locales', 'local streets']];
+    const fw = v?.byClass?.['interstate / freeway'];
+    const verdict = !a ? '' : a.geh5 >= 0.85
+      ? `<div class="verdict ok"><b>Calibrado.</b> El ${pct(a.geh5)} de los conteos queda dentro de la norma (GEH &lt; 5 en el 85%). · Calibrated: ${pct(a.geh5)} of counts within the standard.</div>`
+      : `<div class="verdict"><b>No está calibrado.</b> El modelo mueve el ${pct(a.ratio)} del tránsito contado${fw ? ` (en los expresos, el ${pct(fw.ratio)})` : ''}, y
+        solo el ${pct(a.geh5)} de los conteos queda dentro de la norma de un modelo calibrado (85%). Sirve para ver cómo se arma la mañana y
+        para comparar escenarios entre sí; <b>no</b> para estimar un tiempo de respuesta ni escoger una ruta de emergencia.
+        <span>Not calibrated: the model carries ${pct(a.ratio)} of the counted traffic${fw ? ` (${pct(fw.ratio)} on the expressways)` : ''}, and ${pct(a.geh5)} of counts
+        meet the standard a calibrated model is held to (85%). Use it to see how the morning builds and to compare scenarios with each other,
+        not to estimate a response time or choose an emergency route.</span></div>`;
+    const rows = v ? CLASS.filter(([k]) => v.byClass?.[k]).map(([k, es, en]) => { const c = v.byClass[k];
+      return `<tr><td>${es} <i>${en}</i></td><td>${c.n}</td><td>${pct(c.ratio)}</td><td>${pct(c.geh5)}</td></tr>`; }).join('') : '';
+    this.truth.innerHTML = `<button class="x" title="cerrar">✕</button><h3>¿Qué tan real es esto?</h3><div class="sub">How real is this${dark ? ' · la mañana normal / the normal morning' : ''}</div>
+      ${verdict}
       <div>${n} viajes simulados con SUMO, de las 4:30 a las ${end}, a partir de los flujos de viaje al trabajo del Censo (ACS),
       las horas de salida de cada municipio y los edificios de la ciudad. Se comparan con los conteos de tránsito de la FHWA (HPMS 2024).</div>
-      ${sim.index.share && sim.index.share < 1 ? `<div class="not">Se simula el ${Math.round(sim.index.share * 100)}% de la demanda estimada: con más, en la hora pico
+      ${share && share < 1 ? `<div class="not">Se simula el ${pct(share)} de la demanda estimada: con más, en la hora pico
       las filas crecen más que el tránsito que mueve la red simulada (trazada de OpenStreetMap, con semáforos supuestos). Es
-      un límite del modelo, no de la ciudad. · ${Math.round(sim.index.share * 100)}% of the estimated demand: with more, the simulated
+      un límite del modelo, no de la ciudad. · ${pct(share)} of the estimated demand: with more, the simulated
       network's queues grow faster at the rush than the traffic it moves.</div>` : ''}
-      ${a ? `<div class="nums"><div>conteos comparados<b>${a.n}</b></div><div>GEH &lt; 5 (meta: 85%)<b>${Math.round(a.geh5 * 100)}%</b></div><div>simulado / contado<b>${a.ratio.toFixed(2)}</b></div></div>
+      ${a ? `<div class="nums"><div>conteos comparados<b>${a.n}</b></div><div>GEH &lt; 5 (meta: 85%)<b>${pct(a.geh5)}</b></div><div>simulado / contado<b>${a.ratio.toFixed(2)}</b></div></div>
+      <table><tr><th>clase de vía · road class</th><th>conteos</th><th>simulado / contado</th><th>GEH &lt; 5</th></tr>${rows}</table>
       <canvas width="1040" height="380"></canvas>` : '<div class="not">(la validación de esta corrida no está disponible)</div>'}
-      <div class="not">Lo que no es: tránsito en vivo ni carros reales. Es un modelo, calibrado con datos públicos y comparado con conteos;
-      cada punto es una vía contada (7–8 a.m.): sobre la diagonal, el modelo acierta. · Not live traffic: a model, checked against counts.</div>`;
+      <div class="not">Cada punto es una vía contada (7–8 a.m.): sobre la diagonal, el modelo acierta; debajo, le falta tránsito. Faltan sobre todo
+      los viajes que no son al trabajo y los que cruzan la ciudad por los expresos. No es tránsito en vivo ni carros reales.
+      · Each dot is a counted road: on the diagonal the model is right, below it traffic is missing, mostly trips that are not commutes
+      and trips through the city on the expressways. Not live traffic.</div>
+      ${dark ? '<div class="dark"></div>' : ''}`;
     this.truth.hidden = false;
+    this.truth.querySelector('.x').addEventListener('click', () => { this.truth.hidden = true; });
     const cv = this.truth.querySelector('canvas');
     if (cv && v) {
       const g = cv.getContext('2d'), W = cv.width, H = cv.height, P = 46, max = Math.max(...v.points.map((p) => Math.max(p[0], p[1])), 100);
@@ -438,6 +475,35 @@ export class Experience {
       g.save(); g.translate(18, H / 2 + 60); g.rotate(-Math.PI / 2); g.fillText('simulado →', 0, 0); g.restore();
       for (const [c, m, f] of v.points) { g.fillStyle = f <= 2 ? '#ff7a45' : f <= 4 ? '#f2c94c' : '#5fe0d0'; g.beginPath(); g.arc(sx(c), sy(m), 5, 0, Math.PI * 2); g.fill(); }
     }
+    if (dark) this.blackoutTable(sim, morning).then((html) => { const d = this.truth.querySelector('.dark'); if (d && html) d.innerHTML = html; });
+  }
+  // What the blackout changes in the model: the cars that left in each half hour of the first hour and a half after
+  // the failure, the same cars in both runs. Their delay where they arrived in both, and how many had not arrived when
+  // the blackout's run ended. (Not later cars: the run ends, and of those only the quick trips had arrived, which read
+  // as a blackout faster than the morning.)
+  async blackoutTable(sim, morning) {
+    const buf = (u) => fetch(u).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+    const [t, m, a] = await Promise.all([buf(`${morning}/trips.bin`), buf(`${morning}/tripinfo.bin`), buf(`${sim.base}/tripinfo.bin`)]);
+    if (!t || !m || !a) return '';
+    const T = new DataView(t), M = new Uint16Array(m), A = new Uint16Array(a), n = Math.min(t.byteLength / 5, M.length / 2, A.length / 2) | 0;
+    const at = Math.floor(sim.index.apagon / 60), bins = [0, 1, 2].map(() => ({ n: 0, arrived: 0, both: 0, m: 0, a: 0 }));
+    for (let i = 0; i < n; i++) {
+      const b = Math.floor((T.getUint16(i * 5 + 3, true) - at) / 30);
+      if (b < 0 || b > 2) continue;
+      const r = bins[b], inA = A[i * 2 + 1] > 0;
+      r.n++; if (inA) r.arrived++;
+      if (inA && M[i * 2 + 1] > 0) { r.both++; r.m += M[i * 2]; r.a += A[i * 2]; }
+    }
+    const hm = (min) => clockLabel(min / 60).t, endAt = clockLabel(sim.end / 3600), min = (s) => (s / 60).toFixed(1);
+    const rows = bins.map((r, b) => (r.both ? `<tr><td>${hm(at + b * 30)}–${hm(at + b * 30 + 30)}</td><td>${r.n.toLocaleString('es-PR')}</td>
+      <td>${min(r.m / r.both)} → ${min(r.a / r.both)} min (${r.a >= r.m ? '+' : '−'}${Math.round(Math.abs(r.a / r.m - 1) * 100)}%)</td><td>${Math.round((1 - r.arrived / r.n) * 100)}%</td></tr>` : '')).join('');
+    return `<h3>El apagón, en el modelo</h3><div class="sub">The blackout, in the model</div>
+      <div>A las ${hm(at)} se apagan todos los semáforos y cada cruce se maneja como un pare de cuatro vías. Los mismos carros, en las dos corridas:</div>
+      <table><tr><th>salieron · left</th><th>carros</th><th>demora media, normal → apagón</th><th>sin llegar a las ${endAt.t}</th></tr>${rows}</table>
+      <div class="not">La demora media sube; la mayoría de los viajes cambia poco y una parte queda atrapada. Es un supuesto, no una medición: no hay conteos
+      de un apagón, cada conductor obedece el pare, nadie cambia de ruta ni se queda en casa, y la corrida termina a las ${endAt.t} ${endAt.ap}
+      · The mean delay rises; most trips change little and some are trapped. An assumption, not a measurement: there are no counts of a blackout,
+      every driver obeys the all-way stop, nobody reroutes or stays home, and the run ends at ${endAt.t} ${endAt.ap}</div>`;
   }
   mapButton() {
     const b = this.dock.querySelector('.map'), on = !!this.app.speedMap?.on;
