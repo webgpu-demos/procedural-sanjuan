@@ -59,7 +59,9 @@ function triangulate(rings) {
 // ---------------------------------------------------------------- terrain
 // cut: the channels' (src/world/channels.js): the pieces of a triangle left standing over them, null where none is
 // under it. A triangle cut is replaced by its pieces, flat with it.
-export function terrainMesh(grid, tx, tz, tileSize, cut = null) {
+// inner (src/shared/cuttings.js, a graded cut): the triangles to lay inside what was cut out of one, [[x, y, z, nx, ny, nz] x 3, ...]:
+// the cut's floor and banks are the ground, drawn as the ground is.
+export function terrainMesh(grid, tx, tz, tileSize, cut = null, inner = null) {
   const seg = Math.ceil(tileSize / grid.step), n = seg + 1, d = tileSize / seg;
   const pos = new Float32Array(n * n * 3), nor = new Float32Array(n * n * 3), idx = new Uint16Array(seg * seg * 6);
   for (let j = 0; j < n; j++)
@@ -83,6 +85,11 @@ export function terrainMesh(grid, tx, tz, tileSize, cut = null) {
     const v = [idx[t], idx[t + 1], idx[t + 2]], P = v.map((q) => [pos[q * 3], pos[q * 3 + 2]]);
     const pieces = cut(P);
     if (!pieces) { keep.push(...v); continue; }
+    if (inner) for (const [a, b, c] of inner(P)) {
+      // (wound to face up; each corner [x, y, z, its normal])
+      const up = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]) < 0;
+      for (const q of up ? [a, c, b] : [a, b, c]) { extraPos.push(q[0], q[1], q[2]); extraNor.push(q[3], q[4], q[5]); keep.push(next++); }
+    }
     const det = (P[1][0] - P[0][0]) * (P[2][1] - P[0][1]) - (P[2][0] - P[0][0]) * (P[1][1] - P[0][1]);
     for (const piece of pieces) {
       const base = next;
@@ -794,6 +801,7 @@ function joinMeshes(a, b) {
 // floor up to the ground beside it, with a parapet on the high ones. Arrays like roadMesh()'s.
 const CUT_FLOOR = { color: lin([0.36, 0.36, 0.38]), layer: GROUND.ASPHALT }, CUT_WALL = { color: lin([0.62, 0.61, 0.58]), layer: GROUND.CONCRETE };
 const CUT_PARAPET = 0.9, CUT_HIGH = 1.2;
+const CUT_BANK = { color: lin([0.3, 0.34, 0.24]), layer: GROUND.GRASS }; // (a step in the ground where a bank had no room: earth)
 function cuttingMesh(cu, field, grid, tx, tz, tileSize) {
   const pos = new Buf(), nor = new Buf(), col = new Buf(), lay = new Buf();
   const put = (x, y, z, n, style) => { pos.push(x, y, z); nor.push(...n); col.push(...style.color); lay.push(style.layer); };
@@ -805,21 +813,22 @@ function cuttingMesh(cu, field, grid, tx, tz, tileSize) {
       for (const tri of [[a, c, b], [b, c, e]]) {
         const s = cu.split(tri);
         if (!s) continue;
-        for (const piece of s.ins) for (let k = 1; k + 1 < piece.length; k++)
+        // (a graded cut's floor is the ground, in the terrain's mesh: buildTile)
+        for (const piece of s.ins) if (!piece.graded) for (let k = 1; k + 1 < piece.length; k++)
           floor.triangle(piece[0], piece[k], piece[k + 1], (p, q, r) => { for (const v of [p, q, r]) put(v[0], floor.height(v[0], v[1]), v[1], UP, CUT_FLOOR); });
       }
     }
   const w = cu.walls;
-  for (let k = 0; k < w.length; k += 4) {
-    const x0 = w[k], z0 = w[k + 1], x1 = w[k + 2], z1 = w[k + 3], len = Math.hypot(x1 - x0, z1 - z0) || 1;
+  for (let k = 0; k < w.length; k += 5) {
+    const graded = w[k + 4], wall = graded ? CUT_BANK : CUT_WALL, x0 = w[k], z0 = w[k + 1], x1 = w[k + 2], z1 = w[k + 3], len = Math.hypot(x1 - x0, z1 - z0) || 1;
     // (the cutting on the left hand: the wall's face looks into it)
     const n = [-(z1 - z0) / len, 0, (x1 - x0) / len];
     const fa = floor.height(x0, z0), fb = floor.height(x1, z1), ga = latticeHeight(grid, x0, z0, tileSize), gb = latticeHeight(grid, x1, z1, tileSize);
     if (Math.abs(ga - fa) < 0.03 && Math.abs(gb - fb) < 0.03) continue;
-    const up = Math.max(ga - fa, gb - fb) > CUT_HIGH ? CUT_PARAPET : 0.02;
+    const up = !graded && Math.max(ga - fa, gb - fb) > CUT_HIGH ? CUT_PARAPET : 0.02;
     const A = [x0, Math.min(fa, ga) - 0.05, z0], B = [x1, Math.min(fb, gb) - 0.05, z1], C = [x1, Math.max(fb, gb) + up, z1], D = [x0, Math.max(fa, ga) + up, z0];
     for (const [quad, sign] of [[[A, B, C, A, C, D], 1], [[B, A, D, B, D, C], -1]])
-      for (const p of quad) put(p[0], p[1], p[2], [n[0] * sign, 0, n[2] * sign], CUT_WALL);
+      for (const p of quad) put(p[0], p[1], p[2], [n[0] * sign, 0, n[2] * sign], wall);
   }
   return { position: pos.done(), normal: nor.done(), color: col.done(), aLayer: lay.done() };
 }
@@ -836,12 +845,15 @@ export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(g
     const C = 4, have = new Set(), key = (i, j) => i * 65536 + j;
     for (const a of tile.areas) if (isPaint(a)) for (const rings of a.polygons) { const r = rings[0]; for (let k = 0; k < r.length; k += 2) have.add(key(Math.floor(r[k] / C), Math.floor(r[k + 1] / C))); }
     const has = (x, z) => { const i = Math.floor(x / C), j = Math.floor(z / C); for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) if (have.has(key(i + u, j + v))) return true; return false; };
+    // (and without the tiles' edge line of a sheet of paving, left on the slope over the wall)
+    const strayed = (a) => isPaint(a) && a.polygons.some((rings) => { const r = rings[0]; let x = 0, z = 0; for (let k = 0; k < r.length; k += 2) { x += r[k]; z += r[k + 1]; } return cuttings.stray(x / (r.length / 2), z / (r.length / 2)); });
+    if (tile.areas.some(strayed)) tile = { ...tile, areas: tile.areas.map((a) => (strayed(a) ? { ...a, polygons: a.polygons.filter((rings) => { const r = rings[0]; let x = 0, z = 0; for (let k = 0; k < r.length; k += 2) { x += r[k]; z += r[k + 1]; } return !cuttings.stray(x / (r.length / 2), z / (r.length / 2)); }) } : a)) };
     const { white, yellow } = cu.paint(has), more = [];
     if (white.length) more.push({ kind: AREA.MARK_WHITE, code: 0, polygons: white.map((r) => [r]) });
     if (yellow.length) more.push({ kind: AREA.MARK_YELLOW, code: 0, polygons: yellow.map((r) => [r]) });
     if (more.length) tile = { ...tile, areas: [...tile.areas, ...more] };
   }
-  const ch = channels?.forTile(tile.tx, tile.tz), cut = ch?.cut ?? null;
+  const ch = channels?.forTile(tile.tx, tile.tz), cut = ch?.cut ?? null, cutFloor = cu && createDraper({ step: cuttings.fine }, cuttings.corner, tileSize);
   // the terrain's triangles: what the channels leave of what the cuttings leave
   const left = !cu ? cut : (P) => {
     const s = cu.split(P);
@@ -852,7 +864,16 @@ export function buildTile(tile, grid, tileSize, surface = (x, z) => sampleGrid(g
     return out;
   };
   return {
-    terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize, left),
+    terrain: terrainMesh(grid, tile.tx, tile.tz, tileSize, left, cu && ((P) => {
+      const s = cu.split(P), out = [];
+      if (s) for (const piece of s.ins) if (piece.graded) for (let k = 1; k + 1 < piece.length; k++)
+        cutFloor.triangle(piece[0], piece[k], piece[k + 1], (p, q, r) => out.push([p, q, r].map((v) => {
+          // (with the slope of the floor round it, for a bank shaded as one face and not cell by cell)
+          const d = cuttings.fine * 0.75, gx = cutFloor.height(v[0] + d, v[1]) - cutFloor.height(v[0] - d, v[1]), gz = cutFloor.height(v[0], v[1] + d) - cutFloor.height(v[0], v[1] - d), l = Math.hypot(gx, 2 * d, gz);
+          return [v[0], cutFloor.height(v[0], v[1]), v[1], -gx / l, (2 * d) / l, -gz / l];
+        })));
+      return out;
+    })),
     roads: joinMeshes(joinMeshes(roadMesh(tile.areas.filter((a) => !isPaint(a)), grid, surface, tile.walls, drape, cut, ground, carriage), ch?.segs.length ? channelMesh(ch.segs, grid, tileSize) : null), cu ? cuttingMesh(cu, cuttings, grid, tile.tx, tile.tz, tileSize) : null),
     paint: roadMesh(tile.areas.filter(isPaint), grid, surface, [], drape),
     decals: decalMesh(tile.props, drape),
