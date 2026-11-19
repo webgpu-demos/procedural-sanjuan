@@ -512,6 +512,7 @@ export class Experience {
     this.sound.update(dt, {
       cars: sim?.stats.near ?? 0, moving: sim?.stats.nearSpeed ?? 0,
       height: app.camera.position.y - app.streamer.ground(app.camera.position.x, app.camera.position.z),
+      car: app.mode === 'car' ? app.driver?.view ?? null : null,
       powered: uGrid.z < 0 ? 1 : Math.hypot(app.controls.target.x - uGrid.x, app.controls.target.z - uGrid.y) > uGrid.z ? 1 : 0,
     });
   }
