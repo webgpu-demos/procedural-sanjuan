@@ -456,7 +456,7 @@ export class Experience {
     const [v, mi] = await Promise.all([json(`${morning}/validation.json`), dark ? json(`${morning}/index.json`) : sim.index]);
     const n = (mi?.tripinfo?.count ?? 0).toLocaleString('es-PR'), a = v?.all, end = clockLabel((mi?.end ?? sim.end) / 3600).t, share = mi?.share;
     const pct = (x) => `${Math.round(x * 100)}%`;
-    const CLASS = [['interstate / freeway', 'Expresos', 'expressways'], ['arterials', 'Avenidas', 'arterials'], ['collectors', 'Colectoras', 'collectors'], ['local', 'Calles locales', 'local streets']];
+    const CLASS = [['interstate / freeway', 'Expresos', 'expressways'], ['ramps', 'Rampas', 'ramps'], ['arterials', 'Avenidas', 'arterials'], ['collectors', 'Colectoras', 'collectors'], ['local', 'Calles locales', 'local streets']];
     const fw = v?.byClass?.['interstate / freeway'];
     const verdict = !a ? '' : a.geh5 >= 0.85
       ? `<div class="verdict ok"><b>Calibrado.</b> El ${pct(a.geh5)} de los conteos queda dentro de la norma (GEH &lt; 5 en el 85%). · Calibrated: ${pct(a.geh5)} of counts within the standard.</div>`

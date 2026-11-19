@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """FHWA HPMS (Puerto Rico, 2024) inside the simulated area: counted roads, as calibration targets.
-Writes data/sim/<area>/hpms.json: [{aadt, lanes, fsys, name, pts: [[x, y] SUMO frame ...]}].
+Writes data/sim/<area>/hpms.json: [{aadt, lanes, fsys, name, facility, k, d, route, pts: [[x, y] SUMO frame ...]}];
+facility is HPMS's facility type: 1 a one-way roadway, 2 two-way, 4 a ramp, 5 non-mainline, 6 non-inventory direction.
 Public domain (CC0, NTAD). Usage: .venv-sim/bin/python tools/sim/hpms.py [--area=sanjuan]"""
 import json, math, os, sys, urllib.parse, urllib.request
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
@@ -16,7 +17,7 @@ U = 'https://geo.dot.gov/server/rest/services/Hosted/HPMS_FULL_PR_2024/FeatureSe
 out, off = [], 0
 while True:
     q = urllib.parse.urlencode({'where': 'aadt > 0', 'geometry': f'{west},{south},{east},{north}', 'geometryType': 'esriGeometryEnvelope', 'inSR': 4326,
-        'spatialRel': 'esriSpatialRelIntersects', 'outFields': 'aadt,through_lanes,f_system,routename,routenumber,speed_limit,number_signals,dir_through_lanes',
+        'spatialRel': 'esriSpatialRelIntersects', 'outFields': 'aadt,through_lanes,f_system,routename,routenumber,speed_limit,number_signals,dir_through_lanes,facility_type,k_factor,dir_factor,route_id',
         'returnGeometry': 'true', 'outSR': 4326, 'f': 'json', 'resultOffset': off, 'resultRecordCount': 2000, 'orderByFields': 'objectid'})
     d = json.load(urllib.request.urlopen(U + '?' + q, timeout=120))
     for f in d.get('features', []):
@@ -24,6 +25,7 @@ while True:
         for path in f['geometry']['paths']:
             out.append({'aadt': a['aadt'], 'lanes': a['through_lanes'], 'dirLanes': a['dir_through_lanes'], 'fsys': a['f_system'], 'speed': a['speed_limit'],
                         'name': a['routename'] or (f"PR-{a['routenumber']}" if a['routenumber'] else None), 'signals': a['number_signals'],
+                        'facility': a['facility_type'], 'k': a['k_factor'], 'd': a['dir_factor'], 'route': a['route_id'],
                         'pts': [[round((lon - lon0) * M_LON, 1), round((lat - lat0) * M_LAT, 1)] for lon, lat in path]})
     if len(d.get('features', [])) < 2000: break
     off += 2000
